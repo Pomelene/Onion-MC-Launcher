@@ -69,11 +69,11 @@ class Pages:
             item=tree.itemAt(point)
             if not item:return
             tree.setCurrentItem(item);vid=chosen();menu=QMenu(tree)
-            for title,callback in [('选择并返回首页',select_home),('管理实例',lambda:self.instance_settings(vid)),('启动游戏',lambda:self.launch_version_id(vid)),('打开目录',lambda:self.open_folder(self.repo.run_dir(vid))),('导出整合包',lambda:self.export_modpack(vid)),('移入恢复中心',lambda:self.delete_version(vid))]:menu.addAction(title,callback)
+            for title,callback in [('选择并返回首页',select_home),('重命名实例',lambda:self.rename_instance(vid)),('管理实例',lambda:self.instance_settings(vid)),('启动游戏',lambda:self.launch_version_id(vid)),('打开目录',lambda:self.open_folder(self.repo.run_dir(vid))),('导出整合包',lambda:self.export_modpack(vid)),('移入恢复中心',lambda:self.delete_version(vid))]:menu.addAction(title,callback)
             menu.exec(tree.viewport().mapToGlobal(point))
         tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);tree.customContextMenuRequested.connect(context)
         query.textChanged.connect(render);kinds.currentIndexChanged.connect(render);sort.currentIndexChanged.connect(render);render()
-        actions=row();actions.addWidget(button('管理选中实例',manage,'soft','settings'));actions.addWidget(button('新建独立实例',self.create_instance,glyph='plus'));actions.addWidget(button('恢复中心',self.recovery,glyph='history'));actions.addStretch();actions.addWidget(button('使用此实例',select_home,'primary'));body.addLayout(actions)
+        actions=row();actions.addWidget(button('管理选中实例',manage,'soft','settings'));actions.addWidget(button('重命名实例',lambda:self.rename_instance(chosen()) if chosen() else None));actions.addWidget(button('新建独立实例',self.create_instance,glyph='plus'));actions.addWidget(button('恢复中心',self.recovery,glyph='history'));actions.addStretch();actions.addWidget(button('使用此实例',select_home,'primary'));body.addLayout(actions)
 
     def build_about(self):
         body=self.page('about');card=Card('Onion Minecraft Launcher','免费、开源、公益的 Minecraft Java 版启动器。')
@@ -102,6 +102,8 @@ class Pages:
         go=button('搜索',role='primary',glyph='search');bar.addWidget(go);search.body.addLayout(bar)
         filters=row();game=QLineEdit();game.setPlaceholderText('不限游戏版本');game.setMaximumWidth(180);loader=QComboBox()
         for text,value in [('不限加载器',''),('Fabric','fabric'),('Forge','forge'),('NeoForge','neoforge'),('Quilt','quilt')]:loader.addItem(text,value)
+        def loader_state(*args):loader.setEnabled(kinds.currentData() in ('mod','modpack'))
+        kinds.currentIndexChanged.connect(loader_state);loader_state()
         if self.selected_version:
             from ..modpack import _base_version,_detect_loader
             from ..version import VersionNotFound
@@ -109,22 +111,25 @@ class Pages:
                 game.setText(_base_version(self.repo,self.selected_version));loader.setCurrentIndex(max(0,loader.findData(_detect_loader(self.repo,self.selected_version)[0])))
             except (VersionNotFound,ValueError,OSError):pass
         filters.addWidget(label('游戏版本','muted'));filters.addWidget(game);filters.addSpacing(15);filters.addWidget(label('加载器','muted'));filters.addWidget(loader);filters.addStretch();search.body.addLayout(filters);body.addWidget(search)
-        results_widget=QWidget();results=column(results_widget);body.addWidget(results_widget)
+        results_widget=QWidget();results=column(results_widget,0,0);body.addWidget(results_widget)
         results.addWidget(Empty('发现你的下一份灵感','搜索模组、资源包、光影或整合包，并安装到当前实例。','search'))
         def run_search():
             text=query.text().strip()
             if not text:query.setFocus();return
             from ..catalog import search as find
-            kind,version,load=kinds.currentData(),game.text().strip(),loader.currentData()
+            kind,version,load=kinds.currentData(),game.text().strip(),loader.currentData() if loader.isEnabled() else ''
             go.setEnabled(False)
             def done(data):
                 if self.page_seq.get('download')!=seq:return
                 go.setEnabled(True);clear(results);hits=data.get('hits') or []
                 if not hits:results.addWidget(Empty('没有找到匹配的内容','试试更短的关键词，或放宽版本条件。','search'));return
                 for hit in hits[:20]:
-                    card=Card(hit.get('title') or hit.get('slug') or '项目',hit.get('description') or '')
-                    line=row();line.addWidget(label(f"{hit.get('author') or ''}  ·  下载 {hit.get('downloads') or 0}",'muted'),1)
-                    line.addWidget(button('安装',lambda pid=hit['project_id'],k=kind,g=version,l=load,v=target_vid:self.install_project(pid,k,g,l,version_id=v),'soft','download'));card.body.addLayout(line);results.addWidget(card)
+                    title=hit.get('title') or hit.get('slug') or '项目'
+                    detail=' · '.join(str(v) for v in (hit.get('author'),f"下载 {hit.get('downloads') or 0:,}",', '.join((hit.get('display_categories') or hit.get('categories') or [])[:4]),hit.get('description')) if v)
+                    item=ContentRow(title,detail,{'mod':'package','resourcepack':'grid','shader':'world','modpack':'package'}[kind])
+                    item.line.addWidget(button('选择版本',lambda pid=hit['project_id'],t=title,k=kind,g=version,l=load,v=target_vid:self.choose_project_version(pid,t,k,g,l,v),'soft','download'));results.addWidget(item)
+                    if hit.get('icon_url'):
+                        self.load_catalog_icon(item,hit['icon_url'])
             def failed(error):
                 if self.page_seq.get('download')==seq:go.setEnabled(True);self.error(error)
             self.tasks.submit(lambda job:find(self.repo.downloader,kind,text,version,load,limit=30),done,failed)
@@ -133,7 +138,22 @@ class Pages:
     def open_content_download(self,kind):
         self.download_kind={'mods':'mod','resourcepacks':'resourcepack','shaderpacks':'shader'}[kind];self.navigate('download')
 
-    def install_project(self,project_id,kind,game,loader,version_id=None):
+    def choose_project_version(self,project_id,title,kind,game,loader,vid):
+        from .project_versions import ProjectVersions
+        self.show_subpage(ProjectVersions(self,project_id,title,kind,game,loader,vid))
+
+    def load_catalog_icon(self,item,url):
+        from shiboken6 import isValid
+        def work(job):
+            from ..network import secure_open
+            from .content_icons import MAX_ICON_BYTES
+            if not url.startswith('https://'):return b''
+            from urllib.request import Request
+            with secure_open(Request(url,headers={'User-Agent':'OnionMinecraftLauncher'}),timeout=8) as response:data=response.read(MAX_ICON_BYTES+1)
+            return data if len(data)<=MAX_ICON_BYTES else b''
+        self.tasks.submit(work,lambda data:item.set_artwork(data) if isValid(item) else None,lambda error:None)
+
+    def install_project(self,project_id,kind,game,loader,version_id=None,release_id=None):
         vid=self.selected_version if version_id is None else version_id
         if not vid and kind!='modpack':self.error('请先选择一个游戏实例。');return
         repo=self.repo;run=repo.run_dir(vid) if vid else repo.game_dir
@@ -142,7 +162,9 @@ class Pages:
             from ..mods import install_dependencies
             if vid and kind!='modpack':repo.assert_idle(vid)
             target=repo.game_dir/'.cache/modpacks' if kind=='modpack' else run/{'mod':'mods','resourcepack':'resourcepacks','shader':'shaderpacks'}[kind];repo.assert_writable(target)
-            chosen=pick_version(versions(repo.downloader,project_id),game,loader)
+            available=versions(repo.downloader,project_id)
+            if release_id is not None:available=[v for v in available if v.get('id')==release_id]
+            chosen=pick_version(available,game,loader)
             if not chosen:raise RuntimeError('没有适配当前版本或加载器的文件。')
             target.mkdir(parents=True,exist_ok=True);job.emit('正在下载项目文件');path=download_version(repo.downloader,chosen,target)
             if kind=='modpack':
@@ -150,7 +172,7 @@ class Pages:
                 return import_modpack(repo,path,job.emit,lambda a,b:job.emit((a,b)))
             if kind=='mod':install_dependencies(repo.downloader,chosen.get('id'),target,game,loader)
             return None
-        self.task('安装内容',work,lambda vid:self.installed(vid) if vid else self.status.setText('内容已安装'))
+        return self.task('安装内容',work,lambda vid:self.installed(vid) if vid else self.status.setText('内容已安装'))
 
     def build_mods(self,content_kind='mods'):
         body=self.page('mods');seq=self.page_seq['mods'];vid=self.selected_version

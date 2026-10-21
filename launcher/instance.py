@@ -18,6 +18,11 @@ from typing import Optional
 DEFAULT_GROUP = "默认"
 
 
+def default_instance_name(version: str, loader: str = 'vanilla') -> str:
+    names={'vanilla':'原版','fabric':'Fabric','forge':'Forge','neoforge':'NeoForge','quilt':'Quilt','optifine':'OptiFine'}
+    return f"{version}-{names.get(loader.lower(),loader)}"
+
+
 def _now() -> float:
     return time.time()
 

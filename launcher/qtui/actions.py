@@ -73,8 +73,26 @@ class Actions:
     def create_instance(self):
         base=self.selected_version
         if not base:self.error('请先选择基础版本');return
-        name,ok=QInputDialog.getText(self,'新建独立实例','基础版本：'+base+'\n实例名称')
+        from ..instance import default_instance_name
+        from ..modpack import _base_version,_detect_loader
+        suggested=default_instance_name(_base_version(self.repo,base),_detect_loader(self.repo,base)[0] or 'vanilla')
+        name,ok=QInputDialog.getText(self,'新建独立实例','基础版本：'+base+'\n实例名称',text=suggested)
         if ok and name.strip():self.task('创建独立实例',lambda job:self.repo.create_instance(base,name.strip()),self.installed)
+
+    def rename_instance(self,vid):
+        dialog=QDialog(self);dialog.setWindowTitle('重命名实例');body=column(dialog,24,16)
+        body.addWidget(label('实例名称','heading'));field=QLineEdit(self.instances.display_name(vid));body.addWidget(field)
+        hint=label('更改展示名称，游戏目录和存档位置保持不变。','muted');body.addWidget(hint)
+        def save():
+            name=field.text().strip()
+            if not name:hint.setText('请输入实例名称');return
+            self.instances.update(vid,name=name);self.update_selection()
+            if self.selected_version==vid and self.current_page=='instance':self.page_title='实例管理 · '+name
+            self.reload_versions(refresh_page=False);dialog.accept()
+            if self.current_page=='versions':self.build_versions()
+            self.status.setText('实例已重命名 · '+name)
+        actions=row();actions.addStretch();actions.addWidget(button('取消',dialog.reject));actions.addWidget(button('保存',save,'primary'));body.addLayout(actions);body.addStretch()
+        self.show_subpage(dialog);field.selectAll();field.setFocus()
 
     def import_modpack(self):
         path,_=QFileDialog.getOpenFileName(self,'导入整合包','','整合包 (*.mrpack *.zip)')

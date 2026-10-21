@@ -85,6 +85,34 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
     picker.choose(item);assert window.selected_version==target and not window.process
     window.navigate('versions');assert window.version_tree.topLevelItemCount()==1
     window.open_content_download('shaderpacks');assert window.download_kind=='shader'
+    QCoreApplication.sendPostedEvents(None,QEvent.Type.DeferredDelete);app.processEvents()
+    query=next(e for e in window.page_map['download'].findChildren(__import__('PySide6.QtWidgets',fromlist=['QLineEdit']).QLineEdit) if e.placeholderText()=='搜索名称、作者或关键词');query.setText('Sodium')
+    with patch('launcher.catalog.search',return_value={'hits':[{'project_id':'fixture','title':'Sodium','author':'示例作者','downloads':12345,'description':'优化渲染性能的示例项目','categories':['fabric','optimization']}]}):
+        next(b for b in window.page_map['download'].findChildren(QPushButton) if b.text()=='搜索').click();pump(lambda:not window.tasks.jobs)
+    from launcher.qtui.widgets import ContentRow
+    render(window,'qt-compact-download.png')
+    assert len(window.page_map['download'].findChildren(ContentRow))==1,errors
+    # Renaming changes metadata only, preserving the installed directory and JSON.
+    old_vid=window.selected_version;old_dir=window.repo.version_dir(old_vid)
+    window.rename_instance(old_vid);rename=window.subpages[-1]
+    edit=rename.findChild(__import__('PySide6.QtWidgets',fromlist=['QLineEdit']).QLineEdit);edit.setText('自定义实例名称')
+    next(b for b in rename.findChildren(QPushButton) if b.text()=='保存').click();pump(lambda:not window.tasks.jobs)
+    assert window.instances.display_name(old_vid)=='自定义实例名称' and old_dir.is_dir() and window.selected_version==old_vid
+    # An older compatible release is installed exactly as selected, not replaced by latest.
+    releases=[{'id':'new','version_number':'2.0','version_type':'release','date_published':'2026-10-22','game_versions':['1.21.1'],'loaders':['fabric'],'files':[{'filename':'new.jar'}]},
+              {'id':'old','version_number':'1.0','version_type':'beta','date_published':'2026-09-01','game_versions':['1.21.1'],'loaders':['fabric'],'files':[{'filename':'old.jar'}]},
+              {'id':'wrong','version_number':'forge','game_versions':['1.20.1'],'loaders':['forge'],'files':[{'filename':'wrong.jar'}]}]
+    with patch('launcher.qtui.project_versions.versions',return_value=releases):
+        window.choose_project_version('fixture','示例模组','mod','1.21.1','fabric',old_vid)
+        versions_page=window.subpages[-1];pump(lambda:not versions_page.loading and len(versions_page.entries)==3)
+    assert versions_page.tree.topLevelItemCount()==2 and not versions_page.isWindow()
+    render(window,'qt-project-versions.png');versions_page.tree.setCurrentItem(versions_page.tree.topLevelItem(1))
+    with patch.object(window,'install_project',return_value=True) as selected_install:
+        versions_page.install()
+        assert selected_install.call_args.kwargs['release_id']=='old'
+    with patch('launcher.catalog.versions',return_value=releases),patch('launcher.catalog.download_version',side_effect=lambda dl,v,target:target/v['files'][0]['filename']) as exact_download,patch('launcher.mods.install_dependencies'):
+        window.install_project('fixture','mod','1.21.1','fabric',version_id=old_vid,release_id='old');pump(lambda:not window.tasks.jobs)
+        assert exact_download.call_args.args[1]['id']=='old'
     # A modpack creates a new instance even when no existing target was chosen.
     from unittest.mock import Mock
     with patch('launcher.catalog.versions',return_value=[]),patch('launcher.catalog.pick_version',return_value={'id':'fixture'}),patch('launcher.catalog.download_version',side_effect=lambda downloader,version,target:target/'fixture.mrpack') as downloaded,patch('launcher.modpack.import_modpack',return_value='new-pack'),patch.object(window,'installed') as installed:
@@ -103,10 +131,21 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
         window.install_dialog();installer=window.dialogs[-1]
         pump(lambda:not installer.loading and installer.tree.topLevelItemCount()==1)
     assert installer.version.text()=='1.21.1'
+    assert installer.instance_name.text()=='1.21.1-原版'
     installer.snapshots.setChecked(True);assert installer.tree.topLevelItemCount()==2
     installer.query.setText('24w');assert installer.tree.topLevelItemCount()==1
     installer.loader.setCurrentIndex(1);assert installer.build.isEnabled()
-    render(installer,'qt-install.png');installer.reject()
+    assert installer.instance_name.text()==installer.version.text()+'-Fabric'
+    with patch('launcher.install.fabric.list_loaders',return_value=[{'loader':{'version':'0.18.0','stable':True}},{'loader':{'version':'0.14.0','stable':True}}]):
+        installer.fetch_loaders();pump(lambda:not window.tasks.jobs)
+    assert installer.loader_tree.topLevelItemCount()==2 and installer.build.text()=='0.18.0'
+    installer.loader_tree.setCurrentItem(installer.loader_tree.topLevelItem(1));assert installer.build.text()=='0.14.0'
+    render(installer,'qt-install.png')
+    with patch('launcher.install.fabric.install_loader',return_value='new-loader-fixture') as selected_loader,patch.object(window.repo,'install'),patch.object(window,'installed'):
+        expected_name=installer.instance_name.text();installer.install();pump(lambda:not window.tasks.jobs)
+        assert selected_loader.call_args.args[2]=='0.14.0'
+        assert window.instances.display_name('new-loader-fixture')==expected_name
+    installer.reject()
     for size in ((1100,740),(1920,1080)):
         window.resize(*size);app.processEvents();assert window.width()==size[0],('unexpected minimum size',window.size())
         window.navigate('settings');render(window,f'qt-settings-{size[0]}.png')

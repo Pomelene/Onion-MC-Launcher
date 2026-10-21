@@ -320,7 +320,7 @@ class GameRepository:
         if entry is None and not local:
             raise VersionNotFound(version_id)
 
-        stage(f"获取 {version_id} 版本信息")
+        stage(f"读取本地版本信息 · {version_id}" if local else f"获取 {version_id} 版本信息")
         if entry is not None:
             self._download_version_chain(entry, manifest)
         try:
@@ -334,17 +334,17 @@ class GameRepository:
             self._download_version_chain(parent, manifest)
             rv = self.resolver.resolve(version_id, features)
 
-        stage("下载客户端 jar")
+        stage("检查客户端文件")
         if rv.java_major is None:
             from .foreign import detect_mod_java_requirement
             rv.java_major = detect_mod_java_requirement(self.mods_dir(version_id)) or 8
         self._ensure_client(rv)
 
-        stage("下载依赖库")
-        self._ensure_libraries(rv, features, on_progress)
+        stage("检查本地依赖库")
+        self._ensure_libraries(rv, features, on_progress, on_stage)
 
-        stage("下载资源文件")
-        self._ensure_assets(rv, on_progress)
+        stage("检查本地资源")
+        self._ensure_assets(rv, on_progress, on_stage)
 
         stage("准备日志配置")
         self._ensure_logging(rv)
@@ -352,7 +352,7 @@ class GameRepository:
         stage("解压原生库")
         self.ensure_natives(rv, features)
 
-        stage("安装完成")
+        stage("游戏文件已就绪")
         return rv
 
     def _download_version_chain(self, entry: VersionEntry,
@@ -407,7 +407,7 @@ class GameRepository:
         self.downloader.download_one(job)
 
     def _ensure_libraries(self, rv: ResolvedVersion, features: Optional[dict] = None,
-                          on_progress: ProgressCallback = None) -> None:
+                          on_progress: ProgressCallback = None, on_stage: StageCallback = None) -> None:
         jobs: list[DownloadJob] = []
         for lib in rv.libraries:
             if not lib.matches(features):
@@ -429,10 +429,11 @@ class GameRepository:
                 jobs.append(DownloadJob(lib.artifact_url(self.remap), p, sha1=sha1,
                                         size=size, name=lib.name, fallback_urls=(lib.artifact_url(),)))
         if jobs:
+            if on_stage:on_stage(f"补全缺失依赖库 · {len(jobs)} 个文件")
             self.download_jobs(jobs, on_progress)
             self.invalidate_library_cache()
 
-    def _ensure_assets(self, rv: ResolvedVersion, on_progress: ProgressCallback = None) -> None:
+    def _ensure_assets(self, rv: ResolvedVersion, on_progress: ProgressCallback = None, on_stage: StageCallback = None) -> None:
         info = rv.asset_index or {}
         if not info:
             return
@@ -441,12 +442,14 @@ class GameRepository:
         if ref_assets is not None:
             ref_index = ref_assets / "indexes" / f"{index_id}.json"
             if ref_index.exists() and self._reference_covers_index(ref_index, ref_assets):
+                if on_stage:on_stage("本地资源已完整 · 使用已有资源目录")
                 return
         index_path = child(self.assets_dir / "indexes", f"{index_id}.json")
         if not index_path.exists():
             url = info.get("url")
             if not url:
                 return
+            if on_stage:on_stage("本地资源索引缺失 · 正在获取索引")
             data = self.downloader.fetch(self.remap(url))
             index_path.parent.mkdir(parents=True, exist_ok=True)
             write_text(self.assert_writable(index_path), data)
@@ -457,7 +460,9 @@ class GameRepository:
         index = AssetIndex.parse(raw, index_id, url=info.get("url", ""))
         jobs = index.jobs(self.assets_dir / "objects", self.remap)
         if jobs:
+            if on_stage:on_stage(f"补全缺失或大小不符的资源 · {len(jobs)} 个文件")
             self.download_jobs(jobs, on_progress)
+        elif on_stage:on_stage("本地资源已完整 · 无需下载")
         ensure_virtual_assets(self.game_dir, index)
 
     def _ensure_logging(self, rv: ResolvedVersion) -> None:

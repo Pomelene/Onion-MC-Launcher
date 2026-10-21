@@ -43,6 +43,26 @@ def test_verify_missing_version():
         assert probs and "JSON" in probs[0]
 
 
+def test_assets_complete_do_not_download_and_missing_files_are_reported():
+    from unittest.mock import patch
+    from launcher.version import ResolvedVersion
+    with tempfile.TemporaryDirectory() as folder:
+        repo=_repo(Path(folder));data=b'local-resource';digest=hashlib.sha1(data).hexdigest()
+        index=repo.assets_dir/'indexes/fixture.json';index.parent.mkdir(parents=True)
+        index.write_text(json.dumps({'objects':{'sound/example.ogg':{'hash':digest,'size':len(data)}}}))
+        resource=repo.assets_dir/'objects'/digest[:2]/digest;resource.parent.mkdir(parents=True);resource.write_bytes(data)
+        version=ResolvedVersion(id='fixture',asset_index={'id':'fixture','url':'https://example.invalid/index'})
+        with patch.object(repo,'reference_assets_dir',return_value=None),patch.object(repo.downloader,'fetch',side_effect=AssertionError('Unexpected network')),patch.object(repo,'download_jobs') as download:
+            stages=[];repo._ensure_assets(version,on_stage=stages.append)
+            download.assert_not_called();assert stages==['本地资源已完整 · 无需下载']
+            for contents in (None,b'wrong-size'):
+                if contents is None:resource.unlink(missing_ok=True)
+                else:resource.write_bytes(contents)
+                download.reset_mock();stages.clear();repo._ensure_assets(version,on_stage=stages.append)
+                assert download.call_count==1 and len(download.call_args.args[0])==1
+                assert stages==['补全缺失或大小不符的资源 · 1 个文件']
+
+
 def test_import_external_version_readonly():
     with tempfile.TemporaryDirectory() as d:
         root = Path(d)

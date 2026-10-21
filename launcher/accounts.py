@@ -10,10 +10,14 @@ import json
 import re
 import threading
 import time
+import tempfile
 import uuid as uuid_lib
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Optional
+from .secrets import protect,unprotect,SecretStorageError
+
+_SECRET_FIELDS=('access_token','refresh_token','client_token')
 
 
 _USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,16}$")
@@ -70,6 +74,7 @@ class AccountStore:
         self._lock = threading.Lock()
         self.accounts: list[AccountRecord] = []
         self.current_uuid: str = ""
+        self.locked_credentials: dict[str,dict] = {}
         self.load()
 
     def load(self) -> None:
@@ -79,40 +84,76 @@ class AccountStore:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return
+        if not isinstance(data,dict) or not isinstance(data.get('accounts',[]),list):return
         self.current_uuid = data.get("current", "")
-        self.accounts = [AccountRecord(**item) for item in data.get("accounts", [])
-                         if isinstance(item, dict) and item.get("type") and item.get("username")]
+        migrate=False;accounts=[];locked={}
+        for original in data.get('accounts',[]):
+            if not isinstance(original,dict) or not original.get('type') or not original.get('username'):continue
+            item={k:v for k,v in original.items() if k in AccountRecord.__dataclass_fields__}
+            envelope=original.get('protected_secrets')
+            if envelope is not None:
+                for key in _SECRET_FIELDS:item[key]=''
+                try:
+                    values=unprotect(envelope)
+                    for key in _SECRET_FIELDS:item[key]=values.get(key,'')
+                except SecretStorageError:
+                    # Retain unreadable ciphertext on subsequent saves. Moving
+                    # the file to another Windows user must not destroy it.
+                    locked[item.get('uuid','')]=envelope;item['expires_at']=0
+            elif any(item.get(key) not in (None,'','0') for key in _SECRET_FIELDS):
+                migrate=True
+            try:accounts.append(AccountRecord(**item))
+            except TypeError:continue
+        self.accounts=accounts;self.locked_credentials=locked
+        if migrate:self.save()
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        data = {"current": self.current_uuid, "accounts": [asdict(a) for a in self.accounts]}
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp.replace(self.path)
+        items=[]
+        for account in self.accounts:
+            item=asdict(account);values={key:item.pop(key) for key in _SECRET_FIELDS}
+            if any(value not in ('','0') for value in values.values()):
+                item['protected_secrets']=protect(values)
+            elif account.uuid in self.locked_credentials:
+                item['protected_secrets']=self.locked_credentials[account.uuid]
+            items.append(item)
+        data = {"current": self.current_uuid, "accounts": items}
+        temporary=None
+        try:
+            with tempfile.NamedTemporaryFile(mode='w',encoding='utf-8',dir=self.path.parent,
+                                             prefix='.onion-accounts-',delete=False) as output:
+                temporary=Path(output.name)
+                json.dump(data,output,ensure_ascii=False,indent=2)
+                output.flush()
+            temporary.replace(self.path)
+        finally:
+            if temporary is not None:temporary.unlink(missing_ok=True)
+
+    def _commit(self,accounts,current):
+        previous,self.accounts=self.accounts,accounts
+        old_current,self.current_uuid=self.current_uuid,current
+        try:self.save()
+        except Exception:
+            self.accounts,self.current_uuid=previous,old_current
+            raise
 
     # ---------- 操作 ----------
 
     def add(self, account: AccountRecord) -> None:
         with self._lock:
-            self.accounts = [a for a in self.accounts
-                             if not (a.type == account.type and a.uuid == account.uuid)]
-            self.accounts.append(account)
-            if not self.current_uuid:
-                self.current_uuid = account.uuid
-            self.save()
+            accounts=[a for a in self.accounts if not (a.type==account.type and a.uuid==account.uuid)]
+            self._commit(accounts+[account],self.current_uuid or account.uuid)
 
     def remove(self, uuid: str) -> None:
         with self._lock:
-            self.accounts = [a for a in self.accounts if a.uuid != uuid]
-            if self.current_uuid == uuid:
-                self.current_uuid = self.accounts[0].uuid if self.accounts else ""
-            self.save()
+            accounts=[a for a in self.accounts if a.uuid!=uuid]
+            current=(accounts[0].uuid if accounts else '') if self.current_uuid==uuid else self.current_uuid
+            self._commit(accounts,current)
 
     def set_current(self, uuid: str) -> None:
         with self._lock:
             if any(a.uuid == uuid for a in self.accounts):
-                self.current_uuid = uuid
-                self.save()
+                self._commit(self.accounts,uuid)
 
     def current(self) -> Optional[AccountRecord]:
         for a in self.accounts:
@@ -128,9 +169,7 @@ class AccountStore:
 
     def update(self, account: AccountRecord) -> None:
         with self._lock:
-            self.accounts = [a for a in self.accounts if a.uuid != account.uuid]
-            self.accounts.append(account)
-            self.save()
+            self._commit([a for a in self.accounts if a.uuid!=account.uuid]+[account],self.current_uuid)
 
     def refresh(self, account: AccountRecord) -> AccountRecord:
         """微软账号过期时用 refresh_token 续期；其它类型原样返回。"""

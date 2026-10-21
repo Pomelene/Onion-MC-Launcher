@@ -16,12 +16,16 @@ $taskSavedPath=$env:PATH
 $taskSavedTemp=$env:TEMP
 $taskSavedTmp=$env:TMP
 $taskSavedCache=$env:PYINSTALLER_CONFIG_DIR
+$taskSavedPythonPath=$env:PYTHONPATH
 Push-Location -LiteralPath $taskRoot
 try {
     $env:PATH=@($taskPythonDir,$taskQt,$taskShiboken,(Join-Path $env:SystemRoot 'System32'),$env:SystemRoot)-join ';'
     $env:TEMP=Join-Path $taskRoot 'tmp\build-temp'
     $env:TMP=$env:TEMP
     $env:PYINSTALLER_CONFIG_DIR=Join-Path $taskRoot 'tmp\pyinstaller-cache'
+    if (Test-Path -LiteralPath (Join-Path $taskRoot '.deps\pillow')) {
+        $env:PYTHONPATH=(Join-Path $taskRoot '.deps\pillow')+[IO.Path]::PathSeparator+$env:PYTHONPATH
+    }
     New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
     & $taskPython -m PyInstaller --noconfirm --distpath dist/qt --workpath build/qt-isolated packaging/craftbridge.spec
     if ($LASTEXITCODE -ne 0) { throw 'Qt build failed; existing launcher has been retained.' }
@@ -38,5 +42,6 @@ try {
     $env:TEMP=$taskSavedTemp
     $env:TMP=$taskSavedTmp
     $env:PYINSTALLER_CONFIG_DIR=$taskSavedCache
+    $env:PYTHONPATH=$taskSavedPythonPath
     Pop-Location
 }

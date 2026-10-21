@@ -197,7 +197,8 @@ def download_java(major: int, downloader: Downloader,
         raw = (meta.get("downloads") or {}).get("raw")
         if not raw:
             continue
-        target = dest / rel
+        from .safety import child
+        target = child(dest,rel)
         jobs.append(DownloadJob(raw["url"], target, sha1=raw.get("sha1"),
                                 size=raw.get("size"), name=rel))
     if on_progress:

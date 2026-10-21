@@ -8,6 +8,7 @@ import zipfile
 import tempfile
 import stat
 from pathlib import Path
+from .archives import validate_archive,copy_member
 
 
 def _zip_dir(src: Path, dest: Path) -> None:
@@ -19,7 +20,7 @@ def _zip_dir(src: Path, dest: Path) -> None:
 
 def _safe_extract(zf: zipfile.ZipFile, target_dir: Path) -> None:
     """解压并防御 zip-slip（路径穿越）。"""
-    root = target_dir.resolve()
+    validate_archive(zf)
     for info in zf.infolist():
         from .safety import child
         dest = child(target_dir, info.filename.rstrip('/'))
@@ -27,8 +28,7 @@ def _safe_extract(zf: zipfile.ZipFile, target_dir: Path) -> None:
             dest.mkdir(parents=True, exist_ok=True)
             continue
         dest.parent.mkdir(parents=True, exist_ok=True)
-        with zf.open(info) as src, open(dest, "wb") as out:
-            out.write(src.read())
+        copy_member(zf,info,dest)
 
 
 def backup(save: Path, backups_dir: Path) -> Path:
@@ -42,7 +42,7 @@ def backup(save: Path, backups_dir: Path) -> Path:
     return target
 
 
-def restore(zip_path: Path, saves_dir: Path) -> Path:
+def restore(zip_path: Path, saves_dir: Path, cancel_event=None) -> Path:
     """Restore into a new directory, publishing only after a complete extraction.
 
     Both world-prefixed archives and the launcher's older flat archives are accepted.
@@ -53,6 +53,7 @@ def restore(zip_path: Path, saves_dir: Path) -> Path:
     contained(saves_dir / ".craftbridge-restore-probe", saves_dir)
     saves_dir.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(zip_path) as zf:
+        validate_archive(zf)
         entries = zf.infolist()
         if not entries:
             raise ValueError("备份文件为空")
@@ -77,9 +78,9 @@ def restore(zip_path: Path, saves_dir: Path) -> Path:
                     dest.mkdir(parents=True, exist_ok=True)
                 else:
                     dest.parent.mkdir(parents=True, exist_ok=True)
-                    with zf.open(info) as src, dest.open('wb') as out:
-                        shutil.copyfileobj(src, out)
+                    copy_member(zf,info,dest,cancel_event=cancel_event)
             target = child(saves_dir, root_name)
+            retries = 0
             while True:
                 if target.exists():
                     target = child(saves_dir, f"{root_name}-restored-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}")
@@ -90,6 +91,13 @@ def restore(zip_path: Path, saves_dir: Path) -> Path:
                 except FileExistsError:
                     # Windows rename is exclusive; handle a concurrent restore safely.
                     target = child(saves_dir, f"{root_name}-restored-{uuid.uuid4().hex}")
+                except PermissionError:
+                    # Windows scanners can briefly hold a just-written file open.
+                    # Retry the exclusive rename; never merge or replace a world.
+                    if target.exists() or retries >= 4:
+                        raise
+                    retries += 1
+                    time.sleep(0.05 * retries)
 
 
 def delete_save(save: Path) -> None:

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 from .libraries import Library
+from .archives import validate_archive,copy_member
 
 
 def _is_excluded(entry_name: str, excludes: Iterable[str]) -> bool:
@@ -29,6 +30,7 @@ def extract_native(library: Library, source_jar: Path, dest_dir: Path) -> int:
     excludes = library.exclude_entries()
     count = 0
     with zipfile.ZipFile(source_jar) as zf:
+        validate_archive(zf)
         for info in zf.infolist():
             name = info.filename
             if name.endswith("/"):
@@ -43,8 +45,7 @@ def extract_native(library: Library, source_jar: Path, dest_dir: Path) -> int:
             except (ValueError, PermissionError):
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            with zf.open(info) as src, open(target, "wb") as dst:
-                dst.write(src.read())
+            copy_member(zf,info,target)
             count += 1
     return count
 

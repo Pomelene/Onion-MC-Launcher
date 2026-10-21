@@ -18,7 +18,7 @@ ROOT = Path(SPECPATH).resolve().parent  # SPECPATH 是 spec 所在目录（packa
 
 a = Analysis(
     [str(ROOT / "main.py")],
-    pathex=[str(ROOT), str(ROOT / ".deps" / "qt")],
+    pathex=[str(ROOT), str(ROOT / ".deps" / "pillow"), str(ROOT / ".deps" / "qt")],
     binaries=[],
     datas=[(str(ROOT / "assets" / "craftbridge.ico"), "assets"),
            (str(ROOT / "assets" / "microsoft-app.json"), "assets")],

@@ -9,6 +9,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Callable, Optional
+from ..network import secure_open
 
 DEVICE_CODE_URL = 'https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode'
 TOKEN_URL = 'https://login.microsoftonline.com/consumers/oauth2/v2.0/token'
@@ -85,14 +86,16 @@ def _error(url, status, data):
 
 def _request(req):
     try:
-        with urllib.request.urlopen(req, timeout=20) as response:
-            data = json.loads(response.read().decode('utf-8'))
+        with secure_open(req, timeout=20) as response:
+            content=response.read(1024**2+1)
+            if len(content)>1024**2:raise AuthError('认证响应超过安全上限',code='invalid_response')
+            data = json.loads(content.decode('utf-8'))
         if not isinstance(data, dict):
             raise AuthError('认证服务返回了无效的数据')
         return data
     except urllib.error.HTTPError as exc:
         try:
-            data = json.loads(exc.read().decode('utf-8', 'replace'))
+            data = json.loads(exc.read(65536).decode('utf-8', 'replace'))
             if not isinstance(data, dict):
                 data = {}
         except (ValueError, OSError):

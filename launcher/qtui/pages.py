@@ -172,7 +172,7 @@ class Pages:
         path,_=QFileDialog.getOpenFileName(self,'恢复世界备份','','ZIP 备份 (*.zip)')
         if not path:return
         from ..saves import restore
-        def work(job):self.repo.assert_idle(vid);return restore(Path(path),self.repo.saves_dir(vid))
+        def work(job):self.repo.assert_idle(vid);return restore(Path(path),self.repo.saves_dir(vid),cancel_event=job.cancel)
         self.task('恢复世界备份',work,lambda _:self.navigate('worlds'))
 
     def build_logs(self):

@@ -313,6 +313,8 @@ def launch(repo: GameRepository, rv: ResolvedVersion, account: Account,
            on_log: Optional[Callable[[str, bool], None]] = None,
            on_exit: Optional[Callable[[int], None]] = None) -> ManagedProcess:
     """启动游戏并返回受管进程（不等待游戏退出）。"""
+    if account.user_type in ('msa','mojang') and account.access_token in ('','0'):
+        raise PermissionError('在线账号凭据不可用，请重新登录后启动')
     command = build_command(repo, rv, account, settings, java_path)
     run_dir = Path(settings.game_dir_override) if settings.game_dir_override else repo.run_dir(rv.id)
     if not settings.game_dir_override:

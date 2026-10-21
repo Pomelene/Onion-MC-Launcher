@@ -10,10 +10,10 @@ def test_oauth_device_and_token_requests_are_form_encoded():
     class Response:
         def __enter__(self):return self
         def __exit__(self,*args):pass
-        def read(self):return b'{"access_token":"fake"}'
+        def read(self,size=-1):return b'{"access_token":"fake"}'
     seen=[]
     def opened(request,**kwargs):seen.append(request);return Response()
-    with patch('urllib.request.urlopen',side_effect=opened):
+    with patch.object(ms,'secure_open',side_effect=opened):
         ms.refresh_token('app','refresh+value &')
     request=seen[0]
     assert request.get_header('Content-type')=='application/x-www-form-urlencoded'
@@ -66,7 +66,7 @@ def test_cancel_between_auth_stages_stops_next_request():
 def test_unknown_error_does_not_expose_server_body():
     body=json.dumps({'error':'private-token','error_description':'secret-refresh'}).encode()
     error=urllib.error.HTTPError(ms.TOKEN_URL,400,'bad',{},io.BytesIO(body))
-    with patch('urllib.request.urlopen',side_effect=error):
+    with patch.object(ms,'secure_open',side_effect=error):
         try:ms._post_form(ms.TOKEN_URL,{})
         except ms.AuthError as exc:
             assert 'private-token' not in str(exc) and 'secret-refresh' not in str(exc)

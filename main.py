@@ -5,6 +5,8 @@ from pathlib import Path
 
 dependencies=Path(__file__).resolve().parent/'.deps/qt'
 if dependencies.is_dir():sys.path.insert(0,str(dependencies))
+pillow=Path(__file__).resolve().parent/'.deps/pillow'
+if pillow.is_dir():sys.path.insert(0,str(pillow))
 if '--self-check-output' in sys.argv:
     os.environ['QT_QPA_PLATFORM']='offscreen'
     from launcher.qtui.selfcheck import run

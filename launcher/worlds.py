@@ -35,8 +35,12 @@ class _NbtReader:
 
     def __init__(self, stream: BinaryIO) -> None:
         self.stream = stream
+        self.remaining=16*1024**2
+        self.tags=0
 
     def _read(self, size: int) -> bytes:
+        if size<0 or size>self.remaining:raise ValueError('NBT 数据超过安全上限')
+        self.remaining-=size
         data = self.stream.read(size)
         if len(data) != size:
             raise ValueError("NBT 数据不完整")
@@ -46,7 +50,9 @@ class _NbtReader:
         length = struct.unpack(">H", self._read(2))[0]
         return self._read(length).decode("utf-8", errors="replace")
 
-    def payload(self, tag_type: int):
+    def payload(self, tag_type: int,depth=0):
+        self.tags+=1
+        if depth>64 or self.tags>1_000_000:raise ValueError('NBT 结构超过安全上限')
         if tag_type == TAG_BYTE:
             return struct.unpack(">b", self._read(1))[0]
         if tag_type == TAG_SHORT:
@@ -61,13 +67,14 @@ class _NbtReader:
             return struct.unpack(">d", self._read(8))[0]
         if tag_type == TAG_BYTE_ARRAY:
             length = struct.unpack(">i", self._read(4))[0]
-            return self._read(max(0, length))
+            return self._read(length)
         if tag_type == TAG_STRING:
             return self._string()
         if tag_type == TAG_LIST:
             item_type = struct.unpack(">b", self._read(1))[0]
             length = struct.unpack(">i", self._read(4))[0]
-            return [self.payload(item_type) for _ in range(max(0, length))]
+            if length<0 or length>1_000_000:raise ValueError('NBT 列表超过安全上限')
+            return [self.payload(item_type,depth+1) for _ in range(length)]
         if tag_type == TAG_COMPOUND:
             result = {}
             while True:
@@ -75,13 +82,15 @@ class _NbtReader:
                 if child_type == TAG_END:
                     return result
                 name = self._string()
-                result[name] = self.payload(child_type)
+                result[name] = self.payload(child_type,depth+1)
         if tag_type == TAG_INT_ARRAY:
             length = struct.unpack(">i", self._read(4))[0]
-            return list(struct.unpack(f">{max(0, length)}i", self._read(4 * max(0, length))))
+            if length<0 or length>1_000_000:raise ValueError('NBT 数组超过安全上限')
+            return list(struct.unpack(f">{length}i", self._read(4*length)))
         if tag_type == TAG_LONG_ARRAY:
             length = struct.unpack(">i", self._read(4))[0]
-            return list(struct.unpack(f">{max(0, length)}q", self._read(8 * max(0, length))))
+            if length<0 or length>1_000_000:raise ValueError('NBT 数组超过安全上限')
+            return list(struct.unpack(f">{length}q", self._read(8*length)))
         raise ValueError(f"未知 NBT 类型：{tag_type}")
 
     def root(self) -> dict:

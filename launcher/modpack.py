@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from .download import DownloadError, DownloadJob
+from .archives import validate_archive,copy_member,read_member
 
 
 @dataclass
@@ -30,7 +31,7 @@ class ModpackInfo:
 
 def _read_json(zf: zipfile.ZipFile, name: str) -> Optional[dict]:
     try:
-        return json.loads(zf.read(name).decode("utf-8", "replace"))
+        return json.loads(read_member(zf,name).decode("utf-8", "replace"))
     except (KeyError, json.JSONDecodeError, OSError):
         return None
 
@@ -38,6 +39,7 @@ def _read_json(zf: zipfile.ZipFile, name: str) -> Optional[dict]:
 def read_modpack_info(path: Path) -> ModpackInfo:
     """识别整合包类型并读取基本信息。"""
     with zipfile.ZipFile(path) as zf:
+        validate_archive(zf)
         index = _read_json(zf, "modrinth.index.json")
         if index is not None:
             deps = index.get("dependencies") or {}
@@ -74,9 +76,9 @@ def read_modpack_info(path: Path) -> ModpackInfo:
     raise DownloadError("无法识别的整合包格式（需要 modrinth.index.json 或 manifest.json）")
 
 
-def _safe_extract(zf: zipfile.ZipFile, folder: str, target: Path) -> int:
+def _safe_extract(zf: zipfile.ZipFile, folder: str, target: Path, cancel_event=None) -> int:
     """把 zip 中 folder/ 前缀的内容解压到 target，防路径穿越。"""
-    root = target.resolve()
+    validate_archive(zf)
     count = 0
     for info in zf.infolist():
         if info.filename.endswith("/") or not info.filename.startswith(folder + "/"):
@@ -88,8 +90,7 @@ def _safe_extract(zf: zipfile.ZipFile, folder: str, target: Path) -> int:
         except (ValueError, PermissionError):
             continue
         dest.parent.mkdir(parents=True, exist_ok=True)
-        with zf.open(info) as src, open(dest, "wb") as out:
-            out.write(src.read())
+        copy_member(zf,info,dest,cancel_event=cancel_event)
         count += 1
     return count
 
@@ -146,6 +147,8 @@ def import_modpack(repo, archive: Path, on_stage=None, on_progress=None) -> str:
 
     files_installed = 0
     with zipfile.ZipFile(archive) as zf:
+        validate_archive(zf)
+        cancel_event=getattr(repo.downloader,'_cancel_event',lambda:None)()
         index = _read_json(zf, "modrinth.index.json")
         if index is not None:
             stage("下载整合包模组文件")
@@ -168,11 +171,11 @@ def import_modpack(repo, archive: Path, on_stage=None, on_progress=None) -> str:
                 repo.download_jobs(jobs, on_progress)
             files_installed += len(jobs)
             stage("解压整合包覆盖文件")
-            _safe_extract(zf, "overrides", instance)
-            _safe_extract(zf, "client-overrides", instance)
+            _safe_extract(zf, "overrides", instance,cancel_event)
+            _safe_extract(zf, "client-overrides", instance,cancel_event)
         else:
             stage("解压整合包覆盖文件")
-            _safe_extract(zf, "overrides", instance)
+            _safe_extract(zf, "overrides", instance,cancel_event)
             manifest_data = _read_json(zf, "manifest.json") or {}
             entries = manifest_data.get("files") or []
             if entries:

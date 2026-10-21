@@ -124,7 +124,7 @@ class AccountsDialog(QDialog):
         self.tree.clear()
         for account in self.store.accounts:
             kind={'microsoft':'Microsoft 正版','authlib':'外置账号'}.get(account.type,'离线账号')
-            state='需要重新登录' if account.type=='microsoft' and not account.refresh_token else '需要续期' if account.is_expired() else '已登录' if account.type!='offline' else '本地身份'
+            state='需要重新登录' if account.type!='offline' and not account.access_token or account.type=='microsoft' and not account.refresh_token else '需要续期' if account.is_expired() else '已登录' if account.type!='offline' else '本地身份'
             name=account.username+(' · 当前' if account.uuid==self.store.current_uuid else '')
             item=QTreeWidgetItem([name,kind,state]);item.setData(0,Qt.ItemDataRole.UserRole,account.uuid);self.tree.addTopLevelItem(item)
         if not self.store.accounts:self.status.setText('尚未添加账号。选择“微软正版登录”或先添加一个离线身份。')

@@ -12,9 +12,11 @@ import uuid
 from pathlib import Path
 
 from ..download import DownloadError, DownloadJob
+from ..network import secure_open,validate_url
 
-AUTHLIB_API = "https://api.github.com/repos/yushijinhun/authlib-injector/releases/latest"
-AUTHLIB_FALLBACK = "https://github.com/yushijinhun/authlib-injector/releases/latest/download/authlib-injector.jar"
+INJECTOR_URL='https://github.com/yushijinhun/authlib-injector/releases/download/v1.2.8/authlib-injector-1.2.8.jar'
+INJECTOR_SHA256='9c7f4343e6c82034958ffb48c14a2cb0c85928be7283103ce17da00c6d5a7b10'
+INJECTOR_SIZE=349681
 
 
 def _post_json(url: str, payload: dict) -> dict:
@@ -24,30 +26,24 @@ def _post_json(url: str, payload: dict) -> dict:
         "User-Agent": "Onion Minecraft Launcher/0.2.0",
     })
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+        with secure_open(req, timeout=30) as resp:
+            content=resp.read(1024**2+1)
+            if len(content)>1024**2:raise DownloadError('认证响应过大')
+            return json.loads(content.decode("utf-8"))
     except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", "replace")
-        raise DownloadError(f"登录失败 ({e.code})：{detail[:200]}") from e
+        status=e.code;e.close()
+        raise DownloadError(f"外置认证失败（HTTP {status}），请检查账号或联系验证服务器维护者") from None
     except urllib.error.URLError as e:
-        raise DownloadError(f"网络错误：{e.reason}") from e
+        raise DownloadError('无法连接验证服务器，请检查网络后重试') from None
+    except (ValueError,UnicodeError,OSError):
+        raise DownloadError('验证服务器地址或响应无效') from None
 
 
 def ensure_injector(downloader, dest: Path) -> Path:
-    """确保 authlib-injector.jar 存在（优先取 GitHub 最新 release，失败回退直链）。"""
-    if dest.exists():
-        return dest
+    """Use a pinned official release and validate its SHA-256, including cache."""
     dest.parent.mkdir(parents=True, exist_ok=True)
-    url = AUTHLIB_FALLBACK
-    try:
-        data = downloader.fetch_json(AUTHLIB_API)
-        assets = data.get("assets") or []
-        jar = next((x for x in assets if (x.get("name") or "").endswith(".jar")), None)
-        if jar and jar.get("browser_download_url"):
-            url = jar["browser_download_url"]
-    except Exception:  # noqa: BLE001
-        pass
-    downloader.download_one(DownloadJob(url, dest, name="authlib-injector.jar"))
+    downloader.download_one(DownloadJob(INJECTOR_URL,dest,sha256=INJECTOR_SHA256,
+                                      size=INJECTOR_SIZE,name='authlib-injector-1.2.8.jar'))
     return dest
 
 
@@ -56,7 +52,8 @@ def authenticate(server_url: str, username: str, password: str) -> dict:
 
     返回 {username, uuid, access_token, authlib_url, user_type}。
     """
-    url = (server_url or "").strip().rstrip("/") + "/authserver/authenticate"
+    validate_url((server_url or '').strip(),https_only=True)
+    url = server_url.strip().rstrip("/") + "/authserver/authenticate"
     client_token = uuid.uuid4().hex
     payload = {
         "agent": {"name": "Minecraft", "version": 1},

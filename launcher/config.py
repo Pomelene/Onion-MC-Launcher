@@ -7,10 +7,12 @@
 
 import json
 import threading
+import tempfile
 from pathlib import Path
 from typing import Any
 
 from .paths import default_game_dir,LAUNCHER_NAME
+from .secrets import protect,unprotect,SecretStorageError
 
 #: 需要按类型强制的键（避免 settings.json 手工编辑引入错类型）
 _INT_KEYS = {"min_memory", "max_memory", "window_width", "window_height",
@@ -101,6 +103,7 @@ class Config:
         self.path = Path(path)
         self.data: dict[str, Any] = dict(DEFAULTS)
         self._lock = threading.Lock()
+        self._locked_secret_settings=None
         self.load()
 
     def load(self) -> None:
@@ -109,20 +112,34 @@ class Config:
         try:
             loaded = json.loads(self.path.read_text(encoding="utf-8"))
             if isinstance(loaded, dict):
+                envelope=loaded.get('protected_settings')
+                if envelope is not None:
+                    loaded['curseforge_api_key']=''
+                    try:loaded['curseforge_api_key']=unprotect(envelope).get('curseforge_api_key','')
+                    except SecretStorageError:self._locked_secret_settings=envelope
                 for key, value in loaded.items():
                     if key not in DEFAULTS:
                         continue
                     coerced = _coerce(key, value)
                     if coerced is not None:
                         self.data[key] = coerced
+                if envelope is None and self.data.get('curseforge_api_key'):self.save()
         except (json.JSONDecodeError, OSError):
             pass
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.data, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp.replace(self.path)
+        payload=dict(self.data);secret=payload.pop('curseforge_api_key','')
+        if secret:payload['protected_settings']=protect({'curseforge_api_key':secret})
+        elif self._locked_secret_settings is not None:payload['protected_settings']=self._locked_secret_settings
+        temporary=None
+        try:
+            with tempfile.NamedTemporaryFile(mode='w',encoding='utf-8',dir=self.path.parent,
+                                             prefix='.onion-settings-',delete=False) as output:
+                temporary=Path(output.name);json.dump(payload,output,ensure_ascii=False,indent=2)
+            temporary.replace(self.path)
+        finally:
+            if temporary is not None:temporary.unlink(missing_ok=True)
 
     def get(self, key: str, default: Any = None) -> Any:
         with self._lock:

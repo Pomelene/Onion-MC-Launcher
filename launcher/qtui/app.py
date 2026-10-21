@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt,Signal,Slot,QTimer,QUrl
 from PySide6.QtGui import QDesktopServices,QIcon
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QStackedWidget,QComboBox,
     QLineEdit,QPlainTextEdit,QMessageBox,QInputDialog,QDialog,QFormLayout,QCheckBox,QSpinBox,QProgressBar)
-from .widgets import STYLE,Page,Card,Empty,label,button,column,row,clear,icon,TaskDialog,NavigationItem,GlassBackdrop,configure_fonts
+from .widgets import STYLE,themed_style,Page,Card,Empty,label,button,column,row,clear,icon,TaskDialog,NavigationItem,GlassBackdrop,configure_fonts
 from .tasks import TaskManager
 from .actions import Actions
 from .pages import Pages
@@ -31,7 +31,7 @@ class MainWindow(QMainWindow,Actions,Pages):
         self.setWindowTitle(f'{LAUNCHER_NAME} {LAUNCHER_VERSION}');self.resize(1440,900);self.setMinimumSize(1100,740)
         resource=Path(getattr(sys,'_MEIPASS',self.root))/'assets/craftbridge.ico'
         if resource.exists():self.setWindowIcon(QIcon(str(resource)))
-        self.setStyleSheet(STYLE);self._build();self.game_log.connect(self.append_log);self.game_exit.connect(self.exited)
+        self.setStyleSheet(themed_style(self.config_obj.get('accent_color')));self._build();self.game_log.connect(self.append_log);self.game_exit.connect(self.exited)
         self.refresh_account();self.navigate('home');QTimer.singleShot(0,self.reload_versions)
 
     def _build(self):

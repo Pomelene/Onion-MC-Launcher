@@ -1,8 +1,9 @@
 """Grouped, draft-based settings shared by the launcher and individual instances."""
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QWidget,QStackedWidget,QLineEdit,QComboBox,QSpinBox,
-    QCheckBox,QFileDialog,QMessageBox,QDialog)
-from .widgets import Page,SettingsSection as Card,ToggleSwitch,InlineSpinBox,column,row,label,button,setting_row,icon
+    QCheckBox,QFileDialog,QMessageBox,QDialog,QColorDialog)
+from PySide6.QtGui import QColor
+from .widgets import Page,SettingsSection as Card,ToggleSwitch,InlineSpinBox,SettingsComboBox,themed_style,column,row,label,button,setting_row,icon
 
 
 class SettingsEditor(QWidget):
@@ -61,7 +62,7 @@ class SettingsEditor(QWidget):
         memory_state();body.addWidget(card)
         body=tab('游戏与窗口','world');card=Card('游戏窗口','实例可以继承全局设置，也可以独立指定。')
         for key,title,low,high in [('width' if version_id else 'window_width','窗口宽度',320,7680),('height' if version_id else 'window_height','窗口高度',240,4320)]:self.spin(card,key,title,'以游戏逻辑像素为单位',low,high,1)
-        preset=QComboBox();preset.addItem('选择窗口尺寸',None)
+        preset=SettingsComboBox();preset.addItem('选择窗口尺寸',None)
         for title,value in [('1280 × 720',(1280,720)),('1600 × 900',(1600,900)),('1920 × 1080',(1920,1080))]:preset.addItem(title,value)
         def resize_preset(index):
             size=preset.currentData()
@@ -89,7 +90,14 @@ class SettingsEditor(QWidget):
             self.check(card,'show_launch_logs','启动后显示日志页','便于查看游戏输出和定位问题');body.addWidget(card)
             card=Card('账号管理','正版、离线与外置账号在统一的账号窗口中管理。')
             card.body.addWidget(button('管理游戏账号',window.open_accounts,'soft','account'));body.addWidget(card)
-            body=tab('外观','grid');card=Card('首页背景','选择本地图片，首页将按窗口比例裁切显示。')
+            body=tab('外观','grid');card=Card('特征色','用于高亮设置行中可点击或编辑的文字。')
+            self.edit(card,'accent_color','高亮颜色','输入六位十六进制颜色，例如 #b8e8ee','#b8e8ee')
+            if not self.fields['accent_color'].text():self.fields['accent_color'].setText('#b8e8ee')
+            def choose_accent():
+                color=QColorDialog.getColor(QColor(self.fields['accent_color'].text()),self,'选择特征色')
+                if color.isValid():self.fields['accent_color'].setText(color.name())
+            setting_row(card.body,'颜色选择器','选择后保存设置生效',button('选择颜色',choose_accent,'soft'));body.addWidget(card)
+            card=Card('首页背景','选择本地图片，首页将按窗口比例裁切显示。')
             field=QLineEdit(str(self.initial('background_image') or ''));field.setPlaceholderText('使用默认背景');self.add(card,'background_image','自定义图片','支持 PNG、JPG 和 WebP',field)
             def choose_background():
                 path,_=QFileDialog.getOpenFileName(self,'选择首页背景','','图片 (*.png *.jpg *.jpeg *.webp)')
@@ -170,7 +178,7 @@ class SettingsEditor(QWidget):
         field=ToggleSwitch();field.setChecked(bool(self.initial(key)));self.add(card,key,title,description,field)
 
     def combo(self,card,key,title,description,options):
-        field=QComboBox()
+        field=SettingsComboBox()
         for text,value in options:field.addItem(text,value)
         index=field.findData(self.initial(key))
         if index<0:field.addItem('当前配置（保留）',self.initial(key));index=field.count()-1
@@ -207,6 +215,9 @@ class SettingsEditor(QWidget):
             minimum=values.get('min_memory',w.config_obj.get('min_memory'));maximum=values.get('max_memory',w.config_obj.get('max_memory'))
             if not (self.flat and not self.specific.isChecked()) and not values.get('auto_memory',w.config_obj.get('auto_memory')) and minimum>maximum:raise ValueError('最小内存不能大于最大内存。')
             if not self.vid and bool(values.get('proxy_host')) != bool(values.get('proxy_port')):raise ValueError('代理主机和端口需要同时填写，或同时留空 / 设为 0。')
+            if not self.vid:
+                import re
+                if not re.fullmatch(r'#[0-9a-fA-F]{6}',values.get('accent_color','')):raise ValueError('特征色需要使用 #RRGGBB 格式。')
             if self.vid:
                 w.repo.assert_idle(self.vid)
                 metadata={key:values.pop(key) for key in ('name','group','notes') if key in values}
@@ -215,6 +226,7 @@ class SettingsEditor(QWidget):
                 if metadata:w.instances.update(self.vid,**metadata)
             else:
                 w.config_obj.update(values)
+                w.setStyleSheet(themed_style(values['accent_color']))
                 from ..repository import GameRepository
                 w.repo=GameRepository(w.config_obj)
             self.dirty=False;self.hint.setText('设置已保存');w.status.setText('设置已保存')

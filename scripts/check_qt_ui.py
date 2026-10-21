@@ -59,7 +59,13 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
     window.navigate('home');window.navigate('settings')
     assert window.settings_editor is editor and editor.dirty and config.get('max_memory')==previous
     editor.save();pump(lambda:not window.tasks.jobs)
-    assert config.get('max_memory')==6144 and editor.stack.currentIndex()==1 and not editor.dirty
+    assert config.get('max_memory')==6144 and editor.stack.currentIndex()==1 and not editor.dirty,errors
+    from launcher.qtui.widgets import SettingsComboBox
+    editor.fields['accent_color'].setText('#edc5ff');editor.save();app.processEvents()
+    assert config.get('accent_color')=='#edc5ff'
+    preset=next(c for c in editor.findChildren(SettingsComboBox) if c.itemText(0)=='选择窗口尺寸')
+    assert preset.palette().color(preset.foregroundRole()).name()=='#edc5ff'
+    editor.select_tab(0);render(window,'qt-accent-settings.png')
     vid=window.selected_version;window.instance_settings(vid);instance_editor=window.instance_editor
     assert not instance_editor.fields['max_memory'].isEnabled() and instance_editor.stack.isEnabled()
     instance_editor.specific.setChecked(True);instance_editor.fields['max_memory'].setValue(8192)

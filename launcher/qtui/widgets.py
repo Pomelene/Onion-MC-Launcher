@@ -2,7 +2,7 @@
 from PySide6.QtCore import Qt, QSize, QRectF, QPointF, QVariantAnimation, QEasingCurve, QBuffer, QByteArray, QIODevice
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPainterPath, QFontDatabase, QFont, QLinearGradient, QRadialGradient, QImageReader, QFontMetrics
 from PySide6.QtWidgets import (QWidget,QFrame,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,
-    QScrollArea,QSizePolicy,QDialog,QProgressBar,QMessageBox,QLayout,QAbstractButton,QCheckBox,QSpinBox,QComboBox,QLineEdit,QAbstractSpinBox)
+    QScrollArea,QSizePolicy,QDialog,QProgressBar,QMessageBox,QLayout,QAbstractButton,QCheckBox,QSpinBox,QComboBox,QLineEdit,QAbstractSpinBox,QStyle,QStyleOptionComboBox)
 
 # Shared flat surfaces and compact list controls, matching the supplied reference.
 STYLE = '''
@@ -101,6 +101,29 @@ class GlassBackdrop(QWidget):
             g=QRadialGradient(QPointF(self.width()*x,self.height()*y),max(self.width(),self.height())*r)
             c=QColor(color);c.setAlpha(145);g.setColorAt(0,c);c.setAlpha(0);g.setColorAt(1,c)
             p.fillRect(self.rect(),g)
+        p.end()
+
+
+def themed_style(accent='#b8e8ee'):
+    import re
+    if not isinstance(accent,str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',accent):accent='#b8e8ee'
+    return STYLE+'''
+QWidget#settingRow QLineEdit,QWidget#settingRow QSpinBox,QWidget#settingRow QComboBox,QWidget#settingRow QPushButton { color:ACCENT; }
+QWidget#settingRow QPushButton { text-align:right; }
+QWidget#settingRow QPushButton:hover { background:rgba(193,215,255,20); }
+QWidget#settingRow QLineEdit:disabled,QWidget#settingRow QSpinBox:disabled,QWidget#settingRow QComboBox:disabled,QWidget#settingRow QPushButton:disabled { color:#748095; }
+QWidget#settingRow QLineEdit:read-only { color:#aebbd0; }
+'''.replace('ACCENT',accent)
+
+
+class SettingsComboBox(QComboBox):
+    """Right-align the closed value; retain native popup and keyboard behavior."""
+    def paintEvent(self,event):
+        option=QStyleOptionComboBox();self.initStyleOption(option);p=QPainter(self)
+        self.style().drawComplexControl(QStyle.ComplexControl.CC_ComboBox,option,p,self)
+        rect=self.style().subControlRect(QStyle.ComplexControl.CC_ComboBox,option,QStyle.SubControl.SC_ComboBoxEditField,self).adjusted(4,0,-4,0)
+        p.setPen(option.palette.color(self.foregroundRole()));p.setFont(self.font())
+        p.drawText(rect,Qt.AlignmentFlag.AlignRight|Qt.AlignmentFlag.AlignVCenter,QFontMetrics(self.font()).elidedText(self.currentText(),Qt.TextElideMode.ElideRight,max(0,rect.width())))
         p.end()
 
 

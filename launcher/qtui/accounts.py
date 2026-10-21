@@ -28,7 +28,7 @@ class MicrosoftLogin(QDialog):
         self.advanced.body.addWidget(button('Minecraft 应用访问申请',lambda:QDesktopServices.openUrl(QUrl('https://aka.ms/mce-reviewappid'))))
         body.addWidget(button('维护者设置',lambda:self.advanced.setVisible(self.advanced.isHidden())))
         body.addWidget(self.advanced);self.advanced.hide()
-        code=Card();self.code=label('准备连接 Microsoft','heading');self.code.setStyleSheet('font-size:29px;letter-spacing:4px;color:#2378d8;')
+        code=Card();self.code=label('准备连接 Microsoft','heading');self.code.setStyleSheet('font-size:25px;letter-spacing:2px;color:#b8e8ee;')
         self.status=label('启动器会打开微软网页。输入授权码并同意授权后，返回这里即可。','muted',True)
         if not self.client.text():
             self.code.setText('此版本尚未启用正版登录')
@@ -37,7 +37,7 @@ class MicrosoftLogin(QDialog):
         actions=row();self.copy=button('复制授权码',self.copy_code);self.open_button=button('打开微软授权页',self.open_browser,'soft')
         self.copy.setEnabled(False);self.open_button.setEnabled(False);actions.addWidget(self.copy);actions.addWidget(self.open_button);actions.addStretch();code.body.addLayout(actions)
         body.addWidget(code);self.time_label=label('','muted');body.addWidget(self.time_label)
-        footer=row();self.cancel=button('取消',self.reject);self.start=button('登录 Microsoft',self.begin,'primary','account')
+        body.addStretch();footer=row();self.cancel=button('取消',self.reject);self.start=button('登录 Microsoft',self.begin,'primary','account')
         footer.addStretch();footer.addWidget(self.cancel);footer.addWidget(self.start);body.addLayout(footer)
         self.timer=QTimer(self);self.timer.timeout.connect(self.tick);self.timer.start(500)
 
@@ -135,7 +135,8 @@ class AccountsDialog(QDialog):
 
     def microsoft(self,client_id=''):
         self.login=MicrosoftLogin(self,client_id,self.saved)
-        self.login.open()
+        if getattr(self,'embedded',False):self.app.show_subpage(self.login)
+        else:self.login.open()
         if self.login.client.text():QTimer.singleShot(0,self.login.begin)
 
     def saved(self,data):
@@ -143,6 +144,17 @@ class AccountsDialog(QDialog):
         self.store.add(account);self.store.set_current(account.uuid);self.reload();self.status.setText(f'{account.username} 已登录 Minecraft Java 版。')
 
     def offline(self):
+        if getattr(self,'embedded',False):
+            dialog=QDialog(self);dialog.setWindowTitle('添加离线账户');body=column(dialog,24,16)
+            body.addWidget(label('离线玩家身份','title'));field=QLineEdit();field.setPlaceholderText('3–16 位字母、数字或下划线');body.addWidget(field)
+            status=label('','muted');body.addWidget(status)
+            def save():
+                name=field.text().strip();error=validate_username(name)
+                if error:status.setText(error);return
+                account=AccountRecord('offline',name,offline_uuid(name),access_token='0')
+                self.store.add(account);self.store.set_current(account.uuid);self.reload();self.app.refresh_account();dialog.accept()
+            controls=row();controls.addWidget(button('返回',dialog.reject));controls.addWidget(button('添加账户',save,'primary'));controls.addStretch();body.addLayout(controls);body.addStretch()
+            self.app.show_subpage(dialog);return
         name,ok=QInputDialog.getText(self,'离线账号','玩家名称（3–16 位字母、数字或下划线）')
         if not ok:return
         error=validate_username(name)
@@ -193,4 +205,6 @@ class AccountsDialog(QDialog):
                 record=AccountRecord(type='authlib',**data);self.store.add(record);self.store.set_current(record.uuid);self.reload();dialog.accept()
             def failed(error):status.setText(str(error));start.setEnabled(True)
             self.tasks.submit(lambda job:authenticate(address,username,secret),done,failed)
-        start.clicked.connect(begin);self.auth_dialog=dialog;dialog.open()
+        start.clicked.connect(begin);self.auth_dialog=dialog
+        if getattr(self,'embedded',False):self.app.show_subpage(dialog)
+        else:dialog.open()

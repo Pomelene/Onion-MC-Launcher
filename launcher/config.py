@@ -20,7 +20,7 @@ _INT_KEYS = {"min_memory", "max_memory", "window_width", "window_height",
              "sandbox_budget_mb"}
 _BOOL_KEYS = {"fullscreen", "demo", "version_isolation",
               "close_after_launch", "keep_launcher_open",
-              "allow_newer_java", "foreign_mode"}
+              "allow_newer_java", "foreign_mode", "auto_memory", "show_launch_logs"}
 _FLOAT_KEYS = {"ui_scale"}
 
 
@@ -60,6 +60,9 @@ DEFAULTS: dict[str, Any] = {
     "java_path": "",               # 手动指定的 java 可执行文件；空为自动发现
     "min_memory": 2048,            # 最小堆内存 (MB)
     "max_memory": 4096,            # 最大堆内存 (MB)
+    "auto_memory": False,          # 保留已有手动设置，用户可切换自动分配
+    "show_launch_logs": False,
+    "background_image": "",
     "window_width": 854,
     "window_height": 480,
     "fullscreen": False,

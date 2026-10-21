@@ -16,6 +16,7 @@ SCHEMA: dict[str, type] = {
     "java_path": str,
     "min_memory": int,
     "max_memory": int,
+    "auto_memory": bool,
     "jvm_args": str,
     "game_args": str,
     "width": int,
@@ -74,7 +75,7 @@ class VersionSettingsStore:
         entry = {}
         for key, typ in SCHEMA.items():
             value = overrides.get(key)
-            if value is None or value == "":
+            if value is None or value == "" and typ is not str:
                 continue
             try:
                 entry[key] = typ(value) if typ is not bool else bool(value)
@@ -92,8 +93,8 @@ class VersionSettingsStore:
     def resolve(self, version_id: str, global_cfg) -> dict[str, Any]:
         """把全局配置与版本覆盖合并，返回可直接使用的启动配置。"""
         over = self.get(version_id)
-        return {
-            "java_path": over.get("java_path") or global_cfg.get("java_path") or "",
+        result = {
+            "java_path": over.get("java_path", global_cfg.get("java_path")) or "",
             "min_memory": over.get("min_memory", global_cfg.get("min_memory", 2048)),
             "max_memory": over.get("max_memory", global_cfg.get("max_memory", 4096)),
             "jvm_args": over.get("jvm_args", global_cfg.get("jvm_args", "")),
@@ -104,3 +105,7 @@ class VersionSettingsStore:
             "isolate": over.get("isolate", global_cfg.get("version_isolation", False)),
             "server_address": over.get("server_address", global_cfg.get("server_address", "")),
         }
+        if over.get('auto_memory', global_cfg.get('auto_memory', False)):
+            from .memory import recommended_memory
+            result['min_memory'], result['max_memory'] = recommended_memory()
+        return result

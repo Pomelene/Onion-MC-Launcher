@@ -27,7 +27,14 @@ try {
         $env:PYTHONPATH=(Join-Path $taskRoot '.deps\pillow')+[IO.Path]::PathSeparator+$env:PYTHONPATH
     }
     New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
-    & $taskPython -m PyInstaller --noconfirm --distpath dist/qt --workpath build/qt-isolated packaging/craftbridge.spec
+    # A cached PYZ can retain old code even after Analysis reruns. Clean only
+    # the project-local build/cache paths before producing a reviewable binary.
+    $taskWorkPath=[IO.Path]::GetFullPath((Join-Path $taskRoot 'build\qt-isolated'))
+    $taskCachePath=[IO.Path]::GetFullPath($env:PYINSTALLER_CONFIG_DIR)
+    foreach ($taskBuildPath in @($taskWorkPath,$taskCachePath)) {
+        if (-not $taskBuildPath.StartsWith($taskRoot+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) { throw 'Build cleanup path must remain inside the project.' }
+    }
+    & $taskPython -m PyInstaller --clean --noconfirm --distpath dist/qt --workpath $taskWorkPath packaging/craftbridge.spec
     if ($LASTEXITCODE -ne 0) { throw 'Qt build failed; existing launcher has been retained.' }
     $taskStage=Join-Path $taskRoot 'dist\qt\OnionMinecraftLauncher.exe'
     $taskReport=Join-Path $taskRoot 'docs\qt-frozen-check.json'

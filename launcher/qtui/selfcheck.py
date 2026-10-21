@@ -19,8 +19,17 @@ def run(output):
         application.processEvents()
         while window.tasks.jobs and time.monotonic()<deadline:application.processEvents();time.sleep(.01)
         assert not window.tasks.jobs,'startup task timeout'
-        for page in ('home','versions','download','mods','worlds','logs','settings'):
+        for page in ('home','versions','download','instance','settings','about'):
             window.navigate(page);application.processEvents()
+        assert window.settings_editor.fields['auto_memory'] is not None
+        assert window.nav['instance'].isEnabled() is False
+        from .installer import InstallDialog
+        installer=InstallDialog(window)
+        # Instantiate without opening: packaged imports and filters need no network.
+        installer.active=False
+        from ..version import VersionEntry
+        installer.entries=[VersionEntry('1.21.1','release',''),VersionEntry('24w14a','snapshot','')]
+        installer.render_versions();assert installer.tree.topLevelItemCount()==1
         accounts=AccountsDialog(window)
         entry=next(b for b in accounts.findChildren(QPushButton) if b.text()=='微软正版登录')
         with patch('launcher.qtui.accounts.resolve_client_id',return_value=''):
@@ -31,5 +40,5 @@ def run(output):
         assert not errors,errors
         assert window.repo.game_dir==base/'empty-library'
         window.close();application.processEvents()
-        output.write_text(json.dumps({'result':'pass','packaged_runtime':True,'offscreen':True,'game_started':False,'network_auth':False,'pages':7,'microsoft_login_button':True},indent=2),encoding='utf-8')
+        output.write_text(json.dumps({'result':'pass','packaged_runtime':True,'offscreen':True,'game_started':False,'network_auth':False,'pages':6,'microsoft_login_button':True,'grouped_settings':True,'installer_filters':True},indent=2),encoding='utf-8')
     return 0

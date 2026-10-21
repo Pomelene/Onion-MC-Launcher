@@ -1,0 +1,54 @@
+# -*- mode: python ; coding: utf-8 -*-
+"""PyInstaller 单文件打包配置。
+
+用法（在项目根目录）：
+    python -m PyInstaller --noconfirm --distpath dist/qt --workpath build/qt packaging/craftbridge.spec
+产物：dist/qt/OnionMinecraftLauncher.exe
+
+说明：
+- Qt 前端使用项目私有 .deps/qt 中的 PySide6 Essentials；旧 Tk 前端不包含在新产物中。
+- Python 游戏管理、下载、账号和恢复模块沿用，Pillow 保留用于可选的窗口判活。
+- 不打包 game/、runtime/、config/：游戏默认使用 F:\\.minecraft，config/runtime 保存在 exe 旁，
+  Java 与游戏文件按需下载，保持安装包体积最小。
+"""
+
+from pathlib import Path
+
+ROOT = Path(SPECPATH).resolve().parent  # SPECPATH 是 spec 所在目录（packaging/）
+
+a = Analysis(
+    [str(ROOT / "main.py")],
+    pathex=[str(ROOT), str(ROOT / ".deps" / "qt")],
+    binaries=[],
+    datas=[(str(ROOT / "assets" / "craftbridge.ico"), "assets"),
+           (str(ROOT / "assets" / "microsoft-app.json"), "assets")],
+    hiddenimports=["PIL.Image", "PIL.ImageGrab", "PySide6.QtWidgets"],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=["tests", "scripts", "pytest", "numpy", "matplotlib", "pandas", "tkinter", "launcher.ui"],
+    noarchive=False,
+    optimize=0,
+)
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name="OnionMinecraftLauncher",
+    version=str(ROOT / "packaging" / "windows-version.txt"),
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=str(ROOT / "assets" / "craftbridge.ico"),
+)

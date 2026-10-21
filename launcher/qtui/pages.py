@@ -170,26 +170,46 @@ class Pages:
             key=kind.currentData();path=self.repo.run_dir(vid)/key;clear(results);results.addWidget(label('正在读取内容…','muted'))
             def scan(job):
                 from ..mods import scan_mods,scan_resourcepacks,scan_shaderpacks
-                return {'mods':scan_mods,'resourcepacks':scan_resourcepacks,'shaderpacks':scan_shaderpacks}[key](path) if path.exists() else []
+                from .content_icons import read_content_icon
+                items={'mods':scan_mods,'resourcepacks':scan_resourcepacks,'shaderpacks':scan_shaderpacks}[key](path) if path.exists() else []
+                items.sort(key=lambda i:(i.name.casefold(),i.path.name.casefold(),i.path.name))
+                return [(info,read_content_icon(info.path)) for info in items]
             def done(items):
                 if self.page_seq.get('mods')!=seq or kind.currentData()!=key:return
                 clear(results);visible_rows.clear()
                 if not items:results.addWidget(Empty('尚未添加内容','为当前实例下载适配的模组、资源包或光影。','package','搜索安装',lambda:self.open_content_download(content_kind)));return
-                for info in items:
+                for info,artwork in items:
                     version=getattr(info,'version','');title=info.name+('  ·  '+version if version else '')
                     detail=' · '.join(str(value) for value in (getattr(info,'mod_id',''),getattr(info,'description',''),info.path.name,info.size_text) if value)
-                    item=ContentRow(title,detail,{'mods':'package','resourcepacks':'grid','shaderpacks':'world'}[key],info.enabled if key=='mods' else None,lambda i=info:self.toggle_mod(i,vid,refresh))
-                    item.action('打开所在目录',lambda p=info.path.parent:self.open_folder(p),'folder')
-                    item.action('移入恢复中心',lambda i=info:self.remove_content(i.path,vid,refresh),'trash','danger')
+                    state=[info]
+                    item=ContentRow(title,detail,{'mods':'package','resourcepacks':'grid','shaderpacks':'world'}[key],info.enabled if key=='mods' else None)
+                    if item.check:item.check.clicked.connect(lambda checked=False,s=state,r=item:self.toggle_mod(s,vid,r))
+                    item.set_artwork(artwork)
+                    item.action('打开所在目录',lambda s=state:self.open_folder(s[0].path.parent),'folder')
+                    item.action('移入恢复中心',lambda s=state:self.remove_content(s[0].path,vid,refresh),'trash','danger')
                     results.addWidget(item);visible_rows.append((item,(title+' '+detail).casefold()))
                 filter_rows()
             self.tasks.submit(scan,done,self.error)
         tabs.insertWidget(0,button('刷新',refresh,glyph='history'));kind.currentIndexChanged.connect(refresh);refresh()
 
-    def toggle_mod(self,info,vid,refresh):
+    def toggle_mod(self,state,vid,item):
         from ..mods import set_mod_enabled
+        from shiboken6 import isValid
+        info=state[0]
+        def restore():
+            if isValid(item):item.check.setChecked(state[0].enabled);item.check.setEnabled(True)
+        if self.mutating:
+            restore();self.status.setText('已有文件操作进行中，请稍候');return
+        self.mutating=True;item.check.setEnabled(False)
         def work(job):self.repo.assert_idle(vid);self.repo.assert_writable(info.path);return set_mod_enabled(info,not info.enabled)
-        self.task('更新模组状态',work,lambda _:refresh())
+        def done(updated):
+            self.mutating=False;state[0]=updated
+            if isValid(item):
+                item.text.detail=item.text.detail.replace(info.path.name,updated.path.name);item.text.setToolTip(item.text.title+'\n'+item.text.detail);item.text.update();restore()
+            self.status.setText(('已启用 · ' if updated.enabled else '已禁用 · ')+updated.name)
+        def failed(error):
+            self.mutating=False;restore();self.status.setText('模组状态更新失败：'+str(error))
+        self.tasks.submit(work,done,failed)
 
     def remove_content(self,path,vid,refresh):
         if QMessageBox.question(self,'移除内容','将 '+path.name+' 移入恢复中心？')!=QMessageBox.StandardButton.Yes:return

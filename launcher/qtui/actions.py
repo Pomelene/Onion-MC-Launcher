@@ -30,6 +30,7 @@ class Actions:
             if job.cancel.is_set():raise RuntimeError('启动已取消')
             injector=''
             if fresh.authlib_url:
+                job.emit('正在准备外置登录组件')
                 from ..auth.authlib import ensure_injector
                 injector=str(ensure_injector(repo.downloader,repo.game_dir/'.cache/authlib-injector.jar'))
             settings=LaunchSettings(java_path=str(java.path),min_memory=overrides['min_memory'],max_memory=overrides['max_memory'],
@@ -40,6 +41,7 @@ class Actions:
             def logged(text,is_error):
                 if fresh.access_token and fresh.access_token!='0':text=text.replace(fresh.access_token,'[已隐藏令牌]')
                 self.game_log.emit(text,is_error)
+            job.emit('正在创建游戏进程')
             process=launch(repo,rv,account,settings,str(java.path),on_log=logged,on_exit=lambda code:self.game_exit.emit(code))
             if job.cancel.is_set():process.stop();raise RuntimeError('启动已取消')
             return process

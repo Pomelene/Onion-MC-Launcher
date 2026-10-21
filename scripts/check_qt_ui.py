@@ -123,13 +123,41 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
     window.navigate('mods');pump(lambda:not window.tasks.jobs)
     content_dir=window.repo.run_dir(window.selected_version)/'mods';content_dir.mkdir(parents=True,exist_ok=True)
     fixtures=[ModInfo(content_dir/f'fabric-api-{i}.jar',f'Fabric API 示例 {i}','0.120.0','fabric-api',i!=1) for i in range(12)]
+    import zipfile
+    artwork=QImage(32,32,QImage.Format.Format_RGB32);artwork.fill(0xff20c080);artwork.save(str(base/'fixture-icon.png'))
+    for info in fixtures:
+        with zipfile.ZipFile(info.path,'w') as archive:
+            archive.writestr('fabric.mod.json',json.dumps({'id':'fabric-api','name':info.name,'version':info.version,'icon':'assets/icon.png'}))
+            archive.writestr('assets/icon.png',(base/'fixture-icon.png').read_bytes())
     with patch('launcher.mods.scan_mods',return_value=fixtures):
         window.instance_workspace.open_tab('mods');pump(lambda:not window.tasks.jobs)
     rows=window.instance_content.findChildren(ContentRow)
     assert len(rows)==12 and all(r.height()==64 for r in rows)
+    titles=[r.text.title for r in rows];assert titles==sorted(titles,key=str.casefold)
+    assert rows[0].image.pixmap().toImage().pixelColor(8,8).green()>150
+    before_page=window.stack.currentWidget();before_rows=list(rows);old_subpages=list(window.subpages)
+    for _ in range(2):
+        previous=rows[0].check.isChecked();rows[0].check.click();pump(lambda:not window.tasks.jobs)
+        assert rows[0].check.isChecked()!=previous and window.stack.currentWidget() is before_page
+        assert window.subpages==old_subpages and window.instance_content.findChildren(ContentRow)==before_rows
+    with patch('launcher.mods.set_mod_enabled',side_effect=OSError('fixture failure')):
+        previous=rows[0].check.isChecked();rows[0].check.click();pump(lambda:not window.tasks.jobs)
+        assert rows[0].check.isChecked()==previous and rows[0].check.isEnabled()
     render(window,'qt-compact-mods.png')
     search=next(e for e in window.instance_content.findChildren(__import__('PySide6.QtWidgets',fromlist=['QLineEdit']).QLineEdit) if e.placeholderText().startswith('搜索名称'))
     search.setText('示例 11');assert sum(not r.isHidden() for r in rows)==1
+    window.navigate('home')
+    import threading
+    progress_ready=threading.Event();progress_release=threading.Event()
+    def progress_work(job):
+        job.emit('正在下载游戏资源');job.emit((3,10));progress_ready.set()
+        progress_release.wait(5)
+    progress_job=window.task('进度测试',progress_work)
+    pump(lambda:progress_ready.is_set() and window.task_progress.value()==300)
+    assert window.task_amount.text().endswith('30%')
+    window.navigate('versions');assert not progress_job.cancel.is_set() and window.task_strip.isVisible()
+    window.cancel_active_task();assert progress_job.cancel.is_set() and not window.task_cancel.isEnabled()
+    progress_release.set();pump(lambda:not window.tasks.jobs);assert window.active_task is None and not window.task_strip.isVisible()
     window.navigate('home')
     accounts=AccountsDialog(window);accounts.show();render(accounts,'qt-accounts.png')
     entry=next(b for b in accounts.findChildren(QPushButton) if b.text()=='微软正版登录')
@@ -137,13 +165,13 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
         entry.click();app.processEvents()
     assert isinstance(accounts.login,MicrosoftLogin) and accounts.login.isVisible()
     assert callable(accounts.login.open),'QDialog.open must not be shadowed by a widget'
-    assert accounts.login.advanced.isHidden() and not accounts.login.client.isVisible()
+    assert not accounts.login.client.isVisible() and not any('维护者设置' in b.text() for b in accounts.login.findChildren(QPushButton))
     assert '此版本尚未启用正版登录' in accounts.login.code.text()
     render(accounts.login,'qt-microsoft.png');accounts.login.reject()
     with patch('launcher.qtui.accounts.resolve_client_id',return_value=''):
         accounts.relogin();app.processEvents();assert accounts.login.isVisible();accounts.login.reject();accounts.accept()
     ready=MicrosoftLogin(accounts,'00000000-0000-4000-8000-000000000001');ready.show()
-    assert ready.client.text()=='00000000-0000-4000-8000-000000000001' and ready.advanced.isHidden()
+    assert ready.client.text()=='00000000-0000-4000-8000-000000000001' and not ready.client.isVisible()
     render(ready,'qt-microsoft-ready.png');ready.reject()
     # Full success and cancellation wiring without contacting Microsoft.
     delivered=[]

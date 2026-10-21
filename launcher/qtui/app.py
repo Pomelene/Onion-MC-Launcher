@@ -5,7 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt,Signal,Slot,QTimer,QUrl
 from PySide6.QtGui import QDesktopServices,QIcon
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QStackedWidget,QComboBox,
-    QLineEdit,QPlainTextEdit,QMessageBox,QInputDialog,QDialog,QFormLayout,QCheckBox,QSpinBox)
+    QLineEdit,QPlainTextEdit,QMessageBox,QInputDialog,QDialog,QFormLayout,QCheckBox,QSpinBox,QProgressBar)
 from .widgets import STYLE,Page,Card,Empty,label,button,column,row,clear,icon,TaskDialog,NavigationItem,GlassBackdrop,configure_fonts
 from .tasks import TaskManager
 from .actions import Actions
@@ -52,6 +52,10 @@ class MainWindow(QMainWindow,Actions,Pages):
             else:page.body=column(page,0,0)
             self.page_map[key]=page;self.stack.addWidget(page)
         self.status=label('就绪','muted');self.status.setContentsMargins(14,4,14,4);body.addWidget(self.status)
+        self.task_strip=QWidget();strip=column(self.task_strip,10,5);info=row(spacing=8)
+        self.task_stage=label('','muted');info.addWidget(self.task_stage,1);self.task_amount=label('','muted');info.addWidget(self.task_amount)
+        self.task_cancel=button('取消',self.cancel_active_task);info.addWidget(self.task_cancel);strip.addLayout(info)
+        self.task_progress=QProgressBar();self.task_progress.setTextVisible(False);strip.addWidget(self.task_progress);body.addWidget(self.task_strip);self.task_strip.hide();self.active_task=None
         self.selector=QComboBox(self);self.selector.hide();self.selector.currentIndexChanged.connect(self.choose_version)
         self.logs=QPlainTextEdit();self.logs.setReadOnly(True);self.logs.setMaximumBlockCount(3000)
         self.instance_tab='game';self.instance_context='';self.instance_editor=None;self.settings_editor=None;self.subpages=[]
@@ -71,7 +75,10 @@ class MainWindow(QMainWindow,Actions,Pages):
             self.stack.setCurrentWidget(self.page_map[self.current_page]);self.title.setText(getattr(self,'page_title','Onion'));self.back_button.setVisible(self.current_page!='home')
 
     def go_back(self):
-        if self.subpages:self.subpages[-1].reject()
+        if self.subpages:
+            view=self.subpages[-1]
+            if isinstance(view,TaskDialog):self.finish_subpage(view)
+            else:view.reject()
         else:self.navigate('home')
 
 
@@ -118,7 +125,7 @@ class MainWindow(QMainWindow,Actions,Pages):
 
     def navigate(self,key):
         for view in list(reversed(self.subpages)):
-            view.reject()
+            if not isinstance(view,TaskDialog):view.reject()
             self.finish_subpage(view)
         if key in ('mods','worlds','logs','resourcepacks','shaderpacks'):
             self.instance_tab=key;key='instance'
@@ -218,17 +225,35 @@ class MainWindow(QMainWindow,Actions,Pages):
         if mutates and self.mutating:self.error('已有文件操作进行中，请等待完成或取消当前任务。');return
         if mutates:self.mutating=True
         dialog=TaskDialog(self,title);self.dialogs.append(dialog)
+        self.active_task=dialog;self.task_strip.show();self.task_cancel.setEnabled(True);self.task_stage.setText(title+' · 准备中…');self.task_amount.setText('');self.task_progress.setRange(0,0)
+        def progress(value):
+            dialog.update_progress(value)
+            if self.active_task is not dialog:return
+            if isinstance(value,str):
+                self.task_stage.setText(title+' · '+value);self.task_amount.setText('');self.task_progress.setRange(0,0)
+            elif isinstance(value,tuple) and len(value)==2:
+                completed,total=value
+                if total>0:
+                    self.task_progress.setRange(0,1000);self.task_progress.setValue(min(1000,int(completed*1000/total)))
+                    self.task_amount.setText(f'{completed:,} / {total:,}  ·  {min(100,int(completed*100/total))}%')
+                else:self.task_progress.setRange(0,0);self.task_amount.setText('正在处理…')
+        def finish():
+            if self.active_task is dialog:self.active_task=None;self.task_strip.hide()
         def success(value):
             if mutates:self.mutating=False
-            dialog.accept();self.status.setText(title+' · 完成')
+            dialog.accept();finish();self.status.setText('任务已取消' if dialog.job.cancel.is_set() else title+' · 完成')
             if done:done(value)
         def failure(error):
             if mutates:self.mutating=False
-            dialog.accept()
+            dialog.accept();finish()
             if dialog.job and dialog.job.cancel.is_set():self.status.setText('任务已取消')
             else:self.error(error)
-        dialog.job=self.tasks.submit(work,success,failure,dialog.update_progress,self.repo.downloader)
+        dialog.job=self.tasks.submit(work,success,failure,progress,self.repo.downloader)
         self.show_subpage(dialog);return dialog.job
+
+    def cancel_active_task(self):
+        if self.active_task:
+            self.active_task.cancel_job();self.task_cancel.setEnabled(False);self.task_stage.setText('正在取消，请稍候…')
 
     @Slot(str,bool)
     def append_log(self,text,is_error=False):

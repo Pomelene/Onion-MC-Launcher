@@ -1,5 +1,5 @@
 """Reusable Qt controls: native text rendering, scalable icons and glass surfaces."""
-from PySide6.QtCore import Qt, QSize, QRectF, QPointF, QVariantAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QSize, QRectF, QPointF, QVariantAnimation, QEasingCurve, QBuffer, QByteArray, QIODevice
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPainterPath, QFontDatabase, QFont, QLinearGradient, QRadialGradient, QImageReader, QFontMetrics
 from PySide6.QtWidgets import (QWidget,QFrame,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,
     QScrollArea,QSizePolicy,QDialog,QProgressBar,QMessageBox,QLayout,QAbstractButton,QCheckBox,QSpinBox,QComboBox,QLineEdit,QAbstractSpinBox)
@@ -273,16 +273,45 @@ class ContentText(QWidget):
         p.drawText(QRectF(0,28,self.width(),18),Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(self.detail,Qt.TextElideMode.ElideRight,self.width()));p.end()
 
 
+class ContentCheck(QCheckBox):
+    def __init__(self):
+        super().__init__();self.setFixedSize(24,28);self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def hitButton(self,point):return self.rect().contains(point)
+
+    def paintEvent(self,event):
+        p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(QPen(QColor('#b8c7de' if self.isEnabled() else '#687587'),1.5));p.setBrush(QColor('#c9b8e4') if self.isChecked() else Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(3,5,18,18),3,3)
+        if self.isChecked():
+            p.setPen(QPen(QColor('#253047'),2,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
+            path=QPainterPath(QPointF(7,14));path.lineTo(11,18);path.lineTo(18,10);p.drawPath(path)
+        if self.hasFocus():p.setPen(QPen(QColor('#b8e8ee'),1,Qt.PenStyle.DotLine));p.setBrush(Qt.BrushStyle.NoBrush);p.drawRect(self.rect().adjusted(0,0,-1,-1))
+        p.end()
+
+
 class ContentRow(QWidget):
     def __init__(self,title,detail,glyph='package',enabled=None,on_toggle=None):
         super().__init__();self.setObjectName('listRow');self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground,True);self.setFixedHeight(64);self.line=row(self,8,12)
+        self.check=None
         if enabled is not None:
-            check=QCheckBox();check.setChecked(enabled);check.setToolTip('启用此模组');check.clicked.connect(lambda _:on_toggle());self.line.addWidget(check)
-        image=QLabel();image.setPixmap(icon(glyph).pixmap(30,30));image.setFixedSize(36,36);self.line.addWidget(image)
-        self.line.addWidget(ContentText(title,detail),1)
+            self.check=ContentCheck();self.check.setChecked(enabled);self.check.setToolTip('启用此模组');self.check.setAccessibleName('启用 '+title)
+            if on_toggle:self.check.clicked.connect(lambda _:on_toggle())
+            self.line.addWidget(self.check)
+        self.image=QLabel();self.image.setPixmap(icon(glyph).pixmap(32,32));self.image.setFixedSize(36,36);self.image.setAlignment(Qt.AlignmentFlag.AlignCenter);self.line.addWidget(self.image)
+        self.text=ContentText(title,detail);self.line.addWidget(self.text,1)
+
+    def set_artwork(self,data):
+        if not data:return
+        buffer=QBuffer();buffer.setData(QByteArray(data));buffer.open(QIODevice.OpenModeFlag.ReadOnly)
+        reader=QImageReader(buffer);reader.setDecideFormatFromContent(True);size=reader.size()
+        if not size.isValid() or size.width()*size.height()>4_000_000:return
+        reader.setScaledSize(size.scaled(64,64,Qt.AspectRatioMode.KeepAspectRatio));image=reader.read()
+        if not image.isNull():
+            pixmap=QPixmap.fromImage(image);pixmap.setDevicePixelRatio(2);self.image.setPixmap(pixmap)
 
     def action(self,title,callback,glyph,role=''):
-        control=button('',callback,role,glyph);control.setToolTip(title);control.setAccessibleName(title);control.setFixedSize(34,34);self.line.addWidget(control)
+        control=button('',callback,role,glyph);control.setStyleSheet('padding:0;');control.setToolTip(title);control.setAccessibleName(title);control.setFixedSize(34,34);self.line.addWidget(control)
 
 
 class Empty(Card):
@@ -388,7 +417,7 @@ class TaskDialog(QDialog):
         self.job=None;self.cancel_button.clicked.connect(self.cancel_job)
 
     def update_progress(self,value):
-        if isinstance(value,str):self.message.setText(value)
+        if isinstance(value,str):self.message.setText(value);self.progress.setRange(0,0)
         elif isinstance(value,tuple) and len(value)==2:
             done,total=value;self.progress.setRange(0,max(1,total));self.progress.setValue(done)
 

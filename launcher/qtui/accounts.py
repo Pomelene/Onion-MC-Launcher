@@ -9,9 +9,6 @@ from ..accounts import AccountRecord,offline_uuid,validate_username
 from ..auth.microsoft import login_with_device_code,verification_url,LoginCancelled
 from ..auth.application import resolve_client_id,valid_client_id
 
-HELP_URL='https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code'
-
-
 class MicrosoftLogin(QDialog):
     def __init__(self,owner,client_id='',on_success=None):
         super().__init__(owner);self.owner=owner;self.tasks=owner.tasks;self.config=owner.config_obj
@@ -20,14 +17,7 @@ class MicrosoftLogin(QDialog):
         body=column(self,26,16)
         body.addWidget(label('使用 Microsoft 账号登录','title'))
         body.addWidget(label('在你自己的浏览器中完成授权，启动器不会读取或保存微软密码。','muted',True))
-        self.client=QLineEdit(resolve_client_id(self.config,client_id))
-        self.client.setPlaceholderText('维护者提供的 Microsoft 应用 ID')
-        self.advanced=Card('维护者设置');self.advanced.body.addWidget(self.client)
-        self.advanced.body.addWidget(label('发布者只需配置一次登录应用，玩家无需注册。此处仅用于开发或更换应用。','muted',True))
-        self.advanced.body.addWidget(button('应用配置说明',lambda:QDesktopServices.openUrl(QUrl(HELP_URL))))
-        self.advanced.body.addWidget(button('Minecraft 应用访问申请',lambda:QDesktopServices.openUrl(QUrl('https://aka.ms/mce-reviewappid'))))
-        body.addWidget(button('维护者设置',lambda:self.advanced.setVisible(self.advanced.isHidden())))
-        body.addWidget(self.advanced);self.advanced.hide()
+        self.client=QLineEdit(resolve_client_id(self.config,client_id),self);self.client.hide()
         code=Card();self.code=label('准备连接 Microsoft','heading');self.code.setStyleSheet('font-size:25px;letter-spacing:2px;color:#b8e8ee;')
         self.status=label('启动器会打开微软网页。输入授权码并同意授权后，返回这里即可。','muted',True)
         if not self.client.text():

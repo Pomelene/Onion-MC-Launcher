@@ -35,3 +35,4 @@ settings.json
 /docs/*
 !/docs/development.md
 !/docs/microsoft-auth.md
+!/docs/ui-motion-audit.md

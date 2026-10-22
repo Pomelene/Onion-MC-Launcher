@@ -29,7 +29,7 @@ class Pages:
         overlay.addLayout(bottom);body.addWidget(canvas,1);self.update_selection()
 
     def open_appearance(self):
-        self.navigate('settings');self.settings_editor.select_tab(self.settings_editor.tab_names['外观'])
+        self.navigate('settings');self.open_settings_tab(self.settings_editor.tab_names['外观'])
 
     def build_instance(self):
         vid=self.selected_version
@@ -221,7 +221,7 @@ class Pages:
             for world in worlds:
                 card=Card(world.name,f'{world.version}  ·  {world.game_mode}  ·  {world.last_played_text()}');line=row();line.addStretch()
                 line.addWidget(button('打开目录',lambda w=world:self.open_folder(w.dir),glyph='folder'));line.addWidget(button('备份',lambda w=world:self.backup_world(w,vid),'soft'))
-                line.addWidget(button('移除',lambda w=world:self.remove_content(w.dir,vid,lambda:self.navigate('worlds')),'danger'));card.body.addLayout(line);results.addWidget(card)
+                line.addWidget(button('移除',lambda w=world:self.remove_content(w.dir,vid,lambda:self.navigate('worlds',force=True)),'danger'));card.body.addLayout(line);results.addWidget(card)
         self.tasks.submit(lambda job:list_worlds(self.repo.saves_dir(vid)),done,self.error)
 
     def backup_world(self,world,vid):
@@ -236,7 +236,7 @@ class Pages:
         if not path:return
         from ..saves import restore
         def work(job):self.repo.assert_idle(vid);return restore(Path(path),self.repo.saves_dir(vid),cancel_event=job.cancel)
-        self.task('恢复世界备份',work,lambda _:self.navigate('worlds'))
+        self.task('恢复世界备份',work,lambda _:self.navigate('worlds',force=True))
 
     def build_logs(self):
         body=self.page('logs');bar=row();bar.addWidget(button('打开实例日志',lambda:self.open_folder(self.repo.logs_dir(self.selected_version)) if self.selected_version else None,glyph='folder'))

@@ -98,7 +98,7 @@ class SettingsEditor(QWidget):
                 if color.isValid():self.fields['accent_color'].setText(color.name())
             setting_row(card.body,'颜色选择器','选择后保存设置生效',button('选择颜色',choose_accent,'soft'));body.addWidget(card)
             card=Card('动态效果','关闭后，页面与控件立即切换。')
-            self.check(card,'ui_animations','界面动效','页面短距离平移、导航标记滑动和开关滑动；关闭可减少动态效果');body.addWidget(card)
+            self.check(card,'ui_animations','界面动效','导航胶囊滑动、按钮按压和开关滑动；关闭可减少动态效果');body.addWidget(card)
             card=Card('首页背景','选择本地图片，首页将按窗口比例裁切显示。')
             field=QLineEdit(str(self.initial('background_image') or ''));field.setPlaceholderText('使用默认背景');self.add(card,'background_image','自定义图片','支持 PNG、JPG 和 WebP',field)
             def choose_background():

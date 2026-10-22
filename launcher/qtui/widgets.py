@@ -64,6 +64,10 @@ class NavigationItem(QAbstractButton):
 
     def _hover_changed(self,value):self.hover_amount=float(value);self.update()
 
+    def nextCheckState(self):
+        # Navigation owns selection; action rows must not select themselves.
+        pass
+
     def settle_motion(self):
         self.hover_animation.stop();self._hover_changed(float(self.underMouse()))
 
@@ -76,7 +80,9 @@ class NavigationItem(QAbstractButton):
         self.hover_animation.stop();self.hover_animation.setStartValue(self.hover_amount);self.hover_animation.setEndValue(0.0);self.hover_animation.start();super().leaveEvent(event)
 
     def setSubtitle(self,text):
-        self.subtitle=str(text or '');self.setFixedHeight(68 if self.subtitle else 48)
+        subtitle=str(text or '')
+        if self.subtitle==subtitle and self.height()==(68 if subtitle else 48):return
+        self.subtitle=subtitle;self.setFixedHeight(68 if self.subtitle else 48)
         self.setToolTip(self.text()+(' · '+self.subtitle if self.subtitle else ''));self.update()
 
     def text_left(self):return 54
@@ -86,9 +92,7 @@ class NavigationItem(QAbstractButton):
     def paintEvent(self,event):
         painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         bounds=QRectF(self.rect()).adjusted(10,3,-10,-3)
-        if self.isChecked():
-            painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor('#40364f'));painter.drawRoundedRect(bounds,7,7)
-        elif self.hover_amount or self.hasFocus():
+        if not self.isChecked() and (self.hover_amount or self.hasFocus()):
             painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor(194,220,225,int(20*max(self.hover_amount,float(self.hasFocus())))));painter.drawRoundedRect(bounds,7,7)
         color='#f0e8ff' if self.isChecked() else '#bac7cd'
         if not self.isEnabled():color='#726879'
@@ -195,30 +199,63 @@ class SettingsSection(QWidget):
 
 
 class ToggleSwitch(QCheckBox):
+    """A fixed hit target; thumb translation, size and colors animate locally."""
     def __init__(self):
-        super().__init__();self.setFixedSize(42,26);self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.position=0.0;self.motion=QVariantAnimation(self);self.motion.setDuration(160);self.motion.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self.motion.valueChanged.connect(self._move);self.toggled.connect(self._animate)
+        super().__init__()
+        self.setFixedSize(42,26)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.position=0.0
+        self.emphasis=0.0
+        self.motion=self._animation(self._move)
+        self.thumb_motion=self._animation(self._resize_thumb)
+        self.toggled.connect(self._animate)
+        self.pressed.connect(lambda:self._emphasize(-1.0))
+        self.released.connect(lambda:self._emphasize(float(self.underMouse())))
+
+    def _animation(self,callback):
+        animation=QVariantAnimation(self)
+        animation.setDuration(200)
+        curve=QEasingCurve(QEasingCurve.Type.BezierSpline)
+        curve.addCubicBezierSegment(QPointF(.4,0),QPointF(.2,1),QPointF(1,1))
+        animation.setEasingCurve(curve)
+        animation.valueChanged.connect(callback)
+        return animation
 
     def _move(self,value):self.position=float(value);self.update()
+    def _resize_thumb(self,value):self.emphasis=float(value);self.update()
 
     def settle_motion(self):
-        self.motion.stop();self._move(float(self.isChecked()))
+        self.motion.stop();self.thumb_motion.stop()
+        self._move(float(self.isChecked()))
+        self._resize_thumb(float(self.underMouse()) if self.isEnabled() else 0.0)
 
     def _animate(self,checked):
         self.motion.stop()
         if not self.isVisible() or not motion_enabled(self):self._move(float(checked));return
         self.motion.setStartValue(self.position);self.motion.setEndValue(float(checked));self.motion.start()
 
+    def _emphasize(self,target):
+        self.thumb_motion.stop()
+        if not self.isEnabled():target=0.0
+        if not self.isVisible() or not motion_enabled(self):self._resize_thumb(target);return
+        self.thumb_motion.setStartValue(self.emphasis);self.thumb_motion.setEndValue(target);self.thumb_motion.start()
+
+    def enterEvent(self,event):self._emphasize(1.0);super().enterEvent(event)
+    def leaveEvent(self,event):self._emphasize(0.0);super().leaveEvent(event)
     def hitButton(self,point):return self.rect().contains(point)
 
     def paintEvent(self,event):
         painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing);painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor('#72608d' if self.isChecked() else '#3c4852'));painter.drawRoundedRect(QRectF(2,3,38,20),10,10)
-        painter.setBrush(QColor(control_accent(self) if self.isChecked() else '#a4b0ba') if self.isEnabled() else QColor('#63717a'))
-        painter.drawEllipse(QRectF(5+18*self.position,6,14,14))
+        accent=QColor(control_accent(self))
+        def blend(start,end):
+            return QColor.fromRgbF(*[a+(b-a)*self.position for a,b in zip(start.getRgbF(),end.getRgbF())])
+        track=blend(QColor('#3c4852'),accent.darker(180))
+        thumb=blend(QColor('#a4b0ba'),accent) if self.isEnabled() else QColor('#63717a')
+        painter.setBrush(track);painter.drawRoundedRect(QRectF(2,3,38,20),10,10)
+        radius=7+self.emphasis
+        painter.setBrush(thumb);painter.drawEllipse(QPointF(12+18*self.position,13),radius,radius)
         if self.hasFocus():
-            painter.setPen(QPen(QColor(control_accent(self)),1));painter.setBrush(Qt.BrushStyle.NoBrush);painter.drawRoundedRect(QRectF(0,1,41,24),12,12)
+            painter.setPen(QPen(accent,1));painter.setBrush(Qt.BrushStyle.NoBrush);painter.drawRoundedRect(QRectF(0,1,41,24),12,12)
         painter.end()
 
 
@@ -372,7 +409,10 @@ def setting_row(layout,title,description,control):
 def clear(layout):
     while layout.count():
         item=layout.takeAt(0)
-        if item.widget():item.widget().deleteLater()
+        if item.widget():
+            # Deferred deletion must not leave obsolete rows painting for a frame.
+            item.widget().hide()
+            item.widget().deleteLater()
         elif item.layout():clear(item.layout())
 
 

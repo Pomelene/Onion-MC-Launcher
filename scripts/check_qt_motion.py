@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / '.deps/qt')]
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 
-from PySide6.QtCore import QAbstractAnimation, QCoreApplication, QEvent, Qt
+from PySide6.QtCore import QAbstractAnimation, QCoreApplication, QEvent, Qt, QRectF
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -32,8 +32,19 @@ def wait_for(predicate):
 
 
 def settled(window):
-    wait_for(lambda: not window.motion.running and not window.tasks.jobs)
-    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    wait_for(lambda:not window.nav_motion.running and not window.tasks.jobs)
+    QCoreApplication.sendPostedEvents(None,QEvent.Type.DeferredDelete)
+
+
+def assert_page_fixed(window):
+    assert not hasattr(window,'motion'), 'Global page motion must stay removed'
+    assert window.stack.currentWidget().pos().x()==0
+    assert window.stack.currentWidget().pos().y()==0
+    assert window.stack.currentWidget().graphicsEffect() is None
+
+
+def almost_same(first,second):
+    return all(abs(a-b)<.001 for a,b in zip(first.getRect(),second.getRect()))
 
 
 app = QApplication([])
@@ -60,41 +71,80 @@ with tempfile.TemporaryDirectory(dir=ROOT / 'tmp', prefix='qt-motion-') as folde
     wait_for(lambda: bool(window.versions) and not window.tasks.jobs)
     settled(window)
 
-    window.navigate('versions')
-    assert window.current_page == 'versions'  # Route changes immediately.
-    page = window.motion.page
-    assert page is window.stack.currentWidget()
-    positions = []
-    for moment in (0, 30, 60, 90, 120, 160, 200, 240):
-        window.motion.animation.setCurrentTime(moment)
+    window.navigate('download')
+    settled(window)
+    before_nav=dict(window.nav)
+    browser=window.download_browser
+    browser.query.setText('preserved query')
+    browser.query.setFocus()
+    scroll=browser.results.verticalScrollBar().value()
+    window.navigate('download')
+    assert window.download_browser is browser
+    assert browser.query.text()=='preserved query'
+    assert browser.results.verticalScrollBar().value()==scroll
+    assert all(window.nav[key] is item for key,item in before_nav.items())
+    assert not window.nav_motion.running
+    assert_page_fixed(window)
+
+    # A capsule stretches toward the new row; labels and live pages stay fixed.
+    rail=window.nav_motion
+    original_rect=QRectF(rail.rect)
+    geometry={key:item.geometry() for key,item in window.nav.items()}
+    window.choose_download_kind('resourcepack')
+    assert all(window.nav[key] is item for key,item in before_nav.items())
+    rail.animation.setCurrentTime(60)
+    assert abs(rail.rect.top()-original_rect.top())<.001
+    assert rail.rect.bottom()>original_rect.bottom()
+    assert rail.rect.height()>original_rect.height()
+    assert_page_fixed(window)
+    before_input=window.stack.currentWidget().pos()
+    QTest.keyClick(window.download_browser.query,Qt.Key.Key_A)
+    assert window.stack.currentWidget().pos()==before_input
+    assert rail.running, 'Input must not snap the capsule to its destination'
+    rail.animation.setCurrentTime(175)
+    assert original_rect.top()<rail.rect.top()<rail.destination.top()
+    rail.animation.setCurrentTime(270)
+    assert almost_same(rail.rect,rail.destination)
+    assert all(window.nav[key].geometry()==rect for key,rect in geometry.items())
+
+    # Rapid reversal resumes from the currently visible shape, not a saved endpoint.
+    window.choose_download_kind('shader')
+    rail.animation.setCurrentTime(90)
+    middle=QRectF(rail.rect)
+    window.choose_download_kind('mod')
+    assert almost_same(rail.rect,middle)
+    rail.animation.setCurrentTime(70)
+    time_before=rail.animation.currentTime()
+    window.navigate('download')
+    assert rail.animation.currentTime()==time_before
+    assert all(window.nav[key] is item for key,item in before_nav.items())
+    settled(window)
+    assert almost_same(rail.rect,rail.destination)
+
+    # Real event-loop sampling observes intermediate shapes, without faking a frame rate.
+    window.choose_download_kind('shader')
+    samples=[]
+    start=time.monotonic()
+    while rail.running and time.monotonic()-start<2:
         app.processEvents()
-        positions.append(page.x())
-    assert positions[0] == 18 and positions[-1] == 0, positions
-    assert positions == sorted(positions, reverse=True), positions
-    assert len(set(positions)) >= 5, positions
-    assert page.graphicsEffect() is None
-    settled(window)
+        samples.append((round((time.monotonic()-start)*1000,2),list(rail.rect.getRect())))
+        assert_page_fixed(window)
+        QTest.qWait(8)
+    assert not rail.running
+    assert len({tuple(row[1]) for row in samples})>=5
+    assert almost_same(rail.rect,rail.destination)
+    (ROOT/'tmp/capsule-motion-samples.json').write_text(json.dumps(samples,indent=2))
 
-    # Rapid transitions restore old page geometry and land on the final route.
-    for route in ('settings', 'home', 'versions', 'download', 'home'):
-        window.navigate(route)
-    assert window.current_page == 'home'
-    settled(window)
-    assert all(window.stack.widget(i).x() == 0 for i in range(window.stack.count()))
-
+    # Explicit refresh still rebuilds content; ordinary repeated navigation does not.
     window.navigate('versions')
-    assert window.motion.running
-    QTest.keyClick(window.library_search, Qt.Key.Key_A)
-    assert not window.motion.running  # Input reaches a live child immediately.
-
-    window.navigate('home')
-    settled(window)
+    tree=window.version_tree
+    nav=dict(window.nav)
     window.navigate('versions')
-    window.resize(1180, 780)
-    QTest.qWait(10)
-    assert not window.motion.running
-    window.resize(1440, 900)
-    QTest.qWait(10)
+    assert window.version_tree is tree and all(window.nav[key] is value for key,value in nav.items())
+    window.navigate('versions',force=True)
+    assert window.version_tree is not tree
+    window.resize(1180,780);QTest.qWait(15);assert_page_fixed(window)
+    window.resize(1440,900);QTest.qWait(15)
 
     # A native click dispatches its action without waiting for press feedback.
     called = []
@@ -126,29 +176,22 @@ with tempfile.TemporaryDirectory(dir=ROOT / 'tmp', prefix='qt-motion-') as folde
     assert not hasattr(browser, 'results_motion')
     assert browser.results.graphicsEffect() is None
     assert len(browser.results.findChildren(ContentRow)) == 1
+    obsolete=browser.results.findChildren(ContentRow)
+    browser.empty()
+    assert all(item.isHidden() for item in obsolete), 'Obsolete rows must not paint while awaiting deferred deletion'
 
-    window.choose_download_kind('resourcepack')
-    rail = window.nav_motion
-    rail.animation.setCurrentTime(220)
-    old_y = rail.y()
-    window.choose_download_kind('shader')
-    rail_positions = []
-    for moment in (0, 40, 80, 120, 170, 220):
-        rail.animation.setCurrentTime(moment)
-        rail_positions.append(rail.y())
-    assert rail_positions == sorted(rail_positions) and rail_positions[-1] > old_y, rail_positions
-    assert len(set(rail_positions)) >= 4, rail_positions
 
     # Turning motion off finishes ongoing animation and applies to every control.
-    window.navigate('settings')
-    assert window.motion.running
+    window.choose_download_kind('resourcepack')
+    assert rail.running
     window.config_obj.set('ui_animations', False)
     apply_motion_preferences(window)
-    assert not window.motion.running
-    editor = window.settings_editor
+    assert not rail.running
+    window.navigate('settings')
+    editor=window.settings_editor
     assert 'ui_animations' in editor.fields
     window.navigate('home')
-    assert not window.motion.running
+    assert not rail.running
     nav = window.nav['versions']
     QCoreApplication.sendEvent(nav, QEvent(QEvent.Type.Enter))
     assert nav.hover_animation.state() == QAbstractAnimation.State.Stopped
@@ -163,16 +206,17 @@ with tempfile.TemporaryDirectory(dir=ROOT / 'tmp', prefix='qt-motion-') as folde
     assert 0 < switch.position < 1
     switch.hide()
     window.navigate('versions')
-    assert window.motion.running
+    window.navigate('about')
+    assert rail.running
     window.hide()
-    assert not window.motion.running
+    assert not rail.running
     window.close()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 assert not errors, errors
 print(json.dumps({
     'result': 'pass', 'fixture_only': True, 'desktop_input': False,
-    'interrupted_navigation': True, 'resize_and_hide_cleanup': True,
-    'immediate_click_actions': True, 'no_result_opacity': True, 'monotonic_page_movement': True, 'sidebar_marker_movement': True,
+    'stable_content_geometry': True, 'reused_sidebar_controls': True, 'resize_and_hide_cleanup': True,
+    'immediate_click_actions': True, 'no_result_opacity': True, 'no_page_animation': True, 'capsule_stretch_and_reversal': True,
     'reduced_motion': True, 'toggle_animation': True,
 }))

@@ -1,18 +1,11 @@
-"""Spatial motion on live widgets, with no screen captures or page opacity.
-
-Page content moves 18px, sidebar selection travels between rows, and controls
-retain native input behavior. All movements are short and interruptible.
-"""
-from contextlib import contextmanager
-from functools import wraps
-
-from PySide6.QtCore import QObject, QEvent, Qt, QPoint, QRect, QTimer, QVariantAnimation, QEasingCurve
+"""Local, interruptible control motion on a stable page and sidebar layout."""
+from PySide6.QtCore import QObject, QEvent, Qt, QPoint, QPointF, QRectF, QTimer, QVariantAnimation, QEasingCurve, QAbstractAnimation
 from PySide6.QtGui import QColor, QPainter
-from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QStyle, QStyleOptionButton, QStylePainter
+from PySide6.QtWidgets import QWidget, QPushButton, QStyle, QStyleOption, QStyleOptionButton, QStylePainter
 
 
 HOVER_DURATION = 140
-PRESS_DURATION = 80
+PRESS_DURATION = 150
 
 
 def motion_enabled(widget):
@@ -20,131 +13,135 @@ def motion_enabled(widget):
     return bool(config.get('ui_animations')) if config else True
 
 
-class PageMotion(QObject):
-    """Slide the real destination by 18px; never capture or fade a page."""
-    def __init__(self, target):
-        super().__init__(target)
-        self.target = target
-        self.page = None
-        self.origin = QPoint()
-        self.depth = 0
+class SelectionRail(QObject):
+    """One background capsule; its leading edge moves before its trailing edge.
+
+    Rectangles stay in floating point and are painted behind stable buttons.
+    Layout measurement never animates; only an actual selection change does.
+    """
+    EDGE_DURATION = 150
+    TRAILING_DELAY = 120
+
+    def __init__(self, sidebar):
+        super().__init__(sidebar)
+        self.sidebar = sidebar
+        self.item = None
+        self.rect = QRectF()
+        self.destination = QRectF()
+        self.initial = QRectF()
+        self.visible = False
+        self.trailing_top = False
+        self.curve = QEasingCurve(QEasingCurve.Type.BezierSpline)
+        self.curve.addCubicBezierSegment(QPointF(.4, 0), QPointF(.2, 1), QPointF(1, 1))
         self.animation = QVariantAnimation(self)
-        self.animation.setDuration(240)
-        self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.animation.setDuration(self.EDGE_DURATION + self.TRAILING_DELAY)
+        self.animation.setEasingCurve(QEasingCurve.Type.Linear)
+        self.animation.setStartValue(0.0)
+        self.animation.setEndValue(float(self.animation.duration()))
         self.animation.valueChanged.connect(self._advance)
-        self.animation.finished.connect(self.stop)
-        target.installEventFilter(self)
-        QApplication.instance().installEventFilter(self)
+        self.animation.finished.connect(self._finish)
+        self.measure_timer = QTimer(self)
+        self.measure_timer.setSingleShot(True)
+        self.measure_timer.timeout.connect(self._remeasure)
+        sidebar.installEventFilter(self)
 
     @property
     def running(self):
-        return self.page is not None
+        return self.animation.state() == QAbstractAnimation.State.Running
 
-    def _advance(self, value):
-        if self.page is not None:
-            self.page.move(self.origin + QPoint(round(float(value)), 0))
-
-    def stop(self):
-        self.animation.stop()
-        if self.page is not None:
-            self.page.move(self.origin)
-            self.page = None
-
-    def eventFilter(self, watched, event):
-        kind = event.type()
-        if watched is self.target and kind in (QEvent.Type.Resize, QEvent.Type.Hide):
-            self.stop()
-        elif (self.running and kind in (QEvent.Type.MouseButtonPress, QEvent.Type.KeyPress, QEvent.Type.Wheel)
-              and isinstance(watched, QWidget)
-              and (watched is self.target or self.target.isAncestorOf(watched))):
-            self.stop()
-        return False
-
-    @contextmanager
-    def changing(self):
-        outermost = self.depth == 0
-        if outermost:
-            self.stop()
-        self.depth += 1
-        try:
-            yield
-        except BaseException:
-            if outermost:
-                self.stop()
-            raise
-        else:
-            if outermost and self.target.isVisible() and motion_enabled(self.target):
-                self.target.layout().activate()
-                page = self.target.currentWidget()
-                if page is not None:
-                    self.page = page
-                    self.origin = self.target.contentsRect().topLeft()
-                    self.animation.setStartValue(18.0)
-                    self.animation.setEndValue(0.0)
-                    self.animation.start()
-        finally:
-            self.depth -= 1
-
-
-class SelectionRail(QWidget):
-    """A persistent sidebar marker travels to the selected row at full opacity."""
-    def __init__(self, sidebar):
-        super().__init__(sidebar)
-        self.item = None
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.animation = QVariantAnimation(self)
-        self.animation.setDuration(220)
-        self.animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self.animation.valueChanged.connect(self.setGeometry)
-        sidebar.installEventFilter(self)
-        self.hide()
+    def _target_rect(self):
+        from shiboken6 import isValid
+        if self.item is None or not isValid(self.item) or self.item.isHidden():
+            return QRectF()
+        point = self.item.mapTo(self.sidebar, QPoint(10, 3))
+        return QRectF(point.x(), point.y(), self.item.width()-20, self.item.height()-6)
 
     def select(self, item, animate=True):
-        self.animation.stop()
         self.item = item
-        if item is None:
-            self.hide()
+        self.sidebar.layout().activate()
+        target = self._target_rect()
+        if target.isEmpty():
+            self.animation.stop()
+            self.visible = False
+            self.sidebar.update()
             return
-        self.parentWidget().layout().activate()
-        point = item.mapTo(self.parentWidget(), QPoint(10, 16))
-        destination = QRect(point.x(), point.y(), 3, item.height()-32)
-        if animate and self.isVisible() and motion_enabled(self):
-            self.animation.setStartValue(self.geometry())
-            self.animation.setEndValue(destination)
+        # Repeated clicks or layout notifications cannot restart a live capsule.
+        if self.visible and target == self.destination:
+            return
+        self.animation.stop()
+        self.initial = QRectF(self.rect)
+        self.destination = target
+        if animate and self.visible and self.sidebar.isVisible() and motion_enabled(self.sidebar):
+            self.trailing_top = target.top() > self.rect.top()
             self.animation.start()
         else:
-            self.setGeometry(destination)
-        self.show()
-        self.raise_()
+            self._finish()
+        self.visible = True
+        self.sidebar.update()
+
+    def _edge(self, start, end, elapsed, delay=0):
+        progress = max(0.0, min(1.0, (elapsed-delay)/self.EDGE_DURATION))
+        return start + (end-start)*self.curve.valueForProgress(progress)
+
+    def _advance(self, elapsed):
+        top_delay = self.TRAILING_DELAY if self.trailing_top else 0
+        bottom_delay = 0 if self.trailing_top else self.TRAILING_DELAY
+        left = self._edge(self.initial.left(), self.destination.left(), elapsed)
+        right = self._edge(self.initial.right(), self.destination.right(), elapsed)
+        top = self._edge(self.initial.top(), self.destination.top(), elapsed, top_delay)
+        bottom = self._edge(self.initial.bottom(), self.destination.bottom(), elapsed, bottom_delay)
+        self.rect = QRectF(QPointF(left, top), QPointF(right, bottom))
+        self.sidebar.update()
+
+    def _finish(self):
+        self.rect = QRectF(self.destination)
+        self.sidebar.update()
+
+    def _remeasure(self):
+        target = self._target_rect()
+        if target.isEmpty():
+            self.animation.stop()
+            self.visible = False
+        elif target != self.destination:
+            self.animation.stop()
+            self.destination = target
+            self._finish()
+        self.sidebar.update()
 
     def settle_motion(self):
-        from shiboken6 import isValid
-        self.select(self.item if self.item is not None and isValid(self.item) else None, False)
+        self.animation.stop()
+        self._remeasure()
+        self._finish()
 
     def eventFilter(self, watched, event):
-        if event.type() == QEvent.Type.Resize:
-            QTimer.singleShot(0, self, self.settle_motion)
+        if event.type() in (QEvent.Type.Resize, QEvent.Type.LayoutRequest):
+            self.measure_timer.start(0)
+        elif event.type() == QEvent.Type.Hide:
+            self.animation.stop()
+            self._finish()
         return False
 
+
+class NavigationSurface(QWidget):
+    """Paint the capsule below native navigation children, without an overlay."""
+    def __init__(self):
+        super().__init__()
+        self.selection = SelectionRail(self)
+
     def paintEvent(self, event):
-        config = getattr(self.window(), 'config_obj', None)
-        accent = config.get('accent_color') if config else '#cebafa'
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(accent))
-        painter.drawRoundedRect(self.rect(), 1.5, 1.5)
+        option = QStyleOption()
+        option.initFrom(self)
+        self.style().drawPrimitive(QStyle.PrimitiveElement.PE_Widget, option, painter, self)
+        if self.selection.visible:
+            config = getattr(self.window(), 'config_obj', None)
+            color = QColor(config.get('accent_color') if config else '#cebafa')
+            color.setAlpha(44)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            painter.drawRoundedRect(self.selection.rect, 8, 8)
         painter.end()
-
-
-def animate_change(method):
-    """Nested route calls share a single movement of the live page."""
-    @wraps(method)
-    def wrapped(self, *args, **kwargs):
-        with self.motion.changing():
-            return method(self, *args, **kwargs)
-    return wrapped
 
 
 class MotionButton(QPushButton):
@@ -212,30 +209,28 @@ class MotionButton(QPushButton):
         option = QStyleOptionButton()
         self.initStyleOption(option)
         native = QStylePainter(self)
-        native.drawControl(QStyle.ControlElement.CE_PushButtonBevel, option)
-        # Move only the label/icon while the hit target and layout remain fixed.
+        native.setRenderHint(QPainter.RenderHint.Antialiasing)
+        # Scale the visual button as one unit; its layout and hit area stay fixed.
+        scale = 1.0 - .03 * self.press_amount
+        center = self.rect().center()
+        native.translate(center)
+        native.scale(scale, scale)
+        native.translate(-center)
         option.state &= ~QStyle.StateFlag.State_Sunken
-        native.translate(0, self.press_amount * 1.5)
+        native.drawControl(QStyle.ControlElement.CE_PushButtonBevel, option)
         native.drawControl(QStyle.ControlElement.CE_PushButtonLabel, option)
+        if self.isEnabled() and self.hover_amount > 0:
+            native.setPen(Qt.PenStyle.NoPen)
+            native.setBrush(QColor(238, 227, 255, round(255 * .075 * self.hover_amount)))
+            native.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 6, 6)
         native.end()
-        if not self.isEnabled():
-            return
-        amount = .075 * self.hover_amount + .08 * self.press_amount
-        if amount <= 0:
-            return
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(238, 227, 255, round(255 * amount)))
-        painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 6, 6)
-        painter.end()
 
 
 def apply_motion_preferences(window):
     if motion_enabled(window):
         return
-    for controller in window.findChildren(PageMotion):
-        controller.stop()
+    for controller in window.findChildren(SelectionRail):
+        controller.settle_motion()
     for widget in window.findChildren(QWidget):
         settle = getattr(widget, 'settle_motion', None)
         if settle:

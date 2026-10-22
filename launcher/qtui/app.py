@@ -24,9 +24,11 @@ class MainWindow(QMainWindow,Actions,Pages):
     game_exit=Signal(int)
 
     def __init__(self,config_path=None,root=None):
-        super().__init__();self.root=Path(root or app_root());self.config_obj=Config(config_path or default_settings_path())
-        self.repo=GameRepository(self.config_obj);self.accounts=AccountStore(self.root/'config/accounts.json')
-        self.instances=InstanceStore(self.root/'config/instances.json');self.version_settings=VersionSettingsStore(self.root/'config/version_settings.json')
+        super().__init__();self.root=Path(root or app_root());self.config_obj=Config(config_path or self.root/'onionmcl.json')
+        from ..storage import is_portable
+        portable=self.config_obj.path if is_portable(self.config_obj.path) else None
+        self.repo=GameRepository(self.config_obj);self.accounts=AccountStore(portable or self.root/'config/accounts.json')
+        self.instances=InstanceStore(portable or self.root/'config/instances.json');self.version_settings=VersionSettingsStore(portable or self.root/'config/version_settings.json')
         self.tasks=TaskManager(self);self.versions=[];self.kinds={};self.selected_version=self.config_obj.get('selected_version') or ''
         self.page_seq={};self.process=None;self.launch_pending=False;self.started_at=0;self.mutating=False;self.dialogs=[]
         self.setWindowTitle(f'{LAUNCHER_NAME} {LAUNCHER_VERSION}');self.resize(1440,900);self.setMinimumSize(1100,740)
@@ -333,5 +335,10 @@ def main():
     application.setApplicationName(LAUNCHER_NAME);application.setStyle('Fusion')
     from ..log import setup_logging
     setup_logging(app_root()/'logs',to_console=False)
-    window=MainWindow();window.show()
+    from ..storage import StorageError
+    from ..secrets import SecretStorageError
+    try:window=MainWindow()
+    except (StorageError,SecretStorageError,OSError) as error:
+        QMessageBox.critical(None,'启动器数据无法加载',str(error));return 1
+    window.show()
     return application.exec()

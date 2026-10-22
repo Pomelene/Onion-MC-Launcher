@@ -41,9 +41,9 @@ class App(tk.Tk):
         setup_logging(app_root() / "logs", self.config_obj.get("log_level"), to_console=False)
         self.accounts = AccountStore(default_accounts_path())
         self.repo = GameRepository(self.config_obj)
-        self.instances = InstanceStore(app_root() / "config" / "instances.json")
+        self.instances = InstanceStore(default_settings_path())
         self.version_settings = VersionSettingsStore(
-            app_root() / "config" / "version_settings.json")
+            default_settings_path())
         self._game_started_at = 0.0
         self._process = None
         self._launch_pending = False

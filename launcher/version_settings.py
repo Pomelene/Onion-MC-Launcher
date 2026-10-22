@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """按版本独立设置。
 
-每个版本的覆盖项保存在 config/version_settings.json，键为版本 id，
+每个版本的覆盖项保存在 onionmcl.json 的 version_settings 分区，键为版本 id，
 值为可选的局部配置；未设置项回退到全局配置。
 """
 
+from .storage import is_portable,read_section,write_section
 import json
 import threading
 from pathlib import Path
@@ -37,10 +38,10 @@ class VersionSettingsStore:
         self.load()
 
     def load(self) -> None:
-        if not self.path.exists():
+        if not self.path.exists() and not is_portable(self.path):
             return
         try:
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
+            raw = read_section(self.path,"version_settings")
         except (OSError, json.JSONDecodeError):
             return
         if not isinstance(raw, dict):
@@ -62,6 +63,9 @@ class VersionSettingsStore:
         self._data = cleaned
 
     def save(self) -> None:
+        if is_portable(self.path):
+            write_section(self.path,"version_settings",self._data)
+            return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self._data, ensure_ascii=False, indent=2), encoding="utf-8")

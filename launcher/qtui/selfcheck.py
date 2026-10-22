@@ -13,7 +13,7 @@ def run(output):
     output=Path(output).resolve();output.parent.mkdir(parents=True,exist_ok=True)
     application=QApplication.instance() or QApplication([]);application.setStyle('Fusion');configure_fonts(application)
     with tempfile.TemporaryDirectory(dir=output.parent,prefix='qt-runtime-') as folder:
-        base=Path(folder);config=Config(base/'config/settings.json');config.set('game_dir',str(base/'empty-library'))
+        base=Path(folder);config=Config(base/'onionmcl.json');config.set('game_dir',str(base/'empty-library'))
         window=MainWindow(config.path,base);errors=[];window.error=lambda exc:errors.append(str(exc))
         deadline=time.monotonic()+10
         application.processEvents()
@@ -39,6 +39,13 @@ def run(output):
         accounts.login.reject();accounts.reject()
         assert not errors,errors
         assert window.repo.game_dir==base/'empty-library'
+        assert window.accounts.path==window.instances.path==window.version_settings.path==config.path
+        assert config.path.exists()
+        if __import__('os').name=='nt':
+            import ctypes
+            get_attributes=ctypes.WinDLL('kernel32').GetFileAttributesW
+            get_attributes.argtypes=[ctypes.c_wchar_p];get_attributes.restype=ctypes.c_uint32
+            assert get_attributes(str(config.path)) & 2
         window.close();application.processEvents()
-        output.write_text(json.dumps({'result':'pass','packaged_runtime':True,'offscreen':True,'game_started':False,'network_auth':False,'pages':6,'microsoft_login_button':True,'grouped_settings':True,'installer_filters':True},indent=2),encoding='utf-8')
+        output.write_text(json.dumps({'result':'pass','packaged_runtime':True,'offscreen':True,'game_started':False,'network_auth':False,'pages':6,'microsoft_login_button':True,'grouped_settings':True,'installer_filters':True,'unified_hidden_storage':True},indent=2),encoding='utf-8')
     return 0

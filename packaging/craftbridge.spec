@@ -8,7 +8,8 @@
 说明：
 - Qt 前端使用项目私有 .deps/qt 中的 PySide6 Essentials；旧 Tk 前端不包含在新产物中。
 - Python 游戏管理、下载、账号和恢复模块沿用，Pillow 保留用于可选的窗口判活。
-- 不打包 game/、runtime/、config/：游戏默认使用 F:\\.minecraft，config/runtime 保存在 exe 旁，
+- 不打包游戏、运行配置或账号：统一数据保存到 exe 旁隐藏的 onionmcl.json，
+  游戏默认使用 F:\\.minecraft，runtime 保存在 exe 旁，
   Java 与游戏文件按需下载，保持安装包体积最小。
 """
 

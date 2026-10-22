@@ -66,7 +66,7 @@ python -m pip install --target .deps/qt PySide6-Essentials==6.12.0
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_qt.ps1
 ```
 
-构建脚本隔离原生 DLL 搜索路径，并运行打包后的 offscreen 自检。产物为 `dist/OnionMinecraftLauncher.exe`，运行数据和玩家账号配置不会打入 EXE。依赖不从开发者本机复制到仓库。
+构建脚本隔离原生 DLL 搜索路径，并运行打包后的 offscreen 自检。通过自检后的最终产物为 `release/OnionMinecraftLauncher.exe`（`dist/qt/` 仅作构建暂存），运行数据和玩家账号配置不会打入 EXE。依赖不从开发者本机复制到仓库。
 
 微软应用配置使用 `assets/microsoft-app.example.json` 模板；维护者实际配置保存在被 Git 忽略的 `assets/microsoft-app.json`。详细说明见 [微软登录](microsoft-auth.md)。
 
@@ -89,3 +89,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_qt.ps1
 检查：`python -X utf8 scripts/check_qt_motion.py`，使用临时实例与模拟搜索。检查页面坐标固定、侧栏控件身份不变、同页点击保持搜索/滚动/焦点、胶囊拉伸/收拢及反向连续性、输入不会引起跳位、显式刷新仍生效、关闭动效清理、按钮点击与开关状态。另采集真实事件循环中的形状状态到 `tmp/capsule-motion-samples.json`，不把离屏采样当成显示器帧率测量。
 
 页面内容过渡留待单独原型验收；当前交付不包含全局页面淡入或滑动。完整审计在本地 `docs/ui-motion-audit.md`，不随构建打包。
+
+
+## 统一便携存储
+
+程序同目录的 `onionmcl.json` 使用版本化 JSON：`format_version`、`settings`、`accounts`、`instances`、`version_settings`。Windows 下由文件属性隐藏，文件名本身不以点开头。隐藏属性用于整洁显示；账号访问令牌、续期令牌及外置登录令牌继续由 Windows DPAPI 加密，CurseForge 私有 Key 同样加密。
+
+`launcher/storage.py` 为四个模型提供分区读写；更新时在路径锁内重新读取整个文档，只替换自己的分区，保留其他分区。Windows 使用命名互斥量协调多个进程，临时文件 flush/fsync 后以 ReplaceFileW 原子替换，短暂文件占用时重试，不以删除原文件作为回退。隐藏属性在临时文件上设置，以便替换后保留。测试覆盖重复保存后的隐藏属性和多进程写入。
+
+第一次创建新文件时读取同目录 `config/settings.json`、`accounts.json`、`instances.json`、`version_settings.json`。先收集所有旧文件，再加密旧明文凭据并一次性提交。旧文件不删除、不改写；新文件已经存在后不再从旧数据导入，避免已删除的账号复活。损坏 JSON 或不支持的版本会停止加载，保留原文件。迁移原件仍可能包含旧明文信息，应按个人数据管理。
+
+显式传入旧文件路径的测试和兼容调用仍支持原有独立 JSON；Qt、旧 Tk 入口及默认 CLI 使用统一文件。实例隔离读取也使用统一的 `version_settings` 分区。临时缓存、日志、游戏内容及 Java 运行时不放进该 JSON。
+
+`release/` 和所有 `onionmcl.json` 均被 Git 忽略，不打入 EXE。构建脚本先在 `dist/qt/` 暂存并完成离屏自检，再将 EXE 放入 `release/`。自检使用临时统一数据文件，不读取开发者账号或游戏库。

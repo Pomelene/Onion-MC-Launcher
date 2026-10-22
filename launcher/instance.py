@@ -3,11 +3,12 @@
 
 HMCL/PCL 都把“版本”当作“实例”来管理：除了版本 id，还有玩家可编辑的展示信息。
 这里把展示信息与启动配置分开存：
-- config/instances.json：名称/分组/备注/最后游玩/累计时长；
-- config/version_settings.json：Java、内存、窗口、参数等启动覆盖。
+- onionmcl.json / instances：名称/分组/备注/最后游玩/累计时长；
+- onionmcl.json / version_settings：Java、内存、窗口、参数等启动覆盖。
 版本被删除时，两边的数据都会清理，避免残留。
 """
 
+from .storage import is_portable,read_section,write_section
 import json
 import threading
 import time
@@ -66,7 +67,7 @@ class InstanceStore:
         if path is None:
             from .paths import app_root
 
-            path = app_root() / "config" / "instances.json"
+            path = app_root() / "onionmcl.json"
         self.path = Path(path)
         self._lock = threading.Lock()
         self._data: dict[str, InstanceMeta] = {}
@@ -75,10 +76,10 @@ class InstanceStore:
     # ------------------------------------------------------------ 持久化
 
     def load(self) -> None:
-        if not self.path.exists():
+        if not self.path.exists() and not is_portable(self.path):
             return
         try:
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
+            raw = read_section(self.path,"instances")
         except (OSError, json.JSONDecodeError):
             return
         if not isinstance(raw, dict):
@@ -112,6 +113,9 @@ class InstanceStore:
             }
             for meta in self._data.values()
         }
+        if is_portable(self.path):
+            write_section(self.path,"instances",payload)
+            return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

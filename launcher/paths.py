@@ -42,8 +42,8 @@ def default_config_dir() -> Path:
 
 
 def default_settings_path() -> Path:
-    return default_config_dir() / "settings.json"
+    return app_root() / "onionmcl.json"
 
 
 def default_accounts_path() -> Path:
-    return default_config_dir() / "accounts.json"
+    return app_root() / "onionmcl.json"

@@ -42,8 +42,10 @@ try {
     if ($taskProcess.ExitCode -ne 0) { throw 'Packaged Qt self-check failed; release executable has not been replaced.' }
     $taskResult=Get-Content -LiteralPath $taskReport -Raw | ConvertFrom-Json
     if ($taskResult.result -ne 'pass') { throw 'Packaged Qt self-check did not report success.' }
-    Copy-Item -LiteralPath $taskStage -Destination (Join-Path (Join-Path $taskRoot 'dist') $OutputName) -Force
-    Write-Output ('Ready: dist\'+$OutputName)
+    $taskRelease=Join-Path $taskRoot 'release'
+    New-Item -ItemType Directory -Path $taskRelease -Force | Out-Null
+    Copy-Item -LiteralPath $taskStage -Destination (Join-Path $taskRelease $OutputName) -Force
+    Write-Output ('Ready: release\'+$OutputName)
 } finally {
     $env:PATH=$taskSavedPath
     $env:TEMP=$taskSavedTemp

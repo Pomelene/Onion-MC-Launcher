@@ -2,10 +2,11 @@
 """账号模型与持久化。
 
 账号分两类：离线（offline）与微软正版（microsoft）。
-保存在 config/accounts.json，与设置分离，便于单独管理。
+默认保存在 onionmcl.json 的 accounts 分区，凭据保持用户级加密。
 """
 
 import hashlib
+from .storage import is_portable,read_section,write_section
 import json
 import re
 import threading
@@ -78,10 +79,10 @@ class AccountStore:
         self.load()
 
     def load(self) -> None:
-        if not self.path.exists():
+        if not self.path.exists() and not is_portable(self.path):
             return
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
+            data = read_section(self.path,"accounts")
         except (OSError, json.JSONDecodeError):
             return
         if not isinstance(data,dict) or not isinstance(data.get('accounts',[]),list):return
@@ -118,6 +119,9 @@ class AccountStore:
                 item['protected_secrets']=self.locked_credentials[account.uuid]
             items.append(item)
         data = {"current": self.current_uuid, "accounts": items}
+        if is_portable(self.path):
+            write_section(self.path,"accounts",data)
+            return
         temporary=None
         try:
             with tempfile.NamedTemporaryFile(mode='w',encoding='utf-8',dir=self.path.parent,

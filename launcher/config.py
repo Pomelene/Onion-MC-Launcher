@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-"""全局配置（settings.json）读写。
+"""全局配置读写，默认使用 onionmcl.json 的 settings 分区。
 
 配置以 JSON 保存、结构平坦，未知字段自动忽略；
 所有字段均有默认值，线程安全。
 """
 
+from .storage import is_portable,read_section,write_section
 import json
 import threading
 import tempfile
@@ -111,10 +112,10 @@ class Config:
         self.load()
 
     def load(self) -> None:
-        if not self.path.exists():
+        if not self.path.exists() and not is_portable(self.path):
             return
         try:
-            loaded = json.loads(self.path.read_text(encoding="utf-8"))
+            loaded = read_section(self.path,"settings")
             if isinstance(loaded, dict):
                 envelope=loaded.get('protected_settings')
                 if envelope is not None:
@@ -136,6 +137,9 @@ class Config:
         payload=dict(self.data);secret=payload.pop('curseforge_api_key','')
         if secret:payload['protected_settings']=protect({'curseforge_api_key':secret})
         elif self._locked_secret_settings is not None:payload['protected_settings']=self._locked_secret_settings
+        if is_portable(self.path):
+            write_section(self.path,"settings",payload)
+            return
         temporary=None
         try:
             with tempfile.NamedTemporaryFile(mode='w',encoding='utf-8',dir=self.path.parent,

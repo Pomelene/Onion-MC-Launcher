@@ -270,6 +270,8 @@ class Pages:
         actions=row();major=QComboBox();major.addItems(['8','17','21','25']);actions.addWidget(major)
         def selected(path):
             if on_selected:on_selected(path)
+            elif self.settings_editor:
+                self.settings_editor.java_chosen(path);self.settings_editor.flush()
             else:self.config_obj.set('java_path',str(path))
             dialog.accept();self.status.setText('Java 运行时已选择' if on_selected else 'Java 运行时已保存')
         def download():

@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QStackedWidget,Q
     QLineEdit,QPlainTextEdit,QMessageBox,QInputDialog,QDialog,QFormLayout,QCheckBox,QSpinBox,QProgressBar,QSizePolicy)
 from .widgets import STYLE,themed_style,Page,Card,Empty,label,button,column,row,clear,icon,TaskDialog,NavigationItem,GlassBackdrop,configure_fonts
 from .motion import NavigationSurface
+from .chrome import ChromeMainWindow,TitleBar,window_controls,install_window_chrome
 from .tasks import TaskManager
 from .actions import Actions
 from .pages import Pages
@@ -19,12 +20,12 @@ from ..instance import InstanceStore
 from ..version_settings import VersionSettingsStore
 
 
-class MainWindow(QMainWindow,Actions,Pages):
+class MainWindow(ChromeMainWindow,Actions,Pages):
     game_log=Signal(str,bool)
     game_exit=Signal(int)
 
     def __init__(self,config_path=None,root=None):
-        super().__init__();self.root=Path(root or app_root());self.config_obj=Config(config_path or self.root/'onionmcl.json')
+        super().__init__();install_window_chrome(QApplication.instance());self.root=Path(root or app_root());self.config_obj=Config(config_path or self.root/'onionmcl.json')
         from ..storage import is_portable
         portable=self.config_obj.path if is_portable(self.config_obj.path) else None
         self.repo=GameRepository(self.config_obj);self.accounts=AccountStore(portable or self.root/'config/accounts.json')
@@ -39,13 +40,13 @@ class MainWindow(QMainWindow,Actions,Pages):
 
     def _build(self):
         shell=GlassBackdrop();outer=column(shell,0,0);self.setCentralWidget(shell)
-        toolbar=QWidget();toolbar.setObjectName('toolbar');toolbar.setFixedHeight(64);top=row(toolbar,0,0)
+        toolbar=TitleBar(self.frame_controller);toolbar.setFixedHeight(64);self.title_bar=toolbar;top=row(toolbar,0,0)
         home_area=QWidget();home_area.setFixedWidth(220);home_line=row(home_area,12,0)
         self.home_button=button('返回首页',lambda:self.navigate('home'),'soft','home');self.home_button.setAccessibleName('返回首页');home_line.addWidget(self.home_button);home_line.addStretch();top.addWidget(home_area)
-        heading=QWidget();heading_line=row(heading,0,10);heading_line.setContentsMargins(24,0,24,0);top.addWidget(heading,1)
+        heading=QWidget();heading_line=row(heading,0,10);heading_line.setContentsMargins(24,0,12,0);top.addWidget(heading,1)
         self.back_button=button('',self.go_back,glyph='back');self.back_button.setFixedSize(30,34);self.back_button.setStyleSheet('padding:0;');self.back_button.setToolTip('返回上一页');self.back_button.setAccessibleName('返回上一页');heading_line.addWidget(self.back_button)
         self.title=label('开始游戏','heading');self.title.setMinimumWidth(0);self.title.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Preferred);heading_line.addWidget(self.title,1)
-        self.brand_widget=QWidget();branding=row(self.brand_widget,0,8);branding.addWidget(label('Onion','heading'));branding.addWidget(label(LAUNCHER_VERSION,'pill'),0,Qt.AlignmentFlag.AlignVCenter);heading_line.addWidget(self.brand_widget);outer.addWidget(toolbar)
+        self.brand_widget=QWidget();branding=row(self.brand_widget,0,8);branding.addWidget(label('Onion','heading'));branding.addWidget(label(LAUNCHER_VERSION,'pill'),0,Qt.AlignmentFlag.AlignVCenter);heading_line.addWidget(self.brand_widget);top.addWidget(window_controls(self.frame_controller));outer.addWidget(toolbar)
         lower=row(spacing=0);outer.addLayout(lower,1)
         side=NavigationSurface();side.setObjectName('sidebar');side.setFixedWidth(220)
         self.sidebar_body=column(side,0,0);self.sidebar_body.setSizeConstraint(self.sidebar_body.SizeConstraint.SetDefaultConstraint);self.nav={};self.account_button=None
@@ -163,6 +164,7 @@ class MainWindow(QMainWindow,Actions,Pages):
         self.download_kind=kind;self.navigate('download')
 
     def navigate(self,key,record_history=True,force=False):
+        self.flush_settings()
         for view in list(reversed(self.subpages)):
             if not isinstance(view,TaskDialog):view.reject()
             self.finish_subpage(view)
@@ -229,7 +231,7 @@ class MainWindow(QMainWindow,Actions,Pages):
             if not self.versions:self.selector.addItem('尚未安装游戏','')
             self.selector.setCurrentIndex(max(0,self.selector.findData(self.selected_version)));self.selector.blockSignals(False)
             self.update_selection()
-            self.config_obj.set('selected_version',self.selected_version)
+            if self.selected_version:self.config_obj.set('selected_version',self.selected_version)
             if refresh_page and self.current_page!='settings':self.navigate(self.current_page,force=True)
         self.tasks.submit(scan,done,self.error)
 
@@ -239,19 +241,17 @@ class MainWindow(QMainWindow,Actions,Pages):
 
     def set_selected(self,vid,refresh_page=True):
         if vid not in self.versions:return False
-        if vid!=self.selected_version and self.instance_editor and self.instance_editor.dirty:
-            answer=QMessageBox.question(self,'实例设置尚未保存','切换实例前，是否保存当前实例的设置？',QMessageBox.StandardButton.Save|QMessageBox.StandardButton.Discard|QMessageBox.StandardButton.Cancel)
-            if answer==QMessageBox.StandardButton.Cancel:return False
-            if answer==QMessageBox.StandardButton.Save:
-                self.instance_editor.save()
-                if self.instance_editor.dirty:return False
-            self.instance_editor.dirty=False
+        if vid!=self.selected_version and not self.flush_settings():return False
         self.selected_version=vid;self.config_obj.set('selected_version',vid)
         self.selector.blockSignals(True);self.selector.setCurrentIndex(self.selector.findData(vid));self.selector.blockSignals(False)
         self.update_selection()
         if self.current_page=='instance':self.build_instance()
         elif self.current_page=='versions' and refresh_page:self.build_versions()
         return True
+
+    def flush_settings(self):
+        results=[editor.flush() for editor in (self.settings_editor,self.instance_editor) if editor]
+        return all(results)
 
     def refresh_account(self):
         account=self.accounts.current()
@@ -316,21 +316,23 @@ class MainWindow(QMainWindow,Actions,Pages):
         else:self.close()
 
     def closeEvent(self,event):
-        editors=[self.settings_editor,self.instance_editor]
-        if any(editor and editor.dirty for editor in editors):
-            if QMessageBox.question(self,'尚未保存','关闭并放弃未保存的设置？')!=QMessageBox.StandardButton.Yes:event.ignore();return
-            for editor in editors:
-                if editor:editor.dirty=False
         if self.tasks.jobs:
             if QMessageBox.question(self,'后台任务仍在运行','取消后台任务并在结束后关闭启动器？')!=QMessageBox.StandardButton.Yes:event.ignore();return
             self.tasks.cancel_all();self.hide();event.ignore()
             self.close_timer=QTimer(self);self.close_timer.timeout.connect(lambda:self.close() if not self.tasks.jobs else None);self.close_timer.start(200)
             return
+        self.flush_settings()
+        editors=[self.settings_editor,self.instance_editor]
+        if any(editor and editor.dirty for editor in editors):
+            if QMessageBox.question(self,'尚未保存','关闭并放弃未保存的设置？')!=QMessageBox.StandardButton.Yes:event.ignore();return
+            for editor in editors:
+                if editor:editor.dirty=False
         event.accept()
 
 
 def main():
     application=QApplication.instance() or QApplication(sys.argv)
+    install_window_chrome(application)
     configure_fonts(application)
     application.setApplicationName(LAUNCHER_NAME);application.setStyle('Fusion')
     from ..log import setup_logging

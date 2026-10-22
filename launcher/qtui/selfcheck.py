@@ -3,6 +3,7 @@ import json,tempfile,time
 from unittest.mock import patch
 from pathlib import Path
 from PySide6.QtWidgets import QApplication,QPushButton
+from PySide6.QtCore import Qt
 from .accounts import AccountsDialog
 from .app import MainWindow
 from .widgets import configure_fonts
@@ -22,6 +23,11 @@ def run(output):
         for page in ('home','versions','download','instance','settings','about'):
             window.navigate(page);application.processEvents()
         assert window.settings_editor.fields['auto_memory'] is not None
+        assert window.windowFlags() & Qt.WindowType.FramelessWindowHint
+        assert not any(b.text()=='保存设置' for b in window.settings_editor.findChildren(QPushButton))
+        window.settings_editor.fields['window_width'].setValue(1280)
+        window.flush_settings()
+        assert Config(config.path).get('window_width')==1280
         assert window.nav['instance'].isEnabled() is False
         from .installer import InstallDialog
         installer=InstallDialog(window)
@@ -47,5 +53,5 @@ def run(output):
             get_attributes.argtypes=[ctypes.c_wchar_p];get_attributes.restype=ctypes.c_uint32
             assert get_attributes(str(config.path)) & 2
         window.close();application.processEvents()
-        output.write_text(json.dumps({'result':'pass','packaged_runtime':True,'offscreen':True,'game_started':False,'network_auth':False,'pages':6,'microsoft_login_button':True,'grouped_settings':True,'installer_filters':True,'unified_hidden_storage':True},indent=2),encoding='utf-8')
+        output.write_text(json.dumps({'result':'pass','packaged_runtime':True,'offscreen':True,'game_started':False,'network_auth':False,'pages':6,'microsoft_login_button':True,'grouped_settings':True,'installer_filters':True,'unified_hidden_storage':True,'frameless_window':True,'automatic_settings_save':True},indent=2),encoding='utf-8')
     return 0

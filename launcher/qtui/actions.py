@@ -12,6 +12,7 @@ from ..paths import LAUNCHER_VERSION,LAUNCHER_NAME
 
 class Actions:
     def launch_selected(self):
+        if not self.flush_settings():return
         vid=self.selected_version
         if not vid:self.install_dialog();return
         if self.launch_pending or self.process and self.process.proc.poll() is None:self.error('游戏已在运行或启动准备中。');return
@@ -62,6 +63,7 @@ class Actions:
             self.tasks.jobs[job.key]=(original[0],original[1],reset,original[3])
 
     def install_dialog(self):
+        if not self.flush_settings():return
         from .installer import InstallDialog
         dialog=InstallDialog(self);self.dialogs.append(dialog);self.show_subpage(dialog)
 

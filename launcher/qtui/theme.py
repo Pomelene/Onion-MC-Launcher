@@ -11,6 +11,10 @@ MUTED = '#a4b0ba'
 STYLE = '''
 QMainWindow,QDialog { background:#14181d; }
 QWidget { color:#edf2f4; font-family:'Microsoft YaHei UI'; font-size:14px; }
+QWidget#windowResizeGrip { background:transparent; }
+QPushButton#windowControl,QPushButton#windowClose { padding:0; border:0; border-radius:5px; }
+QPushButton#windowClose:hover { background:#a63855; }
+QPushButton#windowClose:pressed { background:#c34a68; }
 QWidget#workspace { background:transparent; }
 QWidget#sidebar { background:rgba(19,24,29,235); border-right:1px solid #2c343c; }
 QWidget#toolbar { background:rgba(19,24,29,245); border-bottom:1px solid #2c343c; }
@@ -22,6 +26,7 @@ QLabel#heading { font-size:16px; font-weight:600; }
 QLabel#muted { color:#a4b0ba; font-size:12px; }
 QLabel#eyebrow { color:#a4b0ba; font-size:12px; font-weight:500; }
 QLabel#settingTitle { color:#edf2f4; font-size:14px; }
+QLabel:disabled,QLabel#settingTitle:disabled,QLabel#muted:disabled,QLabel#eyebrow:disabled { color:#687780; }
 QLabel#pill { background:#3e344c; color:#ddcafa; padding:3px 7px; border-radius:4px; font-size:12px; }
 QFrame#card,QWidget#settingsSection { background:#1c2229; border:1px solid #303941; border-radius:10px; }
 QWidget#contextPanel { background:#27242f; border:1px solid #453e51; border-radius:8px; }

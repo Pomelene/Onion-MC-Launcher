@@ -1,5 +1,5 @@
-"""Grouped, draft-based settings shared by the launcher and individual instances."""
-from PySide6.QtCore import Qt
+"""Grouped settings with debounced, validated automatic persistence."""
+from PySide6.QtCore import Qt,QTimer
 from PySide6.QtWidgets import (QWidget,QStackedWidget,QLineEdit,QComboBox,QSpinBox,
     QCheckBox,QFileDialog,QMessageBox,QDialog,QColorDialog)
 from PySide6.QtGui import QColor
@@ -11,6 +11,9 @@ class SettingsEditor(QWidget):
         super().__init__();self.launcher=window;self.vid=version_id;self.fields={};self.overrides={};self.flat=flat;self.custom_controls=[]
         self.values=window.version_settings.get(version_id) if version_id else window.config_obj.data.copy()
         self.dirty=False
+        self.ready=False
+        self.autosave_timer=QTimer(self);self.autosave_timer.setSingleShot(True)
+        self.autosave_timer.setInterval(450);self.autosave_timer.timeout.connect(self._autosave)
         outer=column(self,0,15);layout=row(spacing=20);outer.addLayout(layout,1)
         menu=QWidget();menu.setFixedWidth(156);nav=column(menu,0,5)
         if not flat and not external_nav:layout.addWidget(menu)
@@ -18,8 +21,13 @@ class SettingsEditor(QWidget):
         self.stack=QStackedWidget();layout.addWidget(self.stack,1);self.tabs=[]
         self.tab_names={};self.game_body=None
         if flat:
-            self.specific=QCheckBox('启用实例特定游戏设置');self.specific.setChecked(bool(self.values))
-            outer.insertWidget(0,self.specific)
+            scope=QWidget();scope_body=column(scope,0,6)
+            self.specific=QCheckBox('仅为当前实例启用独立设置');self.specific.setChecked(bool(self.values))
+            scope_body.addWidget(self.specific)
+            self.scope_description=label('','muted',True);scope_body.addWidget(self.scope_description)
+            self.global_settings_button=button('设置 → 全局游戏设置',self.open_global_settings,'soft','settings')
+            scope_body.addWidget(self.global_settings_button,0,Qt.AlignmentFlag.AlignLeft)
+            outer.insertWidget(0,scope)
         def tab(title,glyph):
             if (flat or title in ('游戏与窗口','高级参数')) and self.game_body is not None:return self.game_body
             page=Page();index=self.stack.addWidget(page)
@@ -40,8 +48,7 @@ class SettingsEditor(QWidget):
         body=tab('全局游戏设置' if not version_id else '游戏设置','java')
         card=Card('Java 运行环境','留空时，启动器会根据游戏版本选择或下载匹配的 Java。')
         self.edit(card,'java_path','Java 路径','选择 java.exe 或 javaw.exe','自动选择兼容的 Java',browse='file')
-        java_manager=button('检测 / 下载 Java',lambda:window.manage_java(self.java_chosen),'soft','java');self.custom_controls.append(java_manager)
-        setting_row(card.body,'Java 管理','查找本机 Java 或下载官方运行时',java_manager);body.addWidget(card)
+        body.addWidget(card)
         card=Card('内存分配','单位为 MiB。大型整合包可以增加上限，请为系统保留足够内存。')
         self.check(card,'auto_memory','自动分配内存','根据物理内存选择保守的分配值')
         self.spin(card,'min_memory','最小内存','JVM 初始堆内存',512,65536,256)
@@ -96,7 +103,7 @@ class SettingsEditor(QWidget):
             def choose_accent():
                 color=QColorDialog.getColor(QColor(self.fields['accent_color'].text()),self,'选择特征色')
                 if color.isValid():self.fields['accent_color'].setText(color.name())
-            setting_row(card.body,'颜色选择器','选择后保存设置生效',button('选择颜色',choose_accent,'soft'));body.addWidget(card)
+            setting_row(card.body,'颜色选择器','选择后自动保存',button('选择颜色',choose_accent,'soft'));body.addWidget(card)
             card=Card('动态效果','关闭后，页面与控件立即切换。')
             self.check(card,'ui_animations','界面动效','导航胶囊滑动、按钮按压和开关滑动；关闭可减少动态效果');body.addWidget(card)
             card=Card('首页背景','选择本地图片，首页将按窗口比例裁切显示。')
@@ -111,27 +118,51 @@ class SettingsEditor(QWidget):
         if not version_id:self.check(card,'demo','试玩模式','仅在需要 Minecraft 试玩时开启')
         body.addWidget(card)
         nav.addStretch();self.select_tab(0)
-        bar=row();self.hint=label('更改在保存后生效','muted');bar.addWidget(self.hint,1)
+        bar=row();self.hint=label('设置将自动保存','muted');bar.addWidget(self.hint,1)
         if version_id and not flat:bar.addWidget(button('全部跟随全局',self.inherit_all))
-        self.save_button=button('保存设置',self.save,'primary');bar.addWidget(self.save_button);outer.addLayout(bar)
+        outer.addLayout(bar)
         if flat:
             def enable_controls(checked):
+                self.stack.setEnabled(checked)
                 for field in list(self.fields.values())+self.custom_controls:field.setEnabled(checked)
                 memory_state()
+                name=window.instances.display_name(self.vid)
+                self.scope_description.setText(
+                    f'以下修改仅对“{name}”生效，不会修改全局设置或其他实例。'
+                    if checked else '当前实例跟随全局设置。下方仅展示全局值；请前往“设置 → 全局游戏设置”修改。开启独立设置仅影响当前实例。')
+                self.global_settings_button.setVisible(not checked)
             def specific_changed(checked):
                 enable_controls(checked);self.mark_dirty()
-                self.hint.setText('使用实例独立配置，保存后生效' if checked else '保存后将恢复使用全局游戏设置')
+                self.hint.setText('实例独立配置将自动保存' if checked else '将自动恢复使用全局游戏设置')
             self.specific.toggled.connect(specific_changed)
             enable_controls(self.specific.isChecked())
             self.hint.setText('当前使用实例特定设置' if self.specific.isChecked() else '当前跟随全局游戏设置；勾选上方选项后可独立调整')
+
+        self.ready=True;self.dirty=False
+
+    def _autosave(self):
+        if not self.dirty:return
+        self.save(quiet=True)
+
+    def flush(self):
+        for field in self.fields.values():
+            if isinstance(field,QSpinBox) and field.isEnabled():field.interpretText()
+        self.autosave_timer.stop()
+        return not self.dirty or self.save(quiet=True)
+
+    def open_global_settings(self):
+        self.launcher.navigate('settings')
+        self.launcher.open_settings_tab(self.launcher.settings_editor.tab_names['全局游戏设置'])
 
     def select_tab(self,index):
         self.stack.setCurrentIndex(index)
         for i,item in enumerate(self.tabs):item.setChecked(i==index)
 
     def mark_dirty(self,*args):
+        if not self.ready:return
         self.dirty=True
-        if hasattr(self,'hint'):self.hint.setText('有未保存的更改')
+        self.hint.setText('正在自动保存…')
+        self.autosave_timer.start()
 
     def initial(self,key):
         if key in self.values:return self.values[key]
@@ -173,7 +204,7 @@ class SettingsEditor(QWidget):
             action=field.addAction(icon('folder'),QLineEdit.ActionPosition.TrailingPosition);action.setToolTip('浏览目录' if browse=='directory' else '浏览 Java');action.triggered.connect(choose)
 
     def spin(self,card,key,title,description,low,high,step):
-        field=InlineSpinBox();field.setRange(low,high);field.setSingleStep(step);field.setValue(int(self.initial(key) or 0))
+        field=InlineSpinBox();field.setRange(low,high);field.setSingleStep(step);field.setKeyboardTracking(False);field.setValue(int(self.initial(key) or 0))
         self.add(card,key,title,description,field)
 
     def check(self,card,key,title,description):
@@ -206,10 +237,14 @@ class SettingsEditor(QWidget):
             finally:field.blockSignals(previous)
         self.update_memory_controls()
 
-    def save(self):
+    def save(self,quiet=False):
+        self.autosave_timer.stop()
         w=self.launcher
         try:
-            if w.mutating or w.launch_pending:raise ValueError('请先结束当前文件操作或启动任务，再保存设置。')
+            if w.mutating or w.launch_pending:
+                self.hint.setText('当前任务结束后自动保存')
+                if self.dirty:self.autosave_timer.start(700)
+                return False
             values={}
             for key,field in self.fields.items():
                 if key in self.overrides and not self.overrides[key].isChecked():continue
@@ -221,22 +256,29 @@ class SettingsEditor(QWidget):
                 import re
                 if not re.fullmatch(r'#[0-9a-fA-F]{6}',values.get('accent_color','')):raise ValueError('特征色需要使用 #RRGGBB 格式。')
             if self.vid:
-                w.repo.assert_idle(self.vid)
                 metadata={key:values.pop(key) for key in ('name','group','notes') if key in values}
                 if self.flat and not self.specific.isChecked():values={}
                 w.version_settings.set(self.vid,values)
                 if metadata:w.instances.update(self.vid,**metadata)
             else:
+                previous={key:w.config_obj.get(key) for key in values}
+                changed={key for key,value in values.items() if previous[key]!=value}
                 w.config_obj.update(values)
-                w.setStyleSheet(themed_style(values['accent_color']))
+                if 'accent_color' in changed:w.setStyleSheet(themed_style(values['accent_color']))
                 from .motion import apply_motion_preferences
                 apply_motion_preferences(w)
-                from ..repository import GameRepository
-                w.repo=GameRepository(w.config_obj)
-            self.dirty=False;self.hint.setText('设置已保存');w.status.setText('设置已保存')
-            # Update selectors without rebuilding this editor and losing its category.
-            w.reload_versions(refresh_page=False)
-        except Exception as error:w.error(error)
+                if changed & {'game_dir','download_source','proxy_host','proxy_port','max_download_threads','download_speed_limit'}:
+                    from ..repository import GameRepository
+                    w.repo=GameRepository(w.config_obj)
+                if 'game_dir' in changed:w.reload_versions(refresh_page=True)
+                if w.instance_editor:w.instance_editor.refresh_inherited()
+            self.dirty=False;self.refresh_inherited();self.hint.setText('已自动保存');w.status.setText('设置已自动保存')
+            if self.vid and metadata:w.reload_versions(refresh_page=False)
+            return True
+        except Exception as error:
+            self.hint.setText('未保存：'+str(error));w.status.setText('设置未保存：'+str(error))
+            if not quiet:w.error(error)
+            return False
 
 
 class InstanceSettingsDialog(QDialog):
@@ -247,5 +289,6 @@ class InstanceSettingsDialog(QDialog):
         self.editor=SettingsEditor(window,vid);body.addWidget(self.editor,1)
 
     def reject(self):
+        self.editor.flush()
         if self.editor.dirty and QMessageBox.question(self,'尚未保存','放弃未保存的实例设置？')!=QMessageBox.StandardButton.Yes:return
         super().reject()

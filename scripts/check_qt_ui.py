@@ -56,11 +56,11 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
     for page in ('versions','download','mods','worlds','logs','logs','settings','home'):
         window.navigate(page);pump(lambda:not window.tasks.jobs)
         if page in ('versions','download','settings'):render(window,'qt-'+page+'.png')
-    # Settings drafts survive navigation; browsing never commits or discards them.
+    # Valid setting changes are saved automatically when leaving the page.
     window.navigate('settings');editor=window.settings_editor
     previous=config.get('max_memory');editor.fields['max_memory'].setValue(6144);editor.select_tab(1)
     window.navigate('home');window.navigate('settings')
-    assert window.settings_editor is editor and editor.dirty and config.get('max_memory')==previous
+    assert window.settings_editor is editor and not editor.dirty and config.get('max_memory')==6144
     editor.save();pump(lambda:not window.tasks.jobs)
     assert config.get('max_memory')==6144 and editor.stack.currentIndex()==1 and not editor.dirty,errors
     from launcher.qtui.widgets import SettingsComboBox
@@ -70,11 +70,11 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
     assert preset.palette().color(preset.foregroundRole()).name()=='#edc5ff'
     editor.select_tab(0);render(window,'qt-accent-settings.png')
     vid=window.selected_version;window.instance_settings(vid);instance_editor=window.instance_editor
-    assert not instance_editor.fields['max_memory'].isEnabled() and instance_editor.stack.isEnabled()
+    assert not instance_editor.fields['max_memory'].isEnabled() and not instance_editor.stack.isEnabled()
     instance_editor.specific.setChecked(True);instance_editor.fields['max_memory'].setValue(8192)
     window.navigate('worlds');pump(lambda:not window.tasks.jobs);window.navigate('instance')
     window.instance_workspace.open_tab('game')
-    assert window.instance_editor is instance_editor and instance_editor.dirty
+    assert window.instance_editor is instance_editor and not instance_editor.dirty
     instance_editor.save();pump(lambda:not window.tasks.jobs)
     assert window.version_settings.resolve(vid,config)['max_memory']==8192
     render(window,'qt-instance-settings.png')
@@ -303,5 +303,5 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
     window.close();app.processEvents()
     report={'result':'pass','backend':'Qt 6 / PySide6','fixture_only':True,'desktop_input':False,'network_auth':False,'pages':['home','instance','versions','download','settings','about'],'login_success_and_cancel_mocked':True,'main_thread_callbacks':True,'event_loop_heartbeats':beats[0],'cancellation':True,'visual_artifacts':'docs/screens/qt-*.png'}
     report.update(microsoft_entry_click=True,maintainer_settings_hidden=True,automatic_browser_mocked=True,browser_failure_fallback=True,automatic_account_save_mocked=True)
-    report.update(settings_drafts_and_save=True,instance_override_inheritance=True,quick_picker_and_list_consistent=True,local_background=True,installer_filters_fixture=True,layouts=[1100,1440,1920])
+    report.update(settings_auto_save=True,instance_override_inheritance=True,quick_picker_and_list_consistent=True,local_background=True,installer_filters_fixture=True,layouts=[1100,1440,1920])
     (ROOT/'docs/qt-validation.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');print(json.dumps(report,ensure_ascii=False))

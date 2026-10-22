@@ -88,7 +88,6 @@ class NavigationItem(QAbstractButton):
         bounds=QRectF(self.rect()).adjusted(10,3,-10,-3)
         if self.isChecked():
             painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor('#40364f'));painter.drawRoundedRect(bounds,7,7)
-            painter.setBrush(QColor(control_accent(self)));painter.drawRoundedRect(QRectF(10,16,3,self.height()-32),1.5,1.5)
         elif self.hover_amount or self.hasFocus():
             painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor(194,220,225,int(20*max(self.hover_amount,float(self.hasFocus())))));painter.drawRoundedRect(bounds,7,7)
         color='#f0e8ff' if self.isChecked() else '#bac7cd'

@@ -7,7 +7,7 @@ from PySide6.QtGui import QDesktopServices,QIcon
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QStackedWidget,QComboBox,
     QLineEdit,QPlainTextEdit,QMessageBox,QInputDialog,QDialog,QFormLayout,QCheckBox,QSpinBox,QProgressBar,QSizePolicy)
 from .widgets import STYLE,themed_style,Page,Card,Empty,label,button,column,row,clear,icon,TaskDialog,NavigationItem,GlassBackdrop,configure_fonts
-from .motion import PageMotion,animate_change
+from .motion import PageMotion,SelectionRail,animate_change
 from .tasks import TaskManager
 from .actions import Actions
 from .pages import Pages
@@ -47,6 +47,7 @@ class MainWindow(QMainWindow,Actions,Pages):
         lower=row(spacing=0);outer.addLayout(lower,1)
         side=QWidget();side.setObjectName('sidebar');side.setFixedWidth(220)
         self.sidebar_body=column(side,0,0);self.sidebar_body.setSizeConstraint(self.sidebar_body.SizeConstraint.SetDefaultConstraint);self.nav={};self.account_button=None
+        self.nav_motion=SelectionRail(side);self.sidebar_scheme=None
         lower.addWidget(side)
         main=QWidget();main.setObjectName('workspace');body=column(main,0,0);lower.addWidget(main,1)
         self.stack=QStackedWidget();self.motion=PageMotion(self.stack);self.page_map={};body.addWidget(self.stack,1)
@@ -95,11 +96,13 @@ class MainWindow(QMainWindow,Actions,Pages):
 
 
     def build_sidebar(self,key):
+        scheme=key if key in ('instance','settings','download') else 'main'
+        same_scheme=scheme==self.sidebar_scheme;self.sidebar_scheme=scheme
         clear(self.sidebar_body);nav=self.sidebar_body;self.nav={};self.account_button=None
         def heading(text):
-            item=label(text,'eyebrow');item.setContentsMargins(16,18,16,8);nav.addWidget(item)
+            item=label(text,'eyebrow');item.setContentsMargins(16,18,16,8);nav.addWidget(item);item.show()
         def entry(name,title,glyph,callback,subtitle=''):
-            item=NavigationItem(title,glyph,callback,subtitle);nav.addWidget(item);self.nav[name]=item;return item
+            item=NavigationItem(title,glyph,callback,subtitle);nav.addWidget(item);item.show();self.nav[name]=item;return item
         if key=='instance' and self.selected_version:
             for name,title,glyph in [('game','游戏设置','settings'),('auto','自动安装','package'),('mods','模组管理','package'),('resourcepacks','资源包管理','grid'),('shaderpacks','光影管理','world'),('worlds','世界管理','world'),('logs','运行日志','history')]:
                 item=entry(name,title,glyph,lambda k=name:self.open_instance_tab(k));item.setChecked(name==self.instance_tab)
@@ -124,6 +127,10 @@ class MainWindow(QMainWindow,Actions,Pages):
             heading('通用');entry('settings','设置','settings',lambda:self.navigate('settings'));entry('about','关于','package',lambda:self.navigate('about'));nav.addStretch()
             for name,item in self.nav.items():item.setChecked(name==key)
         self.update_selection()
+        self.sync_navigation_motion(same_scheme)
+
+    def sync_navigation_motion(self,animate=True):
+        self.nav_motion.select(next((item for item in self.nav.values() if item.isChecked()),None),animate)
 
     @animate_change
     def open_instance_tab(self,key):
@@ -132,11 +139,13 @@ class MainWindow(QMainWindow,Actions,Pages):
         self.current_route=route
         self.instance_tab=key;self.instance_workspace.open_tab(key)
         for name,item in self.nav.items():item.setChecked(name==key)
+        self.sync_navigation_motion()
 
     @animate_change
     def open_settings_tab(self,index):
         self.settings_editor.select_tab(index)
         for name,item in self.nav.items():item.setChecked(name in self.settings_editor.tab_names and self.settings_editor.tab_names[name]==index)
+        self.sync_navigation_motion()
 
     def choose_download_kind(self,kind):
         self.download_kind=kind;self.navigate('download')

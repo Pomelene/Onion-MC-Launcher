@@ -80,7 +80,7 @@ DEFAULTS: dict[str, Any] = {
     "game_args": "",               # 附加游戏参数（空格分隔）
     "theme": "light",
     "theme_preset": "bridge",
-    "accent_color": "#b8e8ee",      # 可点击设置文字的高亮色
+    "accent_color": "#cebafa",      # 可点击设置文字的高亮色
     "ui_scale": 0.0,               # 界面缩放；0 表示自动按 DPI
     "language": "zh-CN",
     "log_level": "info",           # debug | info | warn | error

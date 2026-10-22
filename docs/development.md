@@ -69,3 +69,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_qt.ps1
 构建脚本隔离原生 DLL 搜索路径，并运行打包后的 offscreen 自检。产物为 `dist/OnionMinecraftLauncher.exe`，运行数据和玩家账号配置不会打入 EXE。依赖不从开发者本机复制到仓库。
 
 微软应用配置使用 `assets/microsoft-app.example.json` 模板；维护者实际配置保存在被 Git 忽略的 `assets/microsoft-app.json`。详细说明见 [微软登录](microsoft-auth.md)。
+
+
+## UI 外观调整
+
+`launcher/qtui/theme.py` 集中维护基础配色、字体、控件和表面样式；`widgets.py` 维护原生绘制的导航、图标、开关和内容行。用户配置的特征色通过 `themed_style()` 应用到主要操作与设置值，绘制控件通过 `control_accent()` 读取。装饰背景不采集桌面，也不使用持续模糊刷新。
+
+顶部左侧为返回首页，右侧为 Onion 与版本号；中间保留页面标题和逐级返回。内容行高为 68px，设置行最小高为 58px，开关滑动时间为 160ms。布局与导航验收使用 `scripts/check_qt_ui.py`，只操作临时实例。

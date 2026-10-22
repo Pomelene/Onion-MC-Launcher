@@ -36,12 +36,13 @@ class MainWindow(QMainWindow,Actions,Pages):
 
     def _build(self):
         shell=GlassBackdrop();outer=column(shell,0,0);self.setCentralWidget(shell)
-        toolbar=QWidget();toolbar.setObjectName('toolbar');toolbar.setFixedHeight(56);top=row(toolbar,0,0)
-        brand=QWidget();brand.setFixedWidth(220);branding=row(brand,16,10);branding.addWidget(label('Onion','heading'));branding.addWidget(label(LAUNCHER_VERSION,'muted'));branding.addStretch();top.addWidget(brand)
+        toolbar=QWidget();toolbar.setObjectName('toolbar');toolbar.setFixedHeight(64);top=row(toolbar,0,0)
+        home_area=QWidget();home_area.setFixedWidth(220);home_line=row(home_area,12,0)
+        self.home_button=button('返回首页',lambda:self.navigate('home'),'soft','home');self.home_button.setAccessibleName('返回首页');home_line.addWidget(self.home_button);home_line.addStretch();top.addWidget(home_area)
         heading=QWidget();heading_line=row(heading,0,10);heading_line.setContentsMargins(24,0,24,0);top.addWidget(heading,1)
         self.back_button=button('',self.go_back,glyph='back');self.back_button.setFixedSize(30,34);self.back_button.setStyleSheet('padding:0;');self.back_button.setToolTip('返回上一页');self.back_button.setAccessibleName('返回上一页');heading_line.addWidget(self.back_button)
         self.title=label('开始游戏','heading');self.title.setMinimumWidth(0);self.title.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Preferred);heading_line.addWidget(self.title,1)
-        heading_line.addWidget(button('首页',lambda:self.navigate('home'),'soft','home'));outer.addWidget(toolbar)
+        self.brand_widget=QWidget();branding=row(self.brand_widget,0,8);branding.addWidget(label('Onion','heading'));branding.addWidget(label(LAUNCHER_VERSION,'pill'),0,Qt.AlignmentFlag.AlignVCenter);heading_line.addWidget(self.brand_widget);outer.addWidget(toolbar)
         lower=row(spacing=0);outer.addLayout(lower,1)
         side=QWidget();side.setObjectName('sidebar');side.setFixedWidth(220)
         self.sidebar_body=column(side,0,0);self.sidebar_body.setSizeConstraint(self.sidebar_body.SizeConstraint.SetDefaultConstraint);self.nav={};self.account_button=None

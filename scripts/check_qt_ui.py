@@ -206,7 +206,9 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
     with patch('launcher.mods.scan_mods',return_value=fixtures):
         window.instance_workspace.open_tab('mods');pump(lambda:not window.tasks.jobs)
     rows=window.instance_content.findChildren(ContentRow)
-    assert len(rows)==12 and all(r.height()==64 for r in rows)
+    assert len(rows)==12 and all(r.height()==68 for r in rows)
+    assert window.home_button.mapTo(window,window.home_button.rect().center()).x()<220
+    assert window.brand_widget.mapTo(window,window.brand_widget.rect().center()).x()>window.width()-220
     titles=[r.text.title for r in rows];assert titles==sorted(titles,key=str.casefold)
     assert rows[0].image.pixmap().toImage().pixelColor(8,8).green()>150
     before_page=window.stack.currentWidget();before_rows=list(rows);old_subpages=list(window.subpages)

@@ -10,11 +10,15 @@ from .widgets import Page,Card,Empty,HomeCanvas,ContentRow,label,button,column,r
 class Pages:
     def build_home(self):
         body=self.page('home');canvas=HomeCanvas(self.config_obj.get('background_image') or '')
-        overlay=column(canvas,30,12);overlay.addStretch()
+        overlay=column(canvas,40,12)
+        hero=column(spacing=12);hero.addWidget(label('ONION / JAVA EDITION','eyebrow'))
+        hero.addWidget(label('下一段冒险，由此开始。','heroTitle'))
+        hero.addWidget(label('选择你的世界，继续上次的旅程。','heroSubtitle'))
+        overlay.addSpacing(44);overlay.addLayout(hero);overlay.addStretch()
         bottom=row(spacing=20);caption=column(spacing=4)
-        caption.addWidget(label('MINECRAFT JAVA EDITION','eyebrow'))
+        caption.addWidget(label('你的启动器，你的世界。','heading'))
         self.wallpaper_button=button('自定义首页背景',self.open_appearance)
-        self.wallpaper_button.setStyleSheet('color:white;background:rgba(255,255,255,28);text-align:left;')
+        self.wallpaper_button.setStyleSheet('color:#b8cbd0;text-align:left;padding-left:0;')
         caption.addWidget(self.wallpaper_button);bottom.addLayout(caption);bottom.addStretch()
         start=QWidget();start.setObjectName('startPanel');actions=row(start,0,0)
         self.launch_button=button('',self.launch_selected,'primary','play');self.launch_button.setMinimumSize(238,78)

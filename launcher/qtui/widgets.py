@@ -4,119 +4,39 @@ from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPainterPath, 
 from PySide6.QtWidgets import (QWidget,QFrame,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,
     QScrollArea,QSizePolicy,QDialog,QProgressBar,QMessageBox,QLayout,QAbstractButton,QCheckBox,QSpinBox,QComboBox,QLineEdit,QAbstractSpinBox,QStyle,QStyleOptionComboBox)
 
-# Shared flat surfaces and compact list controls, matching the supplied reference.
-STYLE = '''
-QMainWindow,QDialog { background:#15131a; }
-QWidget { color:#e6e1eb; font-family:'Microsoft YaHei UI'; font-size:13px; }
-QWidget#sidebar,QWidget#toolbar { background:#19161e; }
-QWidget#workspace { background:#15131a; }
-QLabel { background:transparent; }
-QLabel#title { font-size:23px; font-weight:600; }
-QLabel#heading { font-size:15px; font-weight:600; }
-QLabel#muted { color:#aaa3b3; font-size:11px; }
-QLabel#eyebrow { color:#c3bbcc; font-size:11px; font-weight:400; }
-QLabel#settingTitle { color:#e6e1eb; font-size:13px; font-weight:400; }
-QLabel#pill { color:#d2c6e4; background:#373040; padding:2px 5px; border-radius:2px; font-size:11px; }
-QFrame#card { background:rgba(15,13,19,225); border:0; border-radius:3px; }
-QPushButton { background:transparent; border:0; border-radius:2px; padding:7px 10px; min-height:20px; color:#e0d9e7; }
-QPushButton:hover { background:rgba(213,199,235,18); }
-QPushButton:pressed { background:rgba(213,199,235,28); }
-QPushButton:focus { border:0; background:rgba(213,199,235,15); }
-QPushButton:disabled { color:#6f6879; background:transparent; }
-QPushButton[role='primary'] { background:#c9b8e4; color:#30223e; border-radius:3px; font-weight:500; }
-QPushButton[role='primary']:hover { background:#d8c8ef; }
-QPushButton[role='soft'] { background:transparent; color:#d6c8e8; }
-QPushButton[role='danger'] { color:#ef9baf; }
-QPushButton[role='nav'] { text-align:left; border-radius:0; padding:10px 16px; color:#ded7e7; }
-QPushButton[role='nav']:checked { background:#302b38; font-weight:600; }
-QPushButton[role='tab'] { border-radius:0; border-bottom:2px solid transparent; }
-QPushButton[role='tab']:checked { background:transparent; border-bottom:2px solid #c9b8e4; color:#d9c8ef; }
-QLineEdit,QComboBox,QSpinBox,QPlainTextEdit,QListWidget,QTreeWidget { background:#29242f; color:#e5dfeb; border:0; border-radius:3px; padding:7px 10px; selection-background-color:#50445f; }
-QLineEdit,QComboBox,QSpinBox { min-height:20px; }
-QLineEdit:focus,QPlainTextEdit:focus { border-bottom:1px solid #c9b8e4; }
-QComboBox::drop-down { border:0; width:24px; }
-QComboBox QAbstractItemView { background:#28232e; color:#e5dfeb; selection-background-color:#453a51; padding:5px; }
-QTreeWidget { background:rgba(15,13,19,220); border-radius:0; }
-QTreeWidget::item { padding:10px 6px; border-bottom:1px solid #403947; }
-QTreeWidget::item:selected { background:#302a39; color:#f0e9f7; }
-QHeaderView::section { background:#1a161f; border:0; padding:8px; color:#a69bad; }
-QScrollArea { border:0; background:transparent; }
-QScrollArea>QWidget>QWidget { background:transparent; }
-QScrollBar:vertical { background:transparent; width:6px; margin:0; }
-QScrollBar::handle:vertical { background:#665b74; border-radius:2px; min-height:28px; }
-QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical { height:0; }
-QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical { background:transparent; }
-QProgressBar { background:#342c3e; border:0; border-radius:2px; height:5px; }
-QProgressBar::chunk { background:#c9b8e4; border-radius:2px; }
-QCheckBox { spacing:9px; padding:5px 0; min-height:18px; }
-QCheckBox::indicator { width:15px; height:15px; border:1px solid #9c91a8; border-radius:2px; background:transparent; }
-QCheckBox::indicator:checked { background:#c9b8e4; border-color:#c9b8e4; }
-QCheckBox::indicator:disabled { border-color:#51495c; background:#29232f; }
-QToolTip { background:#302936; color:#e9e0f3; border:0; padding:7px; }
-QWidget#settingsSection { background:rgba(15,13,19,235); border-radius:3px; }
-QWidget#settingRow { background:transparent; border-bottom:1px solid #403947; }
-QWidget#settingRow:hover { background:rgba(212,198,230,5); }
-QWidget#settingRow QLineEdit,QWidget#settingRow QComboBox,QWidget#settingRow QSpinBox { background:transparent; border:0; border-radius:0; padding:6px 8px; color:#b7adbf; }
-QWidget#settingRow QLineEdit:focus,QWidget#settingRow QSpinBox:focus { background:rgba(212,198,230,8); border-bottom:1px solid #c9b8e4; }
-QWidget#listRow { background:rgba(15,13,19,230); border-bottom:1px solid #403947; }
-QWidget#listRow:hover { background:rgba(212,198,230,7); }
-'''
-
-# Glass is composited inside the launcher; the desktop is never captured.
-STYLE += '''
-QMainWindow,QDialog { background:#101522; }
-QWidget#workspace { background:transparent; }
-QWidget#sidebar { background:rgba(18,24,40,155); border-right:1px solid rgba(208,225,255,22); }
-QWidget#toolbar { background:rgba(19,25,43,155); border-bottom:1px solid rgba(208,225,255,22); }
-QFrame#card { background:rgba(29,37,57,160); border:1px solid rgba(208,225,255,24); border-radius:12px; }
-QWidget#settingsSection { background:rgba(23,30,48,185); border:1px solid rgba(208,225,255,24); border-radius:10px; }
-QWidget#settingRow { border-bottom:1px solid rgba(208,225,255,22); }
-QWidget#settingRow:hover { background:rgba(194,219,255,8); }
-QWidget#settingRow QLineEdit,QWidget#settingRow QComboBox,QWidget#settingRow QSpinBox { color:#c8cfe0; }
-QLabel#muted { color:#aebbd0; }
-QLabel#eyebrow { color:#b6c7dd; }
-QPushButton { border-radius:7px; }
-QPushButton:hover { background:rgba(193,215,255,20); }
-QPushButton:focus { border:1px solid rgba(183,218,255,130); }
-QPushButton[role='primary'] { background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #b8e8ee,stop:0.52 #bec9f1,stop:1 #d6bde9); color:#182238; border:1px solid rgba(240,248,255,120); border-radius:9px; }
-QPushButton[role='primary']:hover { background:#d1e8ff; }
-QLineEdit,QComboBox,QSpinBox,QPlainTextEdit,QListWidget { background:rgba(143,169,213,17); border-radius:6px; }
-QTreeWidget { background:rgba(19,26,43,165); border-radius:9px; }
-QTreeWidget::item { border-bottom:1px solid rgba(208,225,255,24); }
-QTreeWidget::item:selected { background:rgba(146,176,234,32); }
-QHeaderView::section { background:#202b40; color:#b6c7dd; }
-QComboBox QAbstractItemView,QMenu { background:#202b40; color:#e5edfa; border:1px solid #43536f; }
-QMenu::item { padding:8px 20px; }
-QMenu::item:selected { background:#374965; }
-QSpinBox QLineEdit,QWidget#settingRow QSpinBox QLineEdit { padding:0; min-height:0; border:0; background:transparent; }
-QWidget#contextPanel { background:rgba(141,174,225,12); border:1px solid rgba(208,225,255,24); border-radius:9px; }
-QWidget#contextPanel QComboBox { background:transparent; border:0; font-weight:600; }
-QDialog[embedded='true'] { background:transparent; }
-'''
+from .theme import STYLE
 
 
 class GlassBackdrop(QWidget):
     """Soft spectral light, painted at native resolution without a blur loop."""
     def paintEvent(self,event):
         p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.fillRect(self.rect(),QColor('#101522'))
-        for x,y,r,color in ((.12,.1,.7,'#305e78'),(.78,.2,.65,'#4f3e77'),(.9,.94,.6,'#245b66')):
+        p.fillRect(self.rect(),QColor('#14181d'))
+        for x,y,r,color in ((.8,.05,.6,'#493459'),(.98,.94,.5,'#302c43')):
             g=QRadialGradient(QPointF(self.width()*x,self.height()*y),max(self.width(),self.height())*r)
-            c=QColor(color);c.setAlpha(145);g.setColorAt(0,c);c.setAlpha(0);g.setColorAt(1,c)
+            c=QColor(color);c.setAlpha(55);g.setColorAt(0,c);c.setAlpha(0);g.setColorAt(1,c)
             p.fillRect(self.rect(),g)
         p.end()
 
 
-def themed_style(accent='#b8e8ee'):
+def themed_style(accent='#cebafa'):
     import re
-    if not isinstance(accent,str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',accent):accent='#b8e8ee'
-    return STYLE+'''
+    if not isinstance(accent,str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',accent):accent='#cebafa'
+    return STYLE.replace('#cebafa',accent)+'''
 QWidget#settingRow QLineEdit,QWidget#settingRow QSpinBox,QWidget#settingRow QComboBox,QWidget#settingRow QPushButton { color:ACCENT; }
 QWidget#settingRow QPushButton { text-align:right; }
 QWidget#settingRow QPushButton:hover { background:rgba(193,215,255,20); }
 QWidget#settingRow QLineEdit:disabled,QWidget#settingRow QSpinBox:disabled,QWidget#settingRow QComboBox:disabled,QWidget#settingRow QPushButton:disabled { color:#748095; }
 QWidget#settingRow QLineEdit:read-only { color:#aebbd0; }
 '''.replace('ACCENT',accent)
+
+
+def control_accent(widget):
+    """Use the saved accent for painted controls as well as stylesheet controls."""
+    import re
+    config=getattr(widget.window(),'config_obj',None)
+    value=config.get('accent_color') if config else None
+    return value if isinstance(value,str) and re.fullmatch(r'#[0-9a-fA-F]{6}',value) else '#cebafa'
 
 
 class SettingsComboBox(QComboBox):
@@ -150,30 +70,32 @@ class NavigationItem(QAbstractButton):
         self.hover_animation.stop();self.hover_animation.setStartValue(self.hover_amount);self.hover_animation.setEndValue(0.0);self.hover_animation.start();super().leaveEvent(event)
 
     def setSubtitle(self,text):
-        self.subtitle=str(text or '');self.setFixedHeight(62 if self.subtitle else 44)
+        self.subtitle=str(text or '');self.setFixedHeight(68 if self.subtitle else 48)
         self.setToolTip(self.text()+(' · '+self.subtitle if self.subtitle else ''));self.update()
 
-    def text_left(self):return 48
+    def text_left(self):return 54
 
-    def sizeHint(self):return QSize(220,62 if self.subtitle else 44)
+    def sizeHint(self):return QSize(220,68 if self.subtitle else 48)
 
     def paintEvent(self,event):
         painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        bounds=QRectF(self.rect()).adjusted(10,3,-10,-3)
         if self.isChecked():
-            glow=QLinearGradient(0,0,self.width(),self.height());glow.setColorAt(0,QColor(150,220,245,38));glow.setColorAt(1,QColor(209,177,255,18))
-            painter.fillRect(self.rect(),glow);painter.fillRect(0,10,3,self.height()-20,QColor('#b8e8ee'))
-        elif self.hover_amount or self.hasFocus():painter.fillRect(self.rect(),QColor(194,220,255,int(18*max(self.hover_amount,float(self.hasFocus())))))
-        color='#e3d5f1' if self.isChecked() else '#d0c7d9'
+            painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor('#40364f'));painter.drawRoundedRect(bounds,7,7)
+            painter.setBrush(QColor(control_accent(self)));painter.drawRoundedRect(QRectF(10,16,3,self.height()-32),1.5,1.5)
+        elif self.hover_amount or self.hasFocus():
+            painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor(194,220,225,int(20*max(self.hover_amount,float(self.hasFocus())))));painter.drawRoundedRect(bounds,7,7)
+        color='#f0e8ff' if self.isChecked() else '#bac7cd'
         if not self.isEnabled():color='#726879'
-        icon(self.glyph,color).paint(painter,16,(self.height()-20)//2,20,20)
-        font=self.font();font.setPixelSize(13);font.setBold(self.isChecked());painter.setFont(font);painter.setPen(QColor(color))
+        icon(self.glyph,color).paint(painter,22,(self.height()-20)//2,20,20)
+        font=self.font();font.setPixelSize(14);font.setBold(self.isChecked());painter.setFont(font);painter.setPen(QColor(color))
         metrics=QFontMetrics(font);width=max(0,self.width()-self.text_left()-16)
         title=metrics.elidedText(self.text(),Qt.TextElideMode.ElideRight,width)
-        painter.drawText(QRectF(self.text_left(),12 if self.subtitle else 0,width,22 if self.subtitle else self.height()),Qt.AlignmentFlag.AlignVCenter,title)
+        painter.drawText(QRectF(self.text_left(),14 if self.subtitle else 0,width,22 if self.subtitle else self.height()),Qt.AlignmentFlag.AlignVCenter,title)
         if self.subtitle:
-            font.setPixelSize(11);font.setBold(False);painter.setFont(font);painter.setPen(QColor('#aaa0b6'))
+            font.setPixelSize(12);font.setBold(False);painter.setFont(font);painter.setPen(QColor('#95a7b1'))
             subtitle=QFontMetrics(font).elidedText(self.subtitle,Qt.TextElideMode.ElideRight,width)
-            painter.drawText(QRectF(self.text_left(),33,width,18),Qt.AlignmentFlag.AlignVCenter,subtitle)
+            painter.drawText(QRectF(self.text_left(),37,width,18),Qt.AlignmentFlag.AlignVCenter,subtitle)
         painter.end()
 
 
@@ -209,7 +131,7 @@ PATHS = {
  'java':[[(5,9),(5,17),(8,20),(15,20),(18,17),(18,9),(5,9)],[(18,10),(22,10),(22,14),(18,14)],[(10,6),(11,3)]],
 }
 
-def icon(name, color='#c9bfd4'):
+def icon(name, color='#bac7cd'):
     image=QPixmap(72,72); image.fill(Qt.GlobalColor.transparent)
     painter=QPainter(image);painter.setRenderHint(QPainter.RenderHint.Antialiasing);painter.scale(3,3)
     painter.setPen(QPen(QColor(color),1.6,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
@@ -235,7 +157,7 @@ def label(text,kind='',wrap=False):
 def button(text, callback=None, role='', glyph=None):
     item=QPushButton(text);item.setCursor(Qt.CursorShape.PointingHandCursor)
     item.setProperty('role',role)
-    if glyph:item.setIcon(icon(glyph,'#352641' if role=='primary' else '#c9bfd4'));item.setIconSize(QSize(18,18))
+    if glyph:item.setIcon(icon(glyph,'#281f35' if role=='primary' else '#bac7cd'));item.setIconSize(QSize(18,18))
     if callback:item.clicked.connect(lambda checked=False: callback())
     return item
 
@@ -270,14 +192,26 @@ class SettingsSection(QWidget):
 class ToggleSwitch(QCheckBox):
     def __init__(self):
         super().__init__();self.setFixedSize(42,26);self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.position=0.0;self.motion=QVariantAnimation(self);self.motion.setDuration(160);self.motion.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.motion.valueChanged.connect(self._move);self.toggled.connect(self._animate)
+
+    def _move(self,value):self.position=float(value);self.update()
+
+    def _animate(self,checked):
+        self.motion.stop()
+        if not self.isVisible():self._move(float(checked));return
+        self.motion.setStartValue(self.position);self.motion.setEndValue(float(checked));self.motion.start()
 
     def hitButton(self,point):return self.rect().contains(point)
 
     def paintEvent(self,event):
         painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing);painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor('#635371' if self.isChecked() else '#3c3544'));painter.drawRoundedRect(QRectF(4,6,34,14),7,7)
-        painter.setBrush(QColor('#cbb7e6' if self.isChecked() else '#93879f') if self.isEnabled() else QColor('#51495c'))
-        painter.drawEllipse(QRectF(21 if self.isChecked() else 2,3,20,20));painter.end()
+        painter.setBrush(QColor('#72608d' if self.isChecked() else '#3c4852'));painter.drawRoundedRect(QRectF(2,3,38,20),10,10)
+        painter.setBrush(QColor(control_accent(self) if self.isChecked() else '#a4b0ba') if self.isEnabled() else QColor('#63717a'))
+        painter.drawEllipse(QRectF(5+18*self.position,6,14,14))
+        if self.hasFocus():
+            painter.setPen(QPen(QColor(control_accent(self)),1));painter.setBrush(Qt.BrushStyle.NoBrush);painter.drawRoundedRect(QRectF(0,1,41,24),12,12)
+        painter.end()
 
 
 class InlineSpinBox(QSpinBox):
@@ -295,7 +229,7 @@ class ContentText(QWidget):
     def paintEvent(self,event):
         p=QPainter(self);font=self.font();font.setPixelSize(14);p.setFont(font);p.setPen(QColor('#e5edfa'))
         p.drawText(QRectF(0,4,self.width(),23),Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(self.title,Qt.TextElideMode.ElideRight,self.width()))
-        font.setPixelSize(11);p.setFont(font);p.setPen(QColor('#aebbd0'))
+        font.setPixelSize(12);p.setFont(font);p.setPen(QColor('#a4b0ba'))
         p.drawText(QRectF(0,28,self.width(),18),Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(self.detail,Qt.TextElideMode.ElideRight,self.width()));p.end()
 
 
@@ -307,18 +241,18 @@ class ContentCheck(QCheckBox):
 
     def paintEvent(self,event):
         p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setPen(QPen(QColor('#b8c7de' if self.isEnabled() else '#687587'),1.5));p.setBrush(QColor('#c9b8e4') if self.isChecked() else Qt.BrushStyle.NoBrush)
+        p.setPen(QPen(QColor('#b8c7de' if self.isEnabled() else '#687587'),1.5));p.setBrush(QColor(control_accent(self)) if self.isChecked() else Qt.BrushStyle.NoBrush)
         p.drawRoundedRect(QRectF(3,5,18,18),3,3)
         if self.isChecked():
             p.setPen(QPen(QColor('#253047'),2,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
             path=QPainterPath(QPointF(7,14));path.lineTo(11,18);path.lineTo(18,10);p.drawPath(path)
-        if self.hasFocus():p.setPen(QPen(QColor('#b8e8ee'),1,Qt.PenStyle.DotLine));p.setBrush(Qt.BrushStyle.NoBrush);p.drawRect(self.rect().adjusted(0,0,-1,-1))
+        if self.hasFocus():p.setPen(QPen(QColor(control_accent(self)),1,Qt.PenStyle.DotLine));p.setBrush(Qt.BrushStyle.NoBrush);p.drawRect(self.rect().adjusted(0,0,-1,-1))
         p.end()
 
 
 class ContentRow(QWidget):
     def __init__(self,title,detail,glyph='package',enabled=None,on_toggle=None):
-        super().__init__();self.setObjectName('listRow');self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground,True);self.setFixedHeight(64);self.line=row(self,8,12)
+        super().__init__();self.setObjectName('listRow');self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground,True);self.setFixedHeight(68);self.line=row(self,10,14)
         self.check=None
         if enabled is not None:
             self.check=ContentCheck();self.check.setChecked(enabled);self.check.setToolTip('启用此模组');self.check.setAccessibleName('启用 '+title)
@@ -402,7 +336,7 @@ class HomeCanvas(Landscape):
             for offset,alpha in ((0,36),(18,18),(42,10)):
                 path=QPainterPath(QPointF(-100,480+offset));path.cubicTo(220,80+offset,600,650+offset,1110,120+offset)
                 gradient=QLinearGradient(0,0,1000,700)
-                gradient.setColorAt(0,QColor(122,238,239,alpha));gradient.setColorAt(.52,QColor(203,184,255,alpha));gradient.setColorAt(1,QColor(250,176,220,alpha))
+                gradient.setColorAt(0,QColor(168,139,228,alpha));gradient.setColorAt(.52,QColor(203,184,255,alpha));gradient.setColorAt(1,QColor(207,163,224,alpha))
                 p.setPen(QPen(gradient,80 if offset==0 else 1.2));p.drawPath(path)
             p.end()
         else:
@@ -414,7 +348,7 @@ class HomeCanvas(Landscape):
 
 def setting_row(layout,title,description,control):
     """A HMCL-style title, explanation and aligned editor row."""
-    container=QWidget();container.setObjectName('settingRow');container.setMinimumHeight(50);container.setToolTip(description)
+    container=QWidget();container.setObjectName('settingRow');container.setMinimumHeight(58);container.setToolTip(description)
     line=row(container,16,20);line.setContentsMargins(16,6,16,6)
     text=label(title,'settingTitle');text.setToolTip(description);line.addWidget(text,1)
     if isinstance(control,QWidget):

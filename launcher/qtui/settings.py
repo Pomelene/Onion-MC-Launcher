@@ -91,8 +91,8 @@ class SettingsEditor(QWidget):
             card=Card('账号管理','正版、离线与外置账号在统一的账号窗口中管理。')
             card.body.addWidget(button('管理游戏账号',window.open_accounts,'soft','account'));body.addWidget(card)
             body=tab('外观','grid');card=Card('特征色','用于高亮设置行中可点击或编辑的文字。')
-            self.edit(card,'accent_color','高亮颜色','输入六位十六进制颜色，例如 #b8e8ee','#b8e8ee')
-            if not self.fields['accent_color'].text():self.fields['accent_color'].setText('#b8e8ee')
+            self.edit(card,'accent_color','高亮颜色','输入六位十六进制颜色，例如 #cebafa','#cebafa')
+            if not self.fields['accent_color'].text():self.fields['accent_color'].setText('#cebafa')
             def choose_accent():
                 color=QColorDialog.getColor(QColor(self.fields['accent_color'].text()),self,'选择特征色')
                 if color.isValid():self.fields['accent_color'].setText(color.name())

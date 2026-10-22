@@ -86,60 +86,25 @@ class Pages:
         if self.set_selected(vid):self.launch_selected()
 
     def build_download(self):
-        body=self.page('download');seq=self.page_seq['download'];actions=row();actions.addWidget(button('安装游戏 / 加载器',self.install_dialog,'primary','download'));actions.addWidget(button('导入整合包',self.import_modpack,glyph='package'));actions.addStretch();body.addLayout(actions)
-        target_vid=self.selected_version
-        target_hint=label('','muted',True);body.addWidget(target_hint)
-        search=Card();bar=row();kinds=QComboBox();categories=row();category_buttons=[]
-        def select_category(index):
-            kinds.setCurrentIndex(index)
-            self.download_kind=kinds.itemData(index)
-            target_hint.setText('整合包将安装为新实例' if self.download_kind=='modpack' else '内容安装目标：'+(self.instances.display_name(target_vid) if target_vid else '尚未选择实例，请先从实例列表选择游戏'))
-            for number,item in enumerate(category_buttons):item.setChecked(number==index)
-        for index,(text,value) in enumerate([('模组','mod'),('资源包','resourcepack'),('光影','shader'),('整合包','modpack')]):
-            kinds.addItem(text,value);item=button(text,lambda i=index:select_category(i),'tab');item.setCheckable(True);category_buttons.append(item);categories.addWidget(item)
-        categories.addStretch();categories.addWidget(label('MODRINTH','eyebrow'));select_category(max(0,kinds.findData(getattr(self,'download_kind','mod'))));search.body.addLayout(categories)
-        query=QLineEdit();query.setPlaceholderText('搜索名称、作者或关键词');bar.addWidget(query,1)
-        go=button('搜索',role='primary',glyph='search');bar.addWidget(go);search.body.addLayout(bar)
-        filters=row();game=QLineEdit();game.setPlaceholderText('不限游戏版本');game.setMaximumWidth(180);loader=QComboBox()
-        for text,value in [('不限加载器',''),('Fabric','fabric'),('Forge','forge'),('NeoForge','neoforge'),('Quilt','quilt')]:loader.addItem(text,value)
-        def loader_state(*args):loader.setEnabled(kinds.currentData() in ('mod','modpack'))
-        kinds.currentIndexChanged.connect(loader_state);loader_state()
-        if self.selected_version:
-            from ..modpack import _base_version,_detect_loader
-            from ..version import VersionNotFound
-            try:
-                game.setText(_base_version(self.repo,self.selected_version));loader.setCurrentIndex(max(0,loader.findData(_detect_loader(self.repo,self.selected_version)[0])))
-            except (VersionNotFound,ValueError,OSError):pass
-        filters.addWidget(label('游戏版本','muted'));filters.addWidget(game);filters.addSpacing(15);filters.addWidget(label('加载器','muted'));filters.addWidget(loader);filters.addStretch();search.body.addLayout(filters);body.addWidget(search)
-        results_widget=QWidget();results=column(results_widget,0,0);body.addWidget(results_widget)
-        results.addWidget(Empty('发现你的下一份灵感','搜索模组、资源包、光影或整合包，并安装到当前实例。','search'))
-        def run_search():
-            text=query.text().strip()
-            if not text:query.setFocus();return
-            from ..catalog import search as find
-            kind,version,load=kinds.currentData(),game.text().strip(),loader.currentData() if loader.isEnabled() else ''
-            go.setEnabled(False)
-            def done(data):
-                if self.page_seq.get('download')!=seq:return
-                go.setEnabled(True);clear(results);hits=data.get('hits') or []
-                if not hits:results.addWidget(Empty('没有找到匹配的内容','试试更短的关键词，或放宽版本条件。','search'));return
-                for hit in hits[:20]:
-                    title=hit.get('title') or hit.get('slug') or '项目'
-                    detail=' · '.join(str(v) for v in (hit.get('author'),f"下载 {hit.get('downloads') or 0:,}",', '.join((hit.get('display_categories') or hit.get('categories') or [])[:4]),hit.get('description')) if v)
-                    item=ContentRow(title,detail,{'mod':'package','resourcepack':'grid','shader':'world','modpack':'package'}[kind])
-                    item.line.addWidget(button('选择版本',lambda pid=hit['project_id'],t=title,k=kind,g=version,l=load,v=target_vid:self.choose_project_version(pid,t,k,g,l,v),'soft','download'));results.addWidget(item)
-                    if hit.get('icon_url'):
-                        self.load_catalog_icon(item,hit['icon_url'])
-            def failed(error):
-                if self.page_seq.get('download')==seq:go.setEnabled(True);self.error(error)
-            self.tasks.submit(lambda job:find(self.repo.downloader,kind,text,version,load,limit=30),done,failed)
-        go.clicked.connect(run_search);query.returnPressed.connect(run_search)
+        from .browser import ContentBrowser
+        kind=getattr(self,'download_kind','mod');page=self.page_map['download']
+        if not hasattr(self,'download_browsers'):self.download_browsers={}
+        while page.body.count():
+            item=page.body.takeAt(0)
+            if item.widget():item.widget().setParent(None)
+        browser=self.download_browsers.get(kind)
+        if browser is None or browser.repo is not self.repo:
+            if browser is not None:browser.request_id+=1;browser.deleteLater()
+            browser=ContentBrowser(self,kind);self.download_browsers[kind]=browser
+        else:browser.sync_target()
+        page.body.addWidget(browser,1);browser.show();self.download_browser=browser
 
     def open_content_download(self,kind):
         self.download_kind={'mods':'mod','resourcepacks':'resourcepack','shaderpacks':'shader'}[kind];self.navigate('download')
 
     def choose_project_version(self,project_id,title,kind,game,loader,vid):
         from .project_versions import ProjectVersions
+        if self.current_page!='download' or getattr(self,'download_kind','mod')!=kind:self.choose_download_kind(kind)
         self.show_subpage(ProjectVersions(self,project_id,title,kind,game,loader,vid))
 
     def load_catalog_icon(self,item,url):

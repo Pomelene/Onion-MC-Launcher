@@ -89,6 +89,9 @@ QComboBox QAbstractItemView,QMenu { background:#202b40; color:#e5edfa; border:1p
 QMenu::item { padding:8px 20px; }
 QMenu::item:selected { background:#374965; }
 QSpinBox QLineEdit,QWidget#settingRow QSpinBox QLineEdit { padding:0; min-height:0; border:0; background:transparent; }
+QWidget#contextPanel { background:rgba(141,174,225,12); border:1px solid rgba(208,225,255,24); border-radius:9px; }
+QWidget#contextPanel QComboBox { background:transparent; border:0; font-weight:600; }
+QDialog[embedded='true'] { background:transparent; }
 '''
 
 
@@ -135,7 +138,7 @@ class NavigationItem(QAbstractButton):
         self.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Fixed)
         self.setCheckable(True);self.clicked.connect(lambda checked=False:callback());self.setSubtitle(subtitle)
         self.hover_amount=0.0;self.hover_animation=QVariantAnimation(self)
-        self.hover_animation.setDuration(450);self.hover_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.hover_animation.setDuration(150);self.hover_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.hover_animation.valueChanged.connect(self._hover_changed)
 
     def _hover_changed(self,value):self.hover_amount=float(value);self.update()

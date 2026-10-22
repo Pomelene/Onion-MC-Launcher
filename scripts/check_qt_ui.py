@@ -31,6 +31,7 @@ def pump(predicate,seconds=8):
     assert predicate(),'Qt task did not finish before deadline'
 
 def render(widget,name):
+    if getattr(widget,'embedded',False):widget=widget.window()
     app.processEvents();QCoreApplication.sendPostedEvents(None,QEvent.Type.DeferredDelete);app.processEvents()
     image=QImage(widget.size()*2,QImage.Format.Format_ARGB32_Premultiplied);image.setDevicePixelRatio(2);image.fill(0)
     widget.render(image)
@@ -92,6 +93,34 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
     from launcher.qtui.widgets import ContentRow
     render(window,'qt-compact-download.png')
     assert len(window.page_map['download'].findChildren(ContentRow))==1,errors
+    browser=window.download_browser
+    def catalog_fixture(dl,kind,text,game,loader,limit,offset):
+        return {'total_hits':60,'hits':[{'project_id':f'fixture-{offset+i}','title':f'示例内容 {offset+i:02d}','author':'示例作者','downloads':1000+i,'description':'用于验证列表布局、返回位置和分页状态的临时内容。'} for i in range(limit)]}
+    with patch('launcher.catalog.search',side_effect=catalog_fixture) as searches:
+        browser.search(0);pump(lambda:not window.tasks.jobs);app.processEvents()
+        browser.results.verticalScrollBar().setValue(180);position=browser.results.verticalScrollBar().value();assert position>0
+        window.navigate('versions');window.go_back()
+        assert window.download_browser is browser and browser.query.text()=='Sodium' and browser.results.verticalScrollBar().value()==position
+        assert window.nav['shader'].isChecked() and searches.call_count==1
+        window.choose_download_kind('mod');window.go_back()
+        assert window.download_browser is browser and browser.results.verticalScrollBar().value()==position
+        browser.next.click();pump(lambda:not window.tasks.jobs)
+        assert browser.page_number==1 and searches.call_args.kwargs['offset']==20
+        render(window,'qt-browser-layout.png')
+    for size in ((1100,740),(1440,900)):
+        window.resize(*size);app.processEvents()
+        assert browser.go.mapTo(window,browser.go.rect().bottomRight()).x()<window.width()
+        assert browser.next.mapTo(window,browser.next.rect().bottomRight()).y()<window.height()
+    import threading
+    slow_started=threading.Event();slow_release=threading.Event()
+    def out_of_order_search(dl,kind,text,*args,**kwargs):
+        if text=='slow':slow_started.set();slow_release.wait(5)
+        return {'total_hits':1,'hits':[{'project_id':text,'title':text}]}
+    with patch('launcher.catalog.search',side_effect=out_of_order_search):
+        browser.query.setText('slow');browser.search();pump(slow_started.is_set)
+        browser.query.setText('fast');browser.search();pump(lambda:browser.last_search and browser.last_search[0]=='fast')
+        slow_release.set();pump(lambda:not window.tasks.jobs)
+        rows=browser.results.findChildren(ContentRow);assert any(r.text.title=='fast' for r in rows) and not any(r.text.title=='slow' for r in rows)
     # Renaming changes metadata only, preserving the installed directory and JSON.
     old_vid=window.selected_version;old_dir=window.repo.version_dir(old_vid)
     window.rename_instance(old_vid);rename=window.subpages[-1]

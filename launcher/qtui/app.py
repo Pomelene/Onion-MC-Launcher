@@ -5,7 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt,Signal,Slot,QTimer,QUrl
 from PySide6.QtGui import QDesktopServices,QIcon
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QStackedWidget,QComboBox,
-    QLineEdit,QPlainTextEdit,QMessageBox,QInputDialog,QDialog,QFormLayout,QCheckBox,QSpinBox,QProgressBar)
+    QLineEdit,QPlainTextEdit,QMessageBox,QInputDialog,QDialog,QFormLayout,QCheckBox,QSpinBox,QProgressBar,QSizePolicy)
 from .widgets import STYLE,themed_style,Page,Card,Empty,label,button,column,row,clear,icon,TaskDialog,NavigationItem,GlassBackdrop,configure_fonts
 from .tasks import TaskManager
 from .actions import Actions
@@ -36,10 +36,12 @@ class MainWindow(QMainWindow,Actions,Pages):
 
     def _build(self):
         shell=GlassBackdrop();outer=column(shell,0,0);self.setCentralWidget(shell)
-        toolbar=QWidget();toolbar.setObjectName('toolbar');top=row(toolbar,10,10)
-        self.back_button=button('返回',self.go_back,glyph='back');top.addWidget(self.back_button)
-        self.title=label('Onion  '+LAUNCHER_VERSION,'heading');top.addWidget(self.title,1)
-        top.addWidget(button('首页',lambda:self.navigate('home'),'soft','home'));outer.addWidget(toolbar)
+        toolbar=QWidget();toolbar.setObjectName('toolbar');toolbar.setFixedHeight(56);top=row(toolbar,0,0)
+        brand=QWidget();brand.setFixedWidth(220);branding=row(brand,16,10);branding.addWidget(label('Onion','heading'));branding.addWidget(label(LAUNCHER_VERSION,'muted'));branding.addStretch();top.addWidget(brand)
+        heading=QWidget();heading_line=row(heading,0,10);heading_line.setContentsMargins(24,0,24,0);top.addWidget(heading,1)
+        self.back_button=button('',self.go_back,glyph='back');self.back_button.setFixedSize(30,34);self.back_button.setStyleSheet('padding:0;');self.back_button.setToolTip('返回上一页');self.back_button.setAccessibleName('返回上一页');heading_line.addWidget(self.back_button)
+        self.title=label('开始游戏','heading');self.title.setMinimumWidth(0);self.title.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Preferred);heading_line.addWidget(self.title,1)
+        heading_line.addWidget(button('首页',lambda:self.navigate('home'),'soft','home'));outer.addWidget(toolbar)
         lower=row(spacing=0);outer.addLayout(lower,1)
         side=QWidget();side.setObjectName('sidebar');side.setFixedWidth(220)
         self.sidebar_body=column(side,0,0);self.sidebar_body.setSizeConstraint(self.sidebar_body.SizeConstraint.SetDefaultConstraint);self.nav={};self.account_button=None
@@ -47,7 +49,7 @@ class MainWindow(QMainWindow,Actions,Pages):
         main=QWidget();main.setObjectName('workspace');body=column(main,0,0);lower.addWidget(main,1)
         self.stack=QStackedWidget();self.page_map={};body.addWidget(self.stack,1)
         for key in ('home','instance','versions','download','settings','about'):
-            page=Page() if key not in ('home','instance') else QWidget()
+            page=Page() if key not in ('home','instance','download') else QWidget()
             if isinstance(page,Page):page.body.setContentsMargins(24,20,24,20)
             else:page.body=column(page,0,0)
             self.page_map[key]=page;self.stack.addWidget(page)
@@ -58,19 +60,19 @@ class MainWindow(QMainWindow,Actions,Pages):
         self.task_progress=QProgressBar();self.task_progress.setTextVisible(False);strip.addWidget(self.task_progress);body.addWidget(self.task_strip);self.task_strip.hide();self.active_task=None
         self.selector=QComboBox(self);self.selector.hide();self.selector.currentIndexChanged.connect(self.choose_version)
         self.logs=QPlainTextEdit();self.logs.setReadOnly(True);self.logs.setMaximumBlockCount(3000)
-        self.instance_tab='game';self.instance_context='';self.instance_editor=None;self.settings_editor=None;self.subpages=[]
+        self.instance_tab='game';self.instance_context='';self.instance_editor=None;self.settings_editor=None;self.subpages=[];self.nav_history=[];self.current_route=None
 
     def show_subpage(self,view):
-        view.embedded=True;view.setModal(False);view.setParent(self.stack,Qt.WindowType.Widget)
+        view.embedded=True;view.setProperty('embedded',True);view.setModal(False);view.setParent(self.stack,Qt.WindowType.Widget)
         view.setMinimumSize(0,0);self.stack.addWidget(view);self.subpages.append(view)
         view.finished.connect(lambda _:self.finish_subpage(view))
-        self.stack.setCurrentWidget(view);view.show();self.title.setText(view.windowTitle());self.back_button.show()
+        self.stack.setCurrentWidget(view);view.show();self.title.setText(getattr(view,'navigation_title',view.windowTitle()));self.back_button.show()
 
     def finish_subpage(self,view):
         if view not in self.subpages:return
         self.subpages.remove(view);self.stack.removeWidget(view);view.hide()
         if self.subpages:
-            target=self.subpages[-1];self.stack.setCurrentWidget(target);self.title.setText(target.windowTitle())
+            target=self.subpages[-1];self.stack.setCurrentWidget(target);self.title.setText(getattr(target,'navigation_title',target.windowTitle()))
         else:
             self.stack.setCurrentWidget(self.page_map[self.current_page]);self.title.setText(getattr(self,'page_title','Onion'));self.back_button.setVisible(self.current_page!='home')
 
@@ -79,7 +81,12 @@ class MainWindow(QMainWindow,Actions,Pages):
             view=self.subpages[-1]
             if isinstance(view,TaskDialog):self.finish_subpage(view)
             else:view.reject()
-        else:self.navigate('home')
+        elif self.nav_history:
+            key,instance_tab,download_kind=self.nav_history.pop()
+            if instance_tab:self.instance_tab=instance_tab
+            if download_kind:self.download_kind=download_kind
+            self.navigate(key,record_history=False)
+        else:self.navigate('home',record_history=False)
 
 
     def build_sidebar(self,key):
@@ -97,7 +104,8 @@ class MainWindow(QMainWindow,Actions,Pages):
                 item=entry(title,title,'settings',lambda i=index:self.open_settings_tab(i));item.setChecked(index==self.settings_editor.stack.currentIndex())
             entry('java','Java 管理','java',self.manage_java);nav.addStretch();entry('about','关于','package',lambda:self.navigate('about'))
         elif key=='download':
-            heading('新游戏');entry('install','游戏','grid',self.install_dialog);entry('modpack','整合包','package',lambda:self.choose_download_kind('modpack'))
+            heading('新游戏');entry('install','安装游戏','grid',self.install_dialog)
+            item=entry('modpack','整合包','package',lambda:self.choose_download_kind('modpack'));item.setChecked(getattr(self,'download_kind','mod')=='modpack')
             heading('游戏内容')
             for name,title,glyph in [('mod','模组','package'),('resourcepack','资源包','grid'),('shader','光影','world')]:
                 item=entry(name,title,glyph,lambda k=name:self.choose_download_kind(k));item.setChecked(name==getattr(self,'download_kind','mod'))
@@ -113,6 +121,9 @@ class MainWindow(QMainWindow,Actions,Pages):
         self.update_selection()
 
     def open_instance_tab(self,key):
+        route=('instance',key,None)
+        if self.current_route and self.current_route!=route:self.nav_history.append(self.current_route)
+        self.current_route=route
         self.instance_tab=key;self.instance_workspace.open_tab(key)
         for name,item in self.nav.items():item.setChecked(name==key)
 
@@ -121,20 +132,27 @@ class MainWindow(QMainWindow,Actions,Pages):
         for name,item in self.nav.items():item.setChecked(name in self.settings_editor.tab_names and self.settings_editor.tab_names[name]==index)
 
     def choose_download_kind(self,kind):
-        self.download_kind=kind;self.build_download();self.build_sidebar('download')
+        self.download_kind=kind;self.navigate('download')
 
-    def navigate(self,key):
+    def navigate(self,key,record_history=True):
         for view in list(reversed(self.subpages)):
             if not isinstance(view,TaskDialog):view.reject()
             self.finish_subpage(view)
         if key in ('mods','worlds','logs','resourcepacks','shaderpacks'):
             self.instance_tab=key;key='instance'
+        route=(key,self.instance_tab if key=='instance' else None,getattr(self,'download_kind','mod') if key=='download' else None)
+        if record_history and self.current_route and route!=self.current_route:
+            self.nav_history.append(self.current_route);self.nav_history=self.nav_history[-40:]
+        self.current_route=route
         self.current_page=key;self.back_button.setVisible(key!='home');self.stack.setCurrentWidget(self.page_map[key])
-        titles={'home':'Onion  '+LAUNCHER_VERSION,'instance':'实例管理 · '+self.instances.display_name(self.selected_version),'versions':'实例列表','download':'下载','settings':'设置','about':'关于 Onion'}
+        titles={'home':'开始游戏','instance':'实例管理 · '+self.instances.display_name(self.selected_version),'versions':'实例列表','download':'下载','settings':'设置','about':'关于 Onion'}
         self.page_title=titles[key];self.title.setText(titles[key])
         if key=='instance':self.build_instance()
         elif key!='settings' or self.settings_editor is None:getattr(self,'build_'+key)()
         self.build_sidebar(key)
+        if key=='download':
+            from .browser import TITLES
+            self.page_title='下载 / '+TITLES[getattr(self,'download_kind','mod')];self.title.setText(self.page_title)
 
     def page(self,key):
         if key=='logs':self.logs.setParent(None)

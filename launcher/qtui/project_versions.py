@@ -1,6 +1,6 @@
 """Select an explicit compatible catalog release inside the main window."""
 from PySide6.QtCore import Qt,QTimer
-from PySide6.QtWidgets import QDialog,QTreeWidget,QTreeWidgetItem,QCheckBox
+from PySide6.QtWidgets import QDialog,QTreeWidget,QTreeWidgetItem,QWidget
 from .widgets import column,row,label,button,ContentCheck
 from ..catalog import pick_version,versions
 
@@ -8,8 +8,13 @@ from ..catalog import pick_version,versions
 class ProjectVersions(QDialog):
     def __init__(self,window,project_id,title,kind,game,loader,vid):
         super().__init__(window);self.launcher=window;self.project_id=project_id;self.kind=kind;self.game=game;self.loader=loader;self.vid=vid;self.entries=[];self.active=True
+        from .browser import TITLES
+        self.navigation_title='下载 / '+TITLES[kind]+' / 选择版本'
         self.setWindowTitle('选择版本 · '+title);body=column(self,24,12)
-        body.addWidget(label(title,'heading'));body.addWidget(label(f'目标：{window.instances.display_name(vid) if vid else "新实例"} · {game or "不限游戏版本"} · {loader or "不限加载器"}','muted'))
+        body.addWidget(label(title,'title'))
+        context=QWidget();context.setObjectName('contextPanel');context_line=row(context,12,12)
+        context_line.addWidget(label('安装目标','muted'));context_line.addWidget(label(window.instances.display_name(vid) if vid else '新建独立实例','heading'),1)
+        context_line.addWidget(label(' · '.join(value for value in (game,loader) if value) or '不限版本','muted'));body.addWidget(context)
         filter_bar=row();self.compatible=ContentCheck();self.compatible.setAccessibleName('仅显示兼容版本');self.compatible.setChecked(True);filter_bar.addWidget(self.compatible);filter_bar.addWidget(label('仅显示匹配当前游戏版本与加载器的文件'));filter_bar.addStretch();body.addLayout(filter_bar)
         self.tree=QTreeWidget();self.tree.setRootIsDecorated(False);self.tree.setHeaderLabels(['版本','发布渠道','游戏版本 / 加载器','发布时间','文件'])
         for i,width in enumerate((220,90,260,110)):self.tree.setColumnWidth(i,width)

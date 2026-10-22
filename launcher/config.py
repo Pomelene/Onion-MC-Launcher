@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .paths import default_game_dir,LAUNCHER_NAME
+from .paths import default_game_dir,LAUNCHER_NAME,LAUNCHER_VERSION
 from .secrets import protect,unprotect,SecretStorageError
 
 #: 需要按类型强制的键（避免 settings.json 手工编辑引入错类型）
@@ -72,7 +72,7 @@ DEFAULTS: dict[str, Any] = {
     "proxy_host": "",
     "proxy_port": 0,
     "launcher_name": LAUNCHER_NAME,
-    "launcher_version": "0.2.0",
+    "launcher_version": LAUNCHER_VERSION,
     "version_isolation": True,     # 每个版本使用独立游戏目录
     "max_download_threads": 8,
     "account_uuid": "",            # 当前使用的账号 uuid

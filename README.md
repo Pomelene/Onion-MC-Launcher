@@ -2,6 +2,8 @@
 
 **免费、开源、公益开发的 Minecraft Java 版启动器。**
 
+当前版本：[v0.2.1](https://github.com/Pomelene/Onion-MC-Launcher/releases/tag/v0.2.1)。Windows 用户可下载 Release 中的 ZIP，解压后运行。
+
 程序显示名称为 **Onion Minecraft Launcher**。项目使用 Python 和 PySide6 / Qt，致力于提供简洁的实例管理、游戏安装及内容管理体验，不以售卖启动器、账号或游戏资源为开发目的。欢迎学习、反馈和贡献。
 
 本项目代码采用 [MIT License](LICENSE)。公益定位不增加许可证之外的使用限制。本项目是独立社区项目，与 Mojang、Microsoft 或其他启动器没有隶属关系。

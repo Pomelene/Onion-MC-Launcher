@@ -8,6 +8,7 @@ from .accounts import AccountsDialog
 from .app import MainWindow
 from .widgets import configure_fonts
 from ..config import Config
+from ..paths import LAUNCHER_VERSION
 
 
 def run(output):
@@ -53,5 +54,5 @@ def run(output):
             get_attributes.argtypes=[ctypes.c_wchar_p];get_attributes.restype=ctypes.c_uint32
             assert get_attributes(str(config.path)) & 2
         window.close();application.processEvents()
-        output.write_text(json.dumps({'result':'pass','packaged_runtime':True,'offscreen':True,'game_started':False,'network_auth':False,'pages':6,'microsoft_login_button':True,'grouped_settings':True,'installer_filters':True,'unified_hidden_storage':True,'frameless_window':True,'automatic_settings_save':True},indent=2),encoding='utf-8')
+        output.write_text(json.dumps({'result':'pass','launcher_version':LAUNCHER_VERSION,'packaged_runtime':True,'offscreen':True,'game_started':False,'network_auth':False,'pages':6,'microsoft_login_button':True,'grouped_settings':True,'installer_filters':True,'unified_hidden_storage':True,'frameless_window':True,'automatic_settings_save':True},indent=2),encoding='utf-8')
     return 0

@@ -10,6 +10,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Callable, Optional
 from ..network import secure_open
+from ..paths import LAUNCHER_VERSION
 
 DEVICE_CODE_URL = 'https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode'
 TOKEN_URL = 'https://login.microsoftonline.com/consumers/oauth2/v2.0/token'
@@ -110,18 +111,18 @@ def _request(req):
 def _post_json(url, payload, headers=None):
     return _request(urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), method='POST', headers={
         'Content-Type': 'application/json', 'Accept': 'application/json',
-        'User-Agent': 'OnionMinecraftLauncher/0.2.0', **(headers or {})}))
+        'User-Agent': f'OnionMinecraftLauncher/{LAUNCHER_VERSION}', **(headers or {})}))
 
 
 def _post_form(url, payload):
     return _request(urllib.request.Request(url, data=urllib.parse.urlencode(payload).encode('ascii'), method='POST', headers={
         'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json',
-        'User-Agent': 'OnionMinecraftLauncher/0.2.0'}))
+        'User-Agent': f'OnionMinecraftLauncher/{LAUNCHER_VERSION}'}))
 
 
 def _get_json(url, token):
     return _request(urllib.request.Request(url, headers={'Authorization': f'Bearer {token}',
-        'Accept': 'application/json', 'User-Agent': 'OnionMinecraftLauncher/0.2.0'}))
+        'Accept': 'application/json', 'User-Agent': f'OnionMinecraftLauncher/{LAUNCHER_VERSION}'}))
 
 
 def _required(data, key):

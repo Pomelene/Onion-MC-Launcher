@@ -1,7 +1,8 @@
 """Shared dark window chrome with native Qt move/resize operations.
 
-The header stays inside the client area. Dialogs are decorated before display;
-embedded subpages and popups keep their existing layout and input behavior.
+The header stays inside the client area. Launcher dialogs are decorated before
+display; file pickers use the platform dialog. Embedded subpages and popups keep
+their existing layout and input behavior.
 """
 from PySide6.QtCore import QObject, QEvent, Qt, QRect
 from PySide6.QtGui import QPainter,QFontMetrics
@@ -177,9 +178,12 @@ class DialogChromeManager(QObject):
     def eventFilter(self, dialog, event):
         if not isinstance(dialog,QDialog):
             return False
+        # File/folder selection belongs to the OS. Do not change flags, options,
+        # layouts or styles: these can prevent Qt from using the native picker.
+        if isinstance(dialog,QFileDialog):
+            return False
         if event.type() in (QEvent.Type.PolishRequest,QEvent.Type.Show):
-            if isinstance(dialog,QFileDialog):dialog.setOption(QFileDialog.Option.DontUseNativeDialog,True)
-            elif isinstance(dialog,QColorDialog):dialog.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog,True)
+            if isinstance(dialog,QColorDialog):dialog.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog,True)
         if event.type() == QEvent.Type.ParentChange and not dialog.isWindow():
             header = getattr(dialog,'_chrome_header',None)
             if header:
@@ -238,7 +242,6 @@ class DialogChromeManager(QObject):
 def install_window_chrome(application):
     if getattr(application,'_onion_dialog_chrome',None):
         return
-    application.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs,True)
     manager = DialogChromeManager(application)
     application.installEventFilter(manager)
     application._onion_dialog_chrome = manager

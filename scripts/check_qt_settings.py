@@ -13,7 +13,7 @@ from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'.deps/qt')]
 os.environ['QT_QPA_PLATFORM']='offscreen'
-from PySide6.QtCore import Qt,QPoint,QTimer
+from PySide6.QtCore import Qt,QPoint,QTimer,QEvent
 from PySide6.QtGui import QColor,QImage
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (QApplication,QDialog,QMessageBox,QInputDialog,
@@ -133,9 +133,26 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-settings-') as direct
     assert Config(path).get('java_path')=='fixture-java.exe'
     assert window.version_settings.resolve('A-Fabric',window.config_obj)['java_path']==''
 
-    # Native Qt dialogs, confirmations and custom dialogs receive common chrome.
+    # File open/save/directory pickers remain eligible for the OS-native dialog.
+    assert not app.testAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs)
+    for mode in ('open','save','directory'):
+        picker=QFileDialog(window,'文件选择',str(base))
+        if mode=='save':picker.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+        elif mode=='directory':picker.setFileMode(QFileDialog.FileMode.Directory)
+        picker.ensurePolished()
+        original_flags=picker.windowFlags()
+        margins=picker.layout().contentsMargins() if picker.layout() else None
+        manager=app._onion_dialog_chrome
+        for event in (QEvent.Type.PolishRequest,QEvent.Type.Show,QEvent.Type.LayoutRequest):
+            manager.eventFilter(picker,QEvent(event))
+        assert picker.windowFlags()==original_flags
+        assert not picker.testOption(QFileDialog.Option.DontUseNativeDialog)
+        assert not hasattr(picker,'_chrome_header') and not hasattr(picker,'frame_controller')
+        if margins is not None:assert picker.layout().contentsMargins()==margins
+        picker.deleteLater()
+    # Launcher confirmations and custom dialogs receive common chrome.
     dialogs=[QDialog(window),QMessageBox(QMessageBox.Icon.Information,'消息','示例内容',QMessageBox.StandardButton.Ok,window),
-        QInputDialog(window),QFileDialog(window,'选择文件',str(base)),QColorDialog(QColor('#cebafa'),window)]
+        QInputDialog(window),QColorDialog(QColor('#cebafa'),window)]
     dialogs[0].setWindowTitle('独立子窗口');QVBoxLayout(dialogs[0]).addWidget(QLabel('示例内容'))
     dialogs[2].setWindowTitle('输入名称');dialogs[2].setLabelText('名称');dialogs[2].setTextValue('Example')
     for dialog in dialogs:
@@ -190,4 +207,4 @@ print(json.dumps({'result':'pass','fixture_only':True,'desktop_input':False,
     'autosave_and_close_flush':True,'validation_and_busy_retry':True,
     'two_instance_isolation_and_restart':True,'inherited_fields_disabled':True,
     'single_java_management_entry':True,'frameless_main_and_dialogs':True,
-    'dialog_results_preserved':True,'embedded_pages_and_popups':True}))
+    'dialog_results_preserved':True,'embedded_pages_and_popups':True,'native_file_pickers_allowed':True}))

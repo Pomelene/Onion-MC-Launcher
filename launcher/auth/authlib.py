@@ -13,6 +13,7 @@ from pathlib import Path
 
 from ..download import DownloadError, DownloadJob
 from ..network import secure_open,validate_url
+from ..paths import LAUNCHER_VERSION
 
 INJECTOR_URL='https://github.com/yushijinhun/authlib-injector/releases/download/v1.2.8/authlib-injector-1.2.8.jar'
 INJECTOR_SHA256='9c7f4343e6c82034958ffb48c14a2cb0c85928be7283103ce17da00c6d5a7b10'
@@ -23,7 +24,7 @@ def _post_json(url: str, payload: dict) -> dict:
     req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"),
                                  method="POST", headers={
         "Content-Type": "application/json", "Accept": "application/json",
-        "User-Agent": "Onion Minecraft Launcher/0.2.0",
+        "User-Agent": f"Onion Minecraft Launcher/{LAUNCHER_VERSION}",
     })
     try:
         with secure_open(req, timeout=30) as resp:

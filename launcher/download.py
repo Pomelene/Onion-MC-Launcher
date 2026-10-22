@@ -21,10 +21,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable, Optional
 from .network import validate_url,SafeRedirectHandler
+from .paths import LAUNCHER_VERSION
 
 DEFAULT_TIMEOUT = 30
 DEFAULT_RETRIES = 3
-USER_AGENT = "Onion Minecraft Launcher/0.2.0 (Minecraft Launcher)"
+USER_AGENT = f"Onion Minecraft Launcher/{LAUNCHER_VERSION} (Minecraft Launcher)"
 
 
 class DownloadError(Exception):

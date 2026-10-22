@@ -19,6 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from launcher.auth import microsoft as auth
+from launcher.download import USER_AGENT
 
 
 def probe(item):
@@ -38,7 +39,7 @@ def probe(item):
     except OSError as error:
         result['direct_tls'] = {'result': type(error).__name__}
     result['direct_tls_ms'] = round((time.monotonic() - start) * 1000)
-    headers = {'Accept': 'application/json', 'User-Agent': 'CraftBridge/0.2.0'}
+    headers = {'Accept': 'application/json', 'User-Agent': USER_AGENT}
     body = None
     if payload is not None:
         body = (urllib.parse.urlencode(payload).encode('ascii') if form

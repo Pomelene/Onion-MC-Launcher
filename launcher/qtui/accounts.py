@@ -18,7 +18,7 @@ class MicrosoftLogin(QDialog):
         body.addWidget(label('使用 Microsoft 账号登录','title'))
         body.addWidget(label('在你自己的浏览器中完成授权，启动器不会读取或保存微软密码。','muted',True))
         self.client=QLineEdit(resolve_client_id(self.config,client_id),self);self.client.hide()
-        code=Card();self.code=label('准备连接 Microsoft','heading');self.code.setStyleSheet('font-size:25px;letter-spacing:2px;color:#b8e8ee;')
+        code=Card();self.code=label('准备连接 Microsoft','heading');self.code.setObjectName('authCode');self.code.setStyleSheet('font-size:25px;letter-spacing:2px;')
         self.status=label('启动器会打开微软网页。输入授权码并同意授权后，返回这里即可。','muted',True)
         if not self.client.text():
             self.code.setText('此版本尚未启用正版登录')

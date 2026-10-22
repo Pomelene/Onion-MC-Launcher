@@ -2,6 +2,7 @@
 from PySide6.QtCore import QObject, QEvent, Qt, QPoint, QPointF, QRectF, QTimer, QVariantAnimation, QEasingCurve, QAbstractAnimation
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QWidget, QPushButton, QStyle, QStyleOption, QStyleOptionButton, QStylePainter
+from .theme import config_for,paint_color
 
 
 HOVER_DURATION = 140
@@ -9,7 +10,7 @@ PRESS_DURATION = 150
 
 
 def motion_enabled(widget):
-    config = getattr(widget.window(), 'config_obj', None)
+    config = config_for(widget)
     return bool(config.get('ui_animations')) if config else True
 
 
@@ -134,7 +135,7 @@ class NavigationSurface(QWidget):
         option.initFrom(self)
         self.style().drawPrimitive(QStyle.PrimitiveElement.PE_Widget, option, painter, self)
         if self.selection.visible:
-            config = getattr(self.window(), 'config_obj', None)
+            config = config_for(self)
             color = QColor(config.get('accent_color') if config else '#cebafa')
             color.setAlpha(44)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -206,6 +207,13 @@ class MotionButton(QPushButton):
             self._press(0.0)
 
     def paintEvent(self, event):
+        glyph=self.property('onionGlyph')
+        if glyph:
+            color=self.palette().color(self.foregroundRole()) if self.property('role')=='primary' else paint_color(self,'icon')
+            signature=(glyph,color.rgba())
+            if getattr(self,'_icon_signature',None)!=signature:
+                from .widgets import icon
+                self._icon_signature=signature;self.setIcon(icon(glyph,color))
         option = QStyleOptionButton()
         self.initStyleOption(option)
         native = QStylePainter(self)
@@ -221,7 +229,7 @@ class MotionButton(QPushButton):
         native.drawControl(QStyle.ControlElement.CE_PushButtonLabel, option)
         if self.isEnabled() and self.hover_amount > 0:
             native.setPen(Qt.PenStyle.NoPen)
-            native.setBrush(QColor(238, 227, 255, round(255 * .075 * self.hover_amount)))
+            hover=paint_color(self,'hover');hover.setAlpha(round(255*.075*self.hover_amount));native.setBrush(hover)
             native.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 6, 6)
         native.end()
 

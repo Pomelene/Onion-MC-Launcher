@@ -49,13 +49,15 @@ def run_raster(output):
         while window.tasks.jobs and time.monotonic()<deadline:application.processEvents();time.sleep(.01)
         assert not window.tasks.jobs
         assert window.windowHandle().surfaceType()==QSurface.SurfaceType.RasterSurface
-        for page in ('home','versions','settings'):
-            window.navigate(page);render_hidden(window)
+        for mode in ('dark','light'):
+            window.config_obj.update({'color_mode':mode});window.apply_appearance()
+            for page in ('home','versions','settings'):
+                window.navigate(page);render_hidden(window)
         formats=check_images(window)
         assert not any(w.isVisible() for w in application.topLevelWidgets()),'Raster probe must not show windows'
         window.close();application.processEvents()
         output.write_text(json.dumps({'result':'pass','platform':'windows','surface':'RasterSurface',
-            'visible_windows':False,'fixture_only':True,'image_formats':formats},indent=2),encoding='utf-8')
+            'visible_windows':False,'fixture_only':True,'image_formats':formats,'color_modes':['dark','light']},indent=2),encoding='utf-8')
     return 0
 
 
@@ -104,7 +106,10 @@ def run(output):
         context=ssl.create_default_context()
         assert context.check_hostname and context.verify_mode==ssl.CERT_REQUIRED
         assert len(ssl.RAND_bytes(16))==16
-        window.navigate('home');render_hidden(window)
+        for mode in ('light','dark'):
+            editor=window.settings_editor
+            editor.fields['color_mode'].setCurrentIndex(editor.fields['color_mode'].findData(mode))
+            window.flush_settings();window.navigate('home');render_hidden(window)
         assert window.accounts.path==window.instances.path==window.version_settings.path==config.path
         assert config.path.exists()
         if __import__('os').name=='nt':
@@ -113,5 +118,5 @@ def run(output):
             get_attributes.argtypes=[ctypes.c_wchar_p];get_attributes.restype=ctypes.c_uint32
             assert get_attributes(str(config.path)) & 2
         window.close();application.processEvents()
-        output.write_text(json.dumps({'result':'pass','launcher_version':LAUNCHER_VERSION,'packaged_runtime':True,'offscreen':True,'game_started':False,'network_auth':False,'pages':6,'microsoft_login_button':True,'grouped_settings':True,'installer_filters':True,'unified_hidden_storage':True,'frameless_window':True,'automatic_settings_save':True,'image_formats':formats,'python_tls':True,'raster_render':True},indent=2),encoding='utf-8')
+        output.write_text(json.dumps({'result':'pass','launcher_version':LAUNCHER_VERSION,'packaged_runtime':True,'offscreen':True,'game_started':False,'network_auth':False,'pages':6,'microsoft_login_button':True,'grouped_settings':True,'installer_filters':True,'unified_hidden_storage':True,'frameless_window':True,'automatic_settings_save':True,'image_formats':formats,'python_tls':True,'raster_render':True,'color_modes':['light','dark']},indent=2),encoding='utf-8')
     return 0

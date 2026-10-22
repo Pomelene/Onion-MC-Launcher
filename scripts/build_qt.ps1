@@ -48,7 +48,24 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Bundle size/dependency audit failed; release executable has not been replaced.' }
     $taskRelease=Join-Path $taskRoot 'release'
     New-Item -ItemType Directory -Path $taskRelease -Force | Out-Null
-    Copy-Item -LiteralPath $taskStage -Destination (Join-Path $taskRelease $OutputName) -Force
+    $taskDestination=Join-Path $taskRelease $OutputName
+    $taskStageHash=(Get-FileHash -LiteralPath $taskStage -Algorithm SHA256).Hash
+    $taskCopied=$false
+    for ($taskAttempt=0; $taskAttempt -lt 5; $taskAttempt++) {
+        try {
+            Copy-Item -LiteralPath $taskStage -Destination $taskDestination -Force
+            $taskCopied=$true; break
+        } catch [System.IO.IOException] {
+            # Antivirus/indexers can hold a newly written file before Copy-Item
+            # finishes its metadata update. Accept it only if content matches.
+            if ((Test-Path -LiteralPath $taskDestination) -and (Get-FileHash -LiteralPath $taskDestination -Algorithm SHA256).Hash -eq $taskStageHash) {
+                $taskCopied=$true; break
+            }
+            if ($taskAttempt -eq 4) { throw }
+            Start-Sleep -Milliseconds (200*($taskAttempt+1))
+        }
+    }
+    if (-not $taskCopied -or (Get-FileHash -LiteralPath $taskDestination -Algorithm SHA256).Hash -ne $taskStageHash) { throw 'Release copy checksum mismatch.' }
     Write-Output ('Ready: release\'+$OutputName)
 } finally {
     $env:PATH=$taskSavedPath

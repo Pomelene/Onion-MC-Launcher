@@ -18,7 +18,7 @@ from .secrets import protect,unprotect,SecretStorageError
 #: 需要按类型强制的键（避免 settings.json 手工编辑引入错类型）
 _INT_KEYS = {"min_memory", "max_memory", "window_width", "window_height",
              "proxy_port", "max_download_threads", "download_speed_limit",
-             "sandbox_budget_mb"}
+             "sandbox_budget_mb", "text_transparency", "ui_transparency", "background_transparency"}
 _BOOL_KEYS = {"fullscreen", "demo", "version_isolation",
               "close_after_launch", "keep_launcher_open",
               "allow_newer_java", "foreign_mode", "auto_memory", "show_launch_logs"}
@@ -27,9 +27,14 @@ _FLOAT_KEYS = {"ui_scale"}
 
 def _coerce(key: str, value: Any) -> Any:
     """把从 settings.json 读到的值强制为期望类型；失败返回 None 表示丢弃。"""
+    if key=='color_mode':return value if value in ('dark','light') else 'dark'
+    if key=='background_mode':return value if value in ('fill','fit','stretch','center','tile') else 'fill'
     if key in _INT_KEYS:
         try:
-            return int(value)
+            number=int(value)
+            if key in ('text_transparency','ui_transparency','background_transparency'):
+                return max(0,min(70 if key=='text_transparency' else 100,number))
+            return number
         except (TypeError, ValueError):
             return None
     if key in _BOOL_KEYS:
@@ -82,6 +87,11 @@ DEFAULTS: dict[str, Any] = {
     "theme": "light",
     "theme_preset": "bridge",
     "accent_color": "#cebafa",      # 可点击设置文字的高亮色
+    "color_mode": "dark",          # Qt 深浅模式；保留旧 theme 字段用于历史界面
+    "text_transparency": 0,         # 0 为不透明；最多 70，保留文字可读性
+    "ui_transparency": 0,           # 面板底色透明度，不改变整窗或文字透明度
+    "background_transparency": 0,   # 首页图片/装饰透明度
+    "background_mode": "fill",     # fill / fit / stretch / center / tile
     "ui_animations": True,        # 页面过渡与控件动效；关闭可减少动态效果
     "ui_scale": 0.0,               # 界面缩放；0 表示自动按 DPI
     "language": "zh-CN",

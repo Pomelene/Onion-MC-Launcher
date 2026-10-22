@@ -8,7 +8,7 @@ from PySide6.QtCore import QObject, QEvent, Qt, QRect
 from PySide6.QtGui import QPainter,QFontMetrics
 from PySide6.QtWidgets import (QApplication, QMainWindow, QDialog, QWidget,
     QHBoxLayout, QLabel, QMenu, QSizePolicy, QFileDialog, QColorDialog)
-from .widgets import button, icon
+from .widgets import button
 
 
 class ResizeHandle(QWidget):
@@ -76,7 +76,8 @@ class FrameController(QObject):
         controls = getattr(window, '_window_controls', None)
         if controls and controls.get('maximize'):
             control = controls['maximize']
-            control.setIcon(icon('restore' if window.isMaximized() else 'maximize'))
+            control.setProperty('onionGlyph','restore' if window.isMaximized() else 'maximize')
+            control.update()
             text = '还原窗口' if window.isMaximized() else '最大化'
             control.setToolTip(text)
             control.setAccessibleName(text)

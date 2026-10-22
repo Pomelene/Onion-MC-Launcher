@@ -9,7 +9,7 @@ from .widgets import Page,Card,Empty,HomeCanvas,ContentRow,label,button,column,r
 
 class Pages:
     def build_home(self):
-        body=self.page('home');canvas=HomeCanvas(self.config_obj.get('background_image') or '')
+        body=self.page('home');canvas=HomeCanvas(self.config_obj.get('background_image') or '',config=self.config_obj)
         overlay=column(canvas,40,12)
         hero=column(spacing=12);hero.addWidget(label('ONION / JAVA EDITION','eyebrow'))
         hero.addWidget(label('下一段冒险，由此开始。','heroTitle'))
@@ -18,7 +18,7 @@ class Pages:
         bottom=row(spacing=20);caption=column(spacing=4)
         caption.addWidget(label('你的启动器，你的世界。','heading'))
         self.wallpaper_button=button('自定义首页背景',self.open_appearance)
-        self.wallpaper_button.setStyleSheet('color:#b8cbd0;text-align:left;padding-left:0;')
+        self.wallpaper_button.setStyleSheet('text-align:left;padding-left:0;')
         caption.addWidget(self.wallpaper_button);bottom.addLayout(caption);bottom.addStretch()
         start=QWidget();start.setObjectName('startPanel');actions=row(start,0,0)
         self.launch_button=button('',self.launch_selected,'primary','play');self.launch_button.setMinimumSize(238,78)

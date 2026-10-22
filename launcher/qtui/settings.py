@@ -3,7 +3,8 @@ from PySide6.QtCore import Qt,QTimer
 from PySide6.QtWidgets import (QWidget,QStackedWidget,QLineEdit,QComboBox,QSpinBox,
     QCheckBox,QFileDialog,QMessageBox,QDialog,QColorDialog)
 from PySide6.QtGui import QColor
-from .widgets import Page,SettingsSection as Card,ToggleSwitch,InlineSpinBox,SettingsComboBox,themed_style,column,row,label,button,setting_row,icon
+from .widgets import Page,SettingsSection as Card,ToggleSwitch,InlineSpinBox,SettingsComboBox,column,row,label,button,setting_row,icon
+from .theme import paint_color
 
 
 class SettingsEditor(QWidget):
@@ -97,7 +98,14 @@ class SettingsEditor(QWidget):
             self.check(card,'show_launch_logs','启动后显示日志页','便于查看游戏输出和定位问题');body.addWidget(card)
             card=Card('账号管理','正版、离线与外置账号在统一的账号窗口中管理。')
             card.body.addWidget(button('管理游戏账号',window.open_accounts,'soft','account'));body.addWidget(card)
-            body=tab('外观','grid');card=Card('特征色','用于高亮设置行中可点击或编辑的文字。')
+            body=tab('外观','grid');card=Card('界面外观','透明度越高，显示越淡；修改后自动保存。')
+            self.combo(card,'color_mode','显示模式','切换启动器的深色或浅色外观',[('深色','dark'),('浅色','light')])
+            for key,title,description,high in [
+                ('text_transparency','文字透明度','0% 为不透明，最高 70%，保留基本可读性',70),
+                ('ui_transparency','UI 透明度','调整导航、面板和列表底色的透明程度',100)]:
+                self.spin(card,key,title,description,0,high,5);self.fields[key].setSuffix('%')
+            body.addWidget(card)
+            card=Card('特征色','用于高亮设置行中可点击或编辑的文字。')
             self.edit(card,'accent_color','高亮颜色','输入六位十六进制颜色，例如 #cebafa','#cebafa')
             if not self.fields['accent_color'].text():self.fields['accent_color'].setText('#cebafa')
             def choose_accent():
@@ -106,7 +114,12 @@ class SettingsEditor(QWidget):
             setting_row(card.body,'颜色选择器','选择后自动保存',button('选择颜色',choose_accent,'soft'));body.addWidget(card)
             card=Card('动态效果','关闭后，页面与控件立即切换。')
             self.check(card,'ui_animations','界面动效','导航胶囊滑动、按钮按压和开关滑动；关闭可减少动态效果');body.addWidget(card)
-            card=Card('首页背景','选择本地图片，首页将按窗口比例裁切显示。')
+            card=Card('首页背景','独立设置背景显示方式与透明度，不改变首页按钮和文字。')
+            self.combo(card,'background_mode','图片显示方式','填充会裁切，适应会保留完整图片',[
+                ('填充（保持比例，裁切）','fill'),('自适应（完整显示）','fit'),
+                ('拉伸（铺满）','stretch'),('居中（原始大小）','center'),('平铺','tile')])
+            self.spin(card,'background_transparency','背景透明度','0% 为完整显示；100% 为隐藏图片及装饰',0,100,5)
+            self.fields['background_transparency'].setSuffix('%')
             field=QLineEdit(str(self.initial('background_image') or ''));field.setPlaceholderText('使用默认背景');self.add(card,'background_image','自定义图片','支持 PNG、JPG 和 WebP',field)
             def choose_background():
                 path,_=QFileDialog.getOpenFileName(self,'选择首页背景','','图片 (*.png *.jpg *.jpeg *.webp)')
@@ -201,7 +214,7 @@ class SettingsEditor(QWidget):
                 if path:
                     if key in self.overrides:self.overrides[key].setChecked(True)
                     field.setText(path)
-            action=field.addAction(icon('folder'),QLineEdit.ActionPosition.TrailingPosition);action.setToolTip('浏览目录' if browse=='directory' else '浏览 Java');action.triggered.connect(choose)
+            action=field.addAction(icon('folder',paint_color(self,'icon')),QLineEdit.ActionPosition.TrailingPosition);action.setProperty('onionGlyph','folder');action.setToolTip('浏览目录' if browse=='directory' else '浏览 Java');action.triggered.connect(choose)
 
     def spin(self,card,key,title,description,low,high,step):
         field=InlineSpinBox();field.setRange(low,high);field.setSingleStep(step);field.setKeyboardTracking(False);field.setValue(int(self.initial(key) or 0))
@@ -264,7 +277,8 @@ class SettingsEditor(QWidget):
                 previous={key:w.config_obj.get(key) for key in values}
                 changed={key for key,value in values.items() if previous[key]!=value}
                 w.config_obj.update(values)
-                if 'accent_color' in changed:w.setStyleSheet(themed_style(values['accent_color']))
+                if changed & {'accent_color','color_mode','text_transparency','ui_transparency','background_image','background_mode','background_transparency'}:
+                    w.apply_appearance()
                 from .motion import apply_motion_preferences
                 apply_motion_preferences(w)
                 if changed & {'game_dir','download_source','proxy_host','proxy_port','max_download_threads','download_speed_limit'}:

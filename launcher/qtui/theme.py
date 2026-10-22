@@ -8,6 +8,119 @@ SURFACE = '#1c2229'
 TEXT = '#edf2f4'
 MUTED = '#a4b0ba'
 
+# Paint helpers and QSS share one appearance model; no widget-level fades.
+PALETTES={
+ 'dark':{'base':'#14181d','surface':'#1c2229','text':'#edf2f4','muted':'#a4b0ba',
+         'icon':'#bac7cd','selected_text':'#f0e8ff','disabled':'#687780',
+         'track':'#3c4852','thumb':'#a4b0ba','check':'#253047','hover':'#eee3ff'},
+ 'light':{'base':'#f2f3f8','surface':'#ffffff','text':'#252536','muted':'#606577',
+          'icon':'#626779','selected_text':'#493661','disabled':'#9a9eaa',
+          'track':'#c8cbd5','thumb':'#ffffff','check':'#253047','hover':'#664285'},
+}
+
+
+def config_for(widget):
+    while widget is not None:
+        config=getattr(widget,'config_obj',None)
+        if config is not None:return config
+        launcher=getattr(widget,'launcher',None)
+        if launcher is not None and hasattr(launcher,'config_obj'):return launcher.config_obj
+        widget=widget.parentWidget()
+    return {}
+
+
+def appearance_values(config=None):
+    config=config if config is not None else {}
+    values={'color_mode':config.get('color_mode','dark')}
+    if values['color_mode'] not in PALETTES:values['color_mode']='dark'
+    for key in ('text_transparency','ui_transparency','background_transparency'):
+        try:value=int(config.get(key,0))
+        except (TypeError,ValueError):value=0
+        values[key]=max(0,min(70 if key=='text_transparency' else 100,value))
+    return values
+
+
+def palette_for(widget):return PALETTES[appearance_values(config_for(widget))['color_mode']]
+
+
+def paint_color(widget,role='text',text=False):
+    from PySide6.QtGui import QColor
+    color=QColor(palette_for(widget)[role])
+    if text:color.setAlpha(round(255*(1-appearance_values(config_for(widget))['text_transparency']/100)))
+    return color
+
+
+def contrasting_accent(accent,mode):
+    """Keep clickable foreground readable while retaining the chosen fill color."""
+    from PySide6.QtGui import QColor
+    color=QColor(accent);base=QColor(PALETTES[mode]['base'])
+    def luminance(c):
+        channels=[v/12.92 if v<=.04045 else ((v+.055)/1.055)**2.4 for v in c.getRgbF()[:3]]
+        return sum(a*b for a,b in zip(channels,(.2126,.7152,.0722)))
+    for _ in range(30):
+        low,high=sorted((luminance(color),luminance(base)))
+        if (high+.05)/(low+.05)>=4.5:break
+        if mode=='light':color=color.darker(110)
+        else:color=QColor.fromRgbF(*[v+(1-v)*.12 for v in color.getRgbF()[:3]])
+    return color.name()
+
+
+def appearance_style(accent,config=None):
+    import re
+    values=appearance_values(config);mode=values['color_mode'];style=STYLE
+    if mode=='light':
+        colors={
+         '#14181d':'#f2f3f8','#1c2229':'#ffffff','#edf2f4':'#252536',
+         '#f3f8fa':'#252536','#bacbd0':'#606577','#a4b0ba':'#606577',
+         '#687780':'#9a9eaa','#3e344c':'#ece5f7','#ddcafa':'#5b4379',
+         '#303941':'#d9dce6','#2c343c':'#dadde7','#27242f':'#f3eef9',
+         '#453e51':'#ded4ec','#dce5e9':'#343548','#303a43':'#e8e8f1',
+         '#3a4851':'#dddded','#303d43':'#e1e2eb','#75858b':'#8b8e9c',
+         '#ffacb2':'#b12f4c','#352d41':'#eee7f7','#252d35':'#f5f5fa',
+         '#35404a':'#d7d9e4','#66557c':'#ded1f0','#43515a':'#d1d3df',
+         '#493e59':'#e6dcf3','#443852':'#e9dff5','#252f37':'#f0edf6',
+         '#f3fcfb':'#352447','#222b33':'#f4f3f8','#aabac2':'#616677',
+         '#51616b':'#b3afc1','#8a9ba5':'#8b889c','#2a3239':'#e3e2eb',
+         '#4b575f':'#bebdcb','#303c44':'#ffffff','#f2f7f8':'#252536',
+         '#50616a':'#c4c1d2','#342c40':'#eee7f7',
+        }
+        style=re.sub(r'#[0-9a-fA-F]{6}',lambda match:colors.get(match.group().lower(),match.group()),style)
+        style=style.replace('rgba(19,24,29,235)','rgba(249,249,253,235)').replace('rgba(19,24,29,245)','rgba(249,249,253,245)')
+    foreground=contrasting_accent(accent,mode)
+    style=style.replace('#cebafa',accent)
+    style+='''
+QWidget#settingRow QLineEdit,QWidget#settingRow QSpinBox,QWidget#settingRow QComboBox,QWidget#settingRow QPushButton { color:ACCENT; }
+QWidget#settingRow QPushButton { text-align:right; }
+QWidget#settingRow QPushButton:hover { background:rgba(155,125,195,20); }
+QWidget#settingRow QLineEdit:disabled,QWidget#settingRow QSpinBox:disabled,QWidget#settingRow QComboBox:disabled,QWidget#settingRow QPushButton:disabled { color:DISABLED; }
+QWidget#settingRow QLineEdit:read-only { color:MUTED; }
+QPushButton[role='soft'] { color:ACCENT; }
+QLabel#authCode { color:ACCENT; }
+'''.replace('ACCENT',foreground).replace('DISABLED',PALETTES[mode]['disabled']).replace('MUTED',PALETTES[mode]['muted'])
+    from PySide6.QtGui import QColor
+    primary_text='#281f35' if QColor(accent).lightnessF()>.55 else '#ffffff'
+    style+="\nQPushButton[role='primary'] { color:"+primary_text+"; }\n"
+    alpha=round(255*(1-values['text_transparency']/100))
+    if alpha<255:
+        def text_alpha(match):
+            color=match.group(1);rgb=tuple(int(color[i:i+2],16) for i in (1,3,5))
+            return 'color:rgba(%d,%d,%d,%d)'%(*rgb,alpha)
+        style=re.sub(r'(?<![-\w])color:\s*(#[0-9a-fA-F]{6})',text_alpha,style)
+    factor=1-values['ui_transparency']/100
+    panels=('QFrame#card','QWidget#settingsSection','QWidget#sidebar','QWidget#toolbar','QWidget#contextPanel','QTreeWidget','QWidget#listRow')
+    def surface_alpha(match):
+        selector,body=match.group(1),match.group(2)
+        if any(panel in selector for panel in panels):
+            def background(match):
+                value=match.group(1)
+                if value.startswith('#'):
+                    rgba=[int(value[i:i+2],16) for i in (1,3,5)]+[255]
+                else:rgba=[int(v) for v in re.findall(r'\d+',value)]
+                return 'background:rgba(%d,%d,%d,%d)'%(*rgba[:3],round(rgba[3]*factor))
+            body=re.sub(r'background:\s*(#[0-9a-fA-F]{6}|rgba\([\d,]+\))',background,body)
+        return selector+'{'+body+'}'
+    return re.sub(r'([^{}]+)\{([^{}]*)\}',surface_alpha,style)
+
 STYLE = '''
 QMainWindow,QDialog { background:#14181d; }
 QWidget { color:#edf2f4; font-family:'Microsoft YaHei UI'; font-size:14px; }

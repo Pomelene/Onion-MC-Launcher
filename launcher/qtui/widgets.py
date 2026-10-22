@@ -1,10 +1,10 @@
 """Reusable Qt controls: native text rendering, scalable icons and glass surfaces."""
 from PySide6.QtCore import Qt, QSize, QRectF, QPointF, QVariantAnimation, QEasingCurve, QBuffer, QByteArray, QIODevice
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPainterPath, QFontDatabase, QFont, QLinearGradient, QRadialGradient, QImageReader, QFontMetrics
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPainterPath, QFontDatabase, QFont, QLinearGradient, QRadialGradient, QImageReader, QFontMetrics, QBrush
 from PySide6.QtWidgets import (QWidget,QFrame,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,
     QScrollArea,QSizePolicy,QDialog,QProgressBar,QMessageBox,QLayout,QAbstractButton,QCheckBox,QSpinBox,QComboBox,QLineEdit,QAbstractSpinBox,QStyle,QStyleOptionComboBox)
 
-from .theme import STYLE
+from .theme import STYLE,appearance_style,appearance_values,config_for,paint_color
 from .motion import MotionButton,motion_enabled
 
 
@@ -12,30 +12,25 @@ class GlassBackdrop(QWidget):
     """Soft spectral light, painted at native resolution without a blur loop."""
     def paintEvent(self,event):
         p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.fillRect(self.rect(),QColor('#14181d'))
-        for x,y,r,color in ((.8,.05,.6,'#493459'),(.98,.94,.5,'#302c43')):
+        p.fillRect(self.rect(),paint_color(self,'base'))
+        light=appearance_values(config_for(self))['color_mode']=='light'
+        for x,y,r,color in ((.8,.05,.6,'#cab5e8' if light else '#493459'),(.98,.94,.5,'#e3d7f2' if light else '#302c43')):
             g=QRadialGradient(QPointF(self.width()*x,self.height()*y),max(self.width(),self.height())*r)
             c=QColor(color);c.setAlpha(55);g.setColorAt(0,c);c.setAlpha(0);g.setColorAt(1,c)
             p.fillRect(self.rect(),g)
         p.end()
 
 
-def themed_style(accent='#cebafa'):
+def themed_style(accent='#cebafa',config=None):
     import re
     if not isinstance(accent,str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',accent):accent='#cebafa'
-    return STYLE.replace('#cebafa',accent)+'''
-QWidget#settingRow QLineEdit,QWidget#settingRow QSpinBox,QWidget#settingRow QComboBox,QWidget#settingRow QPushButton { color:ACCENT; }
-QWidget#settingRow QPushButton { text-align:right; }
-QWidget#settingRow QPushButton:hover { background:rgba(193,215,255,20); }
-QWidget#settingRow QLineEdit:disabled,QWidget#settingRow QSpinBox:disabled,QWidget#settingRow QComboBox:disabled,QWidget#settingRow QPushButton:disabled { color:#748095; }
-QWidget#settingRow QLineEdit:read-only { color:#aebbd0; }
-'''.replace('ACCENT',accent)
+    return appearance_style(accent,config)
 
 
 def control_accent(widget):
     """Use the saved accent for painted controls as well as stylesheet controls."""
     import re
-    config=getattr(widget.window(),'config_obj',None)
+    config=config_for(widget)
     value=config.get('accent_color') if config else None
     return value if isinstance(value,str) and re.fullmatch(r'#[0-9a-fA-F]{6}',value) else '#cebafa'
 
@@ -94,15 +89,15 @@ class NavigationItem(QAbstractButton):
         bounds=QRectF(self.rect()).adjusted(10,3,-10,-3)
         if not self.isChecked() and (self.hover_amount or self.hasFocus()):
             painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor(194,220,225,int(20*max(self.hover_amount,float(self.hasFocus())))));painter.drawRoundedRect(bounds,7,7)
-        color='#f0e8ff' if self.isChecked() else '#bac7cd'
-        if not self.isEnabled():color='#726879'
-        icon(self.glyph,color).paint(painter,22,(self.height()-20)//2,20,20)
+        role='disabled' if not self.isEnabled() else 'selected_text' if self.isChecked() else 'icon'
+        color=paint_color(self,role,text=True)
+        icon(self.glyph,paint_color(self,role)).paint(painter,22,(self.height()-20)//2,20,20)
         font=self.font();font.setPixelSize(14);font.setBold(self.isChecked());painter.setFont(font);painter.setPen(QColor(color))
         metrics=QFontMetrics(font);width=max(0,self.width()-self.text_left()-16)
         title=metrics.elidedText(self.text(),Qt.TextElideMode.ElideRight,width)
         painter.drawText(QRectF(self.text_left(),14 if self.subtitle else 0,width,22 if self.subtitle else self.height()),Qt.AlignmentFlag.AlignVCenter,title)
         if self.subtitle:
-            font.setPixelSize(12);font.setBold(False);painter.setFont(font);painter.setPen(QColor('#95a7b1'))
+            font.setPixelSize(12);font.setBold(False);painter.setFont(font);painter.setPen(paint_color(self,'muted',text=True))
             subtitle=QFontMetrics(font).elidedText(self.subtitle,Qt.TextElideMode.ElideRight,width)
             painter.drawText(QRectF(self.text_left(),37,width,18),Qt.AlignmentFlag.AlignVCenter,subtitle)
         painter.end()
@@ -169,7 +164,7 @@ def label(text,kind='',wrap=False):
 def button(text, callback=None, role='', glyph=None):
     item=MotionButton(text);item.setCursor(Qt.CursorShape.PointingHandCursor)
     item.setProperty('role',role)
-    if glyph:item.setIcon(icon(glyph,'#281f35' if role=='primary' else '#bac7cd'));item.setIconSize(QSize(18,18))
+    if glyph:item.setProperty('onionGlyph',glyph);item.setIcon(icon(glyph,'#281f35' if role=='primary' else '#bac7cd'));item.setIconSize(QSize(18,18))
     if callback:item.clicked.connect(lambda checked=False: callback())
     return item
 
@@ -252,8 +247,8 @@ class ToggleSwitch(QCheckBox):
         accent=QColor(control_accent(self))
         def blend(start,end):
             return QColor.fromRgbF(*[a+(b-a)*self.position for a,b in zip(start.getRgbF(),end.getRgbF())])
-        track=blend(QColor('#3c4852'),accent.darker(180))
-        thumb=blend(QColor('#a4b0ba'),accent) if self.isEnabled() else QColor('#63717a')
+        track=blend(paint_color(self,'track'),accent.darker(180))
+        thumb=blend(paint_color(self,'thumb'),accent) if self.isEnabled() else paint_color(self,'disabled')
         painter.setBrush(track);painter.drawRoundedRect(QRectF(2,3,38,20),10,10)
         radius=7+self.emphasis
         painter.setBrush(thumb);painter.drawEllipse(QPointF(12+18*self.position,13),radius,radius)
@@ -275,9 +270,9 @@ class ContentText(QWidget):
         self.setToolTip(self.title+'\n'+self.detail);self.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Preferred)
 
     def paintEvent(self,event):
-        p=QPainter(self);font=self.font();font.setPixelSize(14);p.setFont(font);p.setPen(QColor('#e5edfa'))
+        p=QPainter(self);font=self.font();font.setPixelSize(14);p.setFont(font);p.setPen(paint_color(self,'text',text=True))
         p.drawText(QRectF(0,4,self.width(),23),Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(self.title,Qt.TextElideMode.ElideRight,self.width()))
-        font.setPixelSize(12);p.setFont(font);p.setPen(QColor('#a4b0ba'))
+        font.setPixelSize(12);p.setFont(font);p.setPen(paint_color(self,'muted',text=True))
         p.drawText(QRectF(0,28,self.width(),18),Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(self.detail,Qt.TextElideMode.ElideRight,self.width()));p.end()
 
 
@@ -289,7 +284,7 @@ class ContentCheck(QCheckBox):
 
     def paintEvent(self,event):
         p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.setPen(QPen(QColor('#b8c7de' if self.isEnabled() else '#687587'),1.5));p.setBrush(QColor(control_accent(self)) if self.isChecked() else Qt.BrushStyle.NoBrush)
+        p.setPen(QPen(paint_color(self,'icon' if self.isEnabled() else 'disabled'),1.5));p.setBrush(QColor(control_accent(self)) if self.isChecked() else Qt.BrushStyle.NoBrush)
         p.drawRoundedRect(QRectF(3,5,18,18),3,3)
         if self.isChecked():
             p.setPen(QPen(QColor('#253047'),2,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
@@ -300,7 +295,7 @@ class ContentCheck(QCheckBox):
 
 class ContentRow(QWidget):
     def __init__(self,title,detail,glyph='package',enabled=None,on_toggle=None):
-        super().__init__();self.setObjectName('listRow');self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground,True);self.setFixedHeight(68);self.line=row(self,10,14)
+        super().__init__();self.glyph=glyph;self.has_artwork=False;self._fallback_color=None;self.setObjectName('listRow');self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground,True);self.setFixedHeight(68);self.line=row(self,10,14)
         self.check=None
         if enabled is not None:
             self.check=ContentCheck();self.check.setChecked(enabled);self.check.setToolTip('启用此模组');self.check.setAccessibleName('启用 '+title)
@@ -309,6 +304,13 @@ class ContentRow(QWidget):
         self.image=QLabel();self.image.setPixmap(icon(glyph).pixmap(32,32));self.image.setFixedSize(36,36);self.image.setAlignment(Qt.AlignmentFlag.AlignCenter);self.line.addWidget(self.image)
         self.text=ContentText(title,detail);self.line.addWidget(self.text,1)
 
+    def paintEvent(self,event):
+        if not self.has_artwork:
+            color=paint_color(self,'icon')
+            if self._fallback_color!=color.rgba():
+                self._fallback_color=color.rgba();self.image.setPixmap(icon(self.glyph,color).pixmap(32,32))
+        super().paintEvent(event)
+
     def set_artwork(self,data):
         if not data:return
         buffer=QBuffer();buffer.setData(QByteArray(data));buffer.open(QIODevice.OpenModeFlag.ReadOnly)
@@ -316,7 +318,7 @@ class ContentRow(QWidget):
         if not size.isValid() or size.width()*size.height()>4_000_000:return
         reader.setScaledSize(size.scaled(64,64,Qt.AspectRatioMode.KeepAspectRatio));image=reader.read()
         if not image.isNull():
-            pixmap=QPixmap.fromImage(image);pixmap.setDevicePixelRatio(2);self.image.setPixmap(pixmap)
+            pixmap=QPixmap.fromImage(image);pixmap.setDevicePixelRatio(2);self.image.setPixmap(pixmap);self.has_artwork=True
 
     def action(self,title,callback,glyph,role=''):
         control=button('',callback,role,glyph);control.setStyleSheet('padding:0;');control.setToolTip(title);control.setAccessibleName(title);control.setFixedSize(34,34);self.line.addWidget(control)
@@ -365,21 +367,40 @@ class Landscape(QWidget):
         p.end()
 
 
+def background_rect(image_size,viewport,mode):
+    """Centered image destination in logical pixels; fill crops, fit letterboxes."""
+    if mode=='stretch':return QRectF(0,0,viewport.width(),viewport.height())
+    if mode=='center':width,height=image_size.width(),image_size.height()
+    else:
+        ratio=(min if mode=='fit' else max)(viewport.width()/max(1,image_size.width()),viewport.height()/max(1,image_size.height()))
+        width,height=image_size.width()*ratio,image_size.height()*ratio
+    return QRectF((viewport.width()-width)/2,(viewport.height()-height)/2,width,height)
+
+
 class HomeCanvas(Landscape):
     """Local wallpaper rendered at window resolution, with a scalable fallback."""
-    def __init__(self,path='',parent=None):
-        super().__init__(parent);self.image=None
+    def __init__(self,path='',parent=None,config=None):
+        super().__init__(parent);self.image=None;self.path=None;self.tile=None;self.config_obj=config
+        self.set_background(path)
+
+    def set_background(self,path):
+        path=str(path or '')
+        if self.path==path:return
+        self.path=path;self.image=None;self.tile=None
         if path:
             reader=QImageReader(str(path));size=reader.size()
             if size.isValid() and size.width()*size.height()<=64_000_000:
-                reader.setScaledSize(size.scaled(3840,2160,Qt.AspectRatioMode.KeepAspectRatio))
+                if size.width()>3840 or size.height()>2160:reader.setScaledSize(size.scaled(3840,2160,Qt.AspectRatioMode.KeepAspectRatio))
                 value=reader.read()
-                if not value.isNull():self.image=value
+                if not value.isNull():self.image=value;self.tile=QPixmap.fromImage(value)
+        self.update()
 
     def paintEvent(self,event):
+        values=appearance_values(config_for(self));opacity=1-values['background_transparency']/100
+        GlassBackdrop.paintEvent(self,event)
         if self.image is None:
-            GlassBackdrop.paintEvent(self,event)
             p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            p.setOpacity(opacity)
             p.scale(self.width()/1000,self.height()/700)
             for offset,alpha in ((0,36),(18,18),(42,10)):
                 path=QPainterPath(QPointF(-100,480+offset));path.cubicTo(220,80+offset,600,650+offset,1110,120+offset)
@@ -389,9 +410,15 @@ class HomeCanvas(Landscape):
             p.end()
         else:
             p=QPainter(self);p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-            size=self.image.size().scaled(self.size(),Qt.AspectRatioMode.KeepAspectRatioByExpanding)
-            p.drawImage(QRectF((self.width()-size.width())/2,(self.height()-size.height())/2,size.width(),size.height()),self.image);p.end()
-        p=QPainter(self);shade=QLinearGradient(0,self.height()*.55,0,self.height());shade.setColorAt(0,QColor(0,0,0,0));shade.setColorAt(1,QColor(13,31,25,115));p.fillRect(self.rect(),shade);p.end()
+            p.setOpacity(opacity);mode=config_for(self).get('background_mode','fill')
+            if mode=='tile':p.fillRect(self.rect(),QBrush(self.tile))
+            else:p.drawImage(background_rect(self.image.size(),self.size(),mode),self.image)
+            p.end()
+        p=QPainter(self);p.setOpacity(opacity);shade=QLinearGradient(0,0,0,self.height())
+        light=values['color_mode']=='light'
+        shade.setColorAt(0,QColor(250,250,255,90) if light else QColor(10,12,20,20))
+        shade.setColorAt(1,QColor(246,246,253,190) if light else QColor(13,20,31,140))
+        p.fillRect(self.rect(),shade);p.end()
 
 
 def setting_row(layout,title,description,control):

@@ -35,7 +35,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
         self.setWindowTitle(f'{LAUNCHER_NAME} {LAUNCHER_VERSION}');self.resize(1440,900);self.setMinimumSize(1100,740)
         resource=Path(getattr(sys,'_MEIPASS',self.root))/'assets/craftbridge.ico'
         if resource.exists():self.setWindowIcon(QIcon(str(resource)))
-        self.setStyleSheet(themed_style(self.config_obj.get('accent_color')));self._build();self.game_log.connect(self.append_log);self.game_exit.connect(self.exited)
+        self.setStyleSheet(themed_style(self.config_obj.get('accent_color'),self.config_obj));self._build();self.apply_appearance();self.game_log.connect(self.append_log);self.game_exit.connect(self.exited)
         self.refresh_account();self.navigate('home');QTimer.singleShot(0,self.reload_versions)
 
     def _build(self):
@@ -252,6 +252,20 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
     def flush_settings(self):
         results=[editor.flush() for editor in (self.settings_editor,self.instance_editor) if editor]
         return all(results)
+
+    def apply_appearance(self):
+        from .theme import paint_color
+        from .widgets import HomeCanvas
+        style=themed_style(self.config_obj.get('accent_color'),self.config_obj)
+        if self.styleSheet()!=style:self.setStyleSheet(style)
+        for canvas in self.findChildren(HomeCanvas):
+            canvas.set_background(self.config_obj.get('background_image'));canvas.update()
+        for field in self.findChildren(QLineEdit):
+            for action in field.actions():
+                if action.property('onionGlyph'):action.setIcon(icon(action.property('onionGlyph'),paint_color(field,'icon')))
+        for dialog in self.findChildren(QDialog):
+            if getattr(dialog,'_chrome_header',None) and dialog.styleSheet()!=style:dialog.setStyleSheet(style)
+        self.centralWidget().update()
 
     def refresh_account(self):
         account=self.accounts.current()

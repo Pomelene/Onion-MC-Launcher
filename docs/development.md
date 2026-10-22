@@ -23,7 +23,7 @@
 首页使用可自定义的本地背景，右下角的分体按钮负责启动游戏和快捷选择实例。
 实例列表使用紧凑表格，支持搜索、类型筛选、排序和右键管理。
 `workspace.py` 将游戏设置、模组、资源包、光影、世界、日志和维护工具绑定到同一个实例。
-`settings.py` 共用全局与实例编辑器，修改保留为草稿，保存后才写入配置。
+`settings.py` 共用全局与实例编辑器，修改通过校验后自动写入配置。
 实例默认跟随全局游戏设置，开启“实例特定游戏设置”后才使用独立配置。
 `installer.py` 提供版本列表、正式版 / 快照筛选与加载器选择。
 自动内存分配在启动配置解析时计算，保留用户原有的手动内存设置。
@@ -68,7 +68,39 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_qt.ps1
 
 构建脚本隔离原生 DLL 搜索路径，并运行打包后的 offscreen 自检。通过自检后的最终产物为 `release/OnionMinecraftLauncher.exe`（`dist/qt/` 仅作构建暂存），运行数据和玩家账号配置不会打入 EXE。依赖不从开发者本机复制到仓库。
 
+构建还会运行 Windows 原生平台的隐藏窗口光栅检查和 `scripts/check_bundle.py` 的依赖体积审计，全部通过后才复制最终 EXE。Windows 检查不显示窗口，不启动游戏，仅使用临时配置。`-OutputName` 可以指定新文件名，避免覆盖正在运行的程序。
+
 微软应用配置使用 `assets/microsoft-app.example.json` 模板；维护者实际配置保存在被 Git 忽略的 `assets/microsoft-app.json`。详细说明见 [微软登录](microsoft-auth.md)。
+
+## 发行体积审计
+
+Qt 发行版自带 Python 解释器、Qt 动态库和 Python 绑定。不能只把 EXE 大小与依赖外部 Java 环境的启动器等同比较；参见 [HMCL 的 Java 下载说明](https://docs.hmcl.net/downloads/)。我们的界面代码本身并非主要占用。
+
+以已发布 v0.2.1 为基线，精简构建的 EXE 从 45,338,417 字节减少到 30,530,304 字节，减少 14,808,113 字节（32.66%）；归档内文件的未压缩合计从 108,865,213 字节降到 75,446,006 字节。下表按 EXE 内的实际压缩体积统计，MB 使用十进制：
+
+| 构成 | 原构建 MB | 精简构建 MB |
+| --- | ---: | ---: |
+| Qt 运行库与绑定 | 16.75 | 16.75 |
+| 软件 OpenGL 实现 | 7.66 | 0 |
+| Pillow 原生编解码器 | 5.69 | 0 |
+| Python 模块（含原来的 Pillow 模块及测试工具） | 3.81 | 2.42 |
+| Python 解释器及基础库 | 2.95 | 2.95 |
+| Qt 插件（20 个） | 2.45 | 2.45 |
+| Qt 多语言文件（99 个） | 2.01 | 2.01 |
+
+`packaging/craftbridge.spec` 不再强制导入 PIL，并明确排除未用于 Qt 产品的 Pillow 与 unittest；Pillow 移至开发依赖，继续支持开发截图及历史验收工具。冻结自检使用局部替换来阻止真实登录请求，不再引入整个 unittest 工具包。
+
+只过滤 `opengl32sw.dll`：该文件是软件 OpenGL 实现，当前产品没有 QOpenGLWidget、Qt Quick 或其他 OpenGL 表面，所有绘制使用 QPainter 的 QWidget/QImage 光栅路径。构建后的隐藏 Windows 窗口必须报告 `RasterSurface`，并实际绘制首页、实例列表和设置页。以后若新增 OpenGL/Quick 功能，需重新评估此裁剪。所有原有 Qt 语言文件与插件继续打包，包括备用平台、TLS、触摸及全部图片编解码插件。
+
+冻结自检验证 PNG、JPEG、WebP、TIFF、SVG、GIF、ICO 读取，Python TLS 上下文和随机数接口、微软登录入口（模拟应用配置）、设置保存及便携存储。它不发起真实账号授权或游戏启动。未使用 UPX，也未启用会删除 assert 检查的 Python 优化级别。
+
+审计命令：
+
+```powershell
+python -X utf8 scripts/check_bundle.py release/OnionMinecraftLauncher-v0.2.1-slim.exe --baseline release/OnionMinecraftLauncher-v0.2.1.exe --require-slim --output tmp/size-comparison.json
+```
+
+审计检查必要运行库及插件仍存在、未重新引入 PIL/unittest、配置等个人文件未进入归档，并在提供基线时断言所有原有语言文件和插件都保留。构建当前使用 38,000,000 字节的 EXE 体积上限，防止依赖悄然膨胀；新增必要功能导致超限时应先审计再调整。审计报告默认保存在被 Git 忽略的 `docs/bundle-audit.json`。
 
 
 ## UI 外观调整

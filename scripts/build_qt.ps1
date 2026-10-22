@@ -16,16 +16,12 @@ $taskSavedPath=$env:PATH
 $taskSavedTemp=$env:TEMP
 $taskSavedTmp=$env:TMP
 $taskSavedCache=$env:PYINSTALLER_CONFIG_DIR
-$taskSavedPythonPath=$env:PYTHONPATH
 Push-Location -LiteralPath $taskRoot
 try {
     $env:PATH=@($taskPythonDir,$taskQt,$taskShiboken,(Join-Path $env:SystemRoot 'System32'),$env:SystemRoot)-join ';'
     $env:TEMP=Join-Path $taskRoot 'tmp\build-temp'
     $env:TMP=$env:TEMP
     $env:PYINSTALLER_CONFIG_DIR=Join-Path $taskRoot 'tmp\pyinstaller-cache'
-    if (Test-Path -LiteralPath (Join-Path $taskRoot '.deps\pillow')) {
-        $env:PYTHONPATH=(Join-Path $taskRoot '.deps\pillow')+[IO.Path]::PathSeparator+$env:PYTHONPATH
-    }
     New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
     # A cached PYZ can retain old code even after Analysis reruns. Clean only
     # the project-local build/cache paths before producing a reviewable binary.
@@ -42,6 +38,14 @@ try {
     if ($taskProcess.ExitCode -ne 0) { throw 'Packaged Qt self-check failed; release executable has not been replaced.' }
     $taskResult=Get-Content -LiteralPath $taskReport -Raw | ConvertFrom-Json
     if ($taskResult.result -ne 'pass') { throw 'Packaged Qt self-check did not report success.' }
+    # Exercise qwindows and the raster painter without displaying any window.
+    $taskRasterReport=Join-Path $taskRoot 'docs\qt-windows-raster-check.json'
+    $taskRaster=Start-Process -FilePath $taskStage -ArgumentList @('--raster-check-output',('"'+$taskRasterReport+'"')) -WindowStyle Hidden -PassThru -Wait
+    if ($taskRaster.ExitCode -ne 0) { throw 'Packaged Windows raster check failed; release executable has not been replaced.' }
+    $taskRasterResult=Get-Content -LiteralPath $taskRasterReport -Raw | ConvertFrom-Json
+    if ($taskRasterResult.result -ne 'pass' -or $taskRasterResult.visible_windows -ne $false) { throw 'Windows raster check did not report hidden-window success.' }
+    & $taskPython -X utf8 scripts/check_bundle.py $taskStage --require-slim --max-bytes 38000000 --output docs/bundle-audit.json
+    if ($LASTEXITCODE -ne 0) { throw 'Bundle size/dependency audit failed; release executable has not been replaced.' }
     $taskRelease=Join-Path $taskRoot 'release'
     New-Item -ItemType Directory -Path $taskRelease -Force | Out-Null
     Copy-Item -LiteralPath $taskStage -Destination (Join-Path $taskRelease $OutputName) -Force
@@ -51,6 +55,5 @@ try {
     $env:TEMP=$taskSavedTemp
     $env:TMP=$taskSavedTmp
     $env:PYINSTALLER_CONFIG_DIR=$taskSavedCache
-    $env:PYTHONPATH=$taskSavedPythonPath
     Pop-Location
 }

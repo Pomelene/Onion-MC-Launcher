@@ -1,14 +1,62 @@
 """Offline, invisible packaged-runtime check. Never uses the user's game library."""
 import json,tempfile,time
-from unittest.mock import patch
 from pathlib import Path
 from PySide6.QtWidgets import QApplication,QPushButton
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt,QBuffer,QByteArray,QIODevice
+from PySide6.QtGui import QImage,QIcon,QSurface
 from .accounts import AccountsDialog
 from .app import MainWindow
 from .widgets import configure_fonts
 from ..config import Config
 from ..paths import LAUNCHER_VERSION
+
+
+def check_images(window):
+    """Exercise Qt's bundled image codecs without importing Pillow."""
+    source=QImage(16,16,QImage.Format.Format_RGB32);source.fill(0xff40b060)
+    for fmt in ('PNG','JPEG','WEBP','TIFF'):
+        data=QByteArray();buffer=QBuffer(data);buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        assert source.save(buffer,fmt),'Image encoder missing: '+fmt
+        buffer.close();decoded=QImage.fromData(data)
+        assert decoded.size()==source.size() and decoded.pixelColor(8,8).green()>140,fmt
+    svg=b'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#40b060"/></svg>'
+    assert QImage.fromData(svg).pixelColor(8,8).green()>140
+    import base64
+    gif=QImage.fromData(base64.b64decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'))
+    assert not gif.isNull() and gif.width()==1
+    icon=QIcon(str(Path(__file__).resolve().parents[2]/'assets/craftbridge.ico'))
+    assert not icon.pixmap(32,32).isNull()
+    return ['PNG','JPEG','WEBP','TIFF','SVG','GIF','ICO']
+
+
+def render_hidden(window):
+    window.ensurePolished()
+    image=QImage(window.size(),QImage.Format.Format_ARGB32_Premultiplied);image.fill(0)
+    window.render(image)
+    assert image.pixelColor(image.width()//2,image.height()//2).alpha()>0
+
+
+def run_raster(output):
+    """Use the real Windows QPA plugin but keep every window hidden."""
+    output=Path(output).resolve();output.parent.mkdir(parents=True,exist_ok=True)
+    application=QApplication.instance() or QApplication([]);application.setStyle('Fusion');configure_fonts(application)
+    assert application.platformName()=='windows'
+    with tempfile.TemporaryDirectory(dir=output.parent,prefix='qt-raster-') as folder:
+        base=Path(folder);config=Config(base/'onionmcl.json');config.set('game_dir',str(base/'empty-library'))
+        window=MainWindow(config.path,base);window.winId()
+        application.processEvents()
+        deadline=time.monotonic()+10
+        while window.tasks.jobs and time.monotonic()<deadline:application.processEvents();time.sleep(.01)
+        assert not window.tasks.jobs
+        assert window.windowHandle().surfaceType()==QSurface.SurfaceType.RasterSurface
+        for page in ('home','versions','settings'):
+            window.navigate(page);render_hidden(window)
+        formats=check_images(window)
+        assert not any(w.isVisible() for w in application.topLevelWidgets()),'Raster probe must not show windows'
+        window.close();application.processEvents()
+        output.write_text(json.dumps({'result':'pass','platform':'windows','surface':'RasterSurface',
+            'visible_windows':False,'fixture_only':True,'image_formats':formats},indent=2),encoding='utf-8')
+    return 0
 
 
 def run(output):
@@ -39,13 +87,24 @@ def run(output):
         installer.render_versions();assert installer.tree.topLevelItemCount()==1
         accounts=AccountsDialog(window)
         entry=next(b for b in accounts.findChildren(QPushButton) if b.text()=='微软正版登录')
-        with patch('launcher.qtui.accounts.resolve_client_id',return_value=''):
+        # Keep the frozen diagnostic independent of unittest and its mock tools.
+        from . import accounts as accounts_module
+        original_resolver=accounts_module.resolve_client_id
+        accounts_module.resolve_client_id=lambda *args,**kwargs:''
+        try:
             entry.click();application.processEvents()
+        finally:accounts_module.resolve_client_id=original_resolver
         assert accounts.login.isVisible(),'Microsoft login button did not open the dialog'
         assert callable(accounts.login.open),'QDialog.open is shadowed'
         accounts.login.reject();accounts.reject()
         assert not errors,errors
         assert window.repo.game_dir==base/'empty-library'
+        formats=check_images(window)
+        import ssl
+        context=ssl.create_default_context()
+        assert context.check_hostname and context.verify_mode==ssl.CERT_REQUIRED
+        assert len(ssl.RAND_bytes(16))==16
+        window.navigate('home');render_hidden(window)
         assert window.accounts.path==window.instances.path==window.version_settings.path==config.path
         assert config.path.exists()
         if __import__('os').name=='nt':
@@ -54,5 +113,5 @@ def run(output):
             get_attributes.argtypes=[ctypes.c_wchar_p];get_attributes.restype=ctypes.c_uint32
             assert get_attributes(str(config.path)) & 2
         window.close();application.processEvents()
-        output.write_text(json.dumps({'result':'pass','launcher_version':LAUNCHER_VERSION,'packaged_runtime':True,'offscreen':True,'game_started':False,'network_auth':False,'pages':6,'microsoft_login_button':True,'grouped_settings':True,'installer_filters':True,'unified_hidden_storage':True,'frameless_window':True,'automatic_settings_save':True},indent=2),encoding='utf-8')
+        output.write_text(json.dumps({'result':'pass','launcher_version':LAUNCHER_VERSION,'packaged_runtime':True,'offscreen':True,'game_started':False,'network_auth':False,'pages':6,'microsoft_login_button':True,'grouped_settings':True,'installer_filters':True,'unified_hidden_storage':True,'frameless_window':True,'automatic_settings_save':True,'image_formats':formats,'python_tls':True,'raster_render':True},indent=2),encoding='utf-8')
     return 0

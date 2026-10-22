@@ -14,7 +14,7 @@ Onion MC Launcher 是独立的 Python / Qt 启动器项目，与 Mojang、Micros
 运行与开发依赖由安装工具另行获取，不随源码仓库附带：
 
 - PySide6 / Qt：遵循对应版本的 LGPL/GPL/商业许可及分发要求。
-- Pillow：遵循 HPND 等上游适用许可。
+- Pillow：开发截图和历史验收工具使用，遵循 HPND 等上游适用许可；当前 Qt 发行 EXE 不包含此依赖。
 - PyInstaller：遵循上游 GPL 及其引导程序分发例外。
 
 本项目不提供 Minecraft 游戏文件、模组再分发授权或微软应用访问资格。公开仓库不包含开发者本机字体、Java 运行时或账号数据。

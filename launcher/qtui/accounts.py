@@ -99,8 +99,6 @@ class AccountsDialog(QDialog):
     def __init__(self,app):
         super().__init__(app);self.app=app;self.tasks=app.tasks;self.config_obj=app.config_obj;self.store=app.accounts
         self.setWindowTitle('账号管理');self.resize(780,540);self.setModal(True);body=column(self,24,16)
-        body.addWidget(label('你的游戏身份','title'))
-        body.addWidget(label('正版账号用于在线验证；离线账号仅提供本地玩家身份。','muted'))
         self.tree=QTreeWidget();self.tree.setHeaderLabels(['玩家','账号类型','状态']);self.tree.setRootIsDecorated(False)
         self.tree.setColumnWidth(0,260);self.tree.setColumnWidth(1,140);body.addWidget(self.tree,1)
         actions=row();actions.addWidget(button('微软正版登录',self.microsoft,'primary','account'))

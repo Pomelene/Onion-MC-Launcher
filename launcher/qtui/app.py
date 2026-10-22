@@ -2,12 +2,14 @@
 import sys
 import time
 from pathlib import Path
+from .choices import ActionMenu
 from PySide6.QtCore import Qt,Signal,Slot,QTimer,QUrl
 from PySide6.QtGui import QDesktopServices,QIcon
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QStackedWidget,QComboBox,
     QLineEdit,QPlainTextEdit,QMessageBox,QInputDialog,QDialog,QFormLayout,QCheckBox,QSpinBox,QProgressBar,QSizePolicy)
 from .widgets import STYLE,themed_style,Page,Card,Empty,label,button,column,row,clear,icon,TaskDialog,NavigationItem,GlassBackdrop,configure_fonts
 from .motion import NavigationSurface
+from .widgets import FeedbackLabel
 from .chrome import ChromeMainWindow,TitleBar,window_controls,install_window_chrome
 from .tasks import TaskManager
 from .actions import Actions
@@ -41,14 +43,18 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
     def _build(self):
         shell=GlassBackdrop();outer=column(shell,0,0);self.setCentralWidget(shell)
         toolbar=TitleBar(self.frame_controller);toolbar.setFixedHeight(64);self.title_bar=toolbar;top=row(toolbar,0,0)
+        toolbar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground,True)
         home_area=QWidget();home_area.setFixedWidth(220);home_line=row(home_area,12,0)
+        self.home_area=home_area;self.home_line=home_line
         self.home_button=button('返回首页',lambda:self.navigate('home'),'soft','home');self.home_button.setAccessibleName('返回首页');home_line.addWidget(self.home_button);home_line.addStretch();top.addWidget(home_area)
         heading=QWidget();heading_line=row(heading,0,10);heading_line.setContentsMargins(24,0,12,0);top.addWidget(heading,1)
+        self.heading_area=heading;self.heading_line=heading_line
         self.back_button=button('',self.go_back,glyph='back');self.back_button.setFixedSize(30,34);self.back_button.setStyleSheet('padding:0;');self.back_button.setToolTip('返回上一页');self.back_button.setAccessibleName('返回上一页');heading_line.addWidget(self.back_button)
-        self.title=label('开始游戏','heading');self.title.setMinimumWidth(0);self.title.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Preferred);heading_line.addWidget(self.title,1)
+        self.title=label('','heading');self.title.setMinimumWidth(0);self.title.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Preferred);heading_line.addWidget(self.title,1)
         self.brand_widget=QWidget();branding=row(self.brand_widget,0,8);branding.addWidget(label('Onion','heading'));branding.addWidget(label(LAUNCHER_VERSION,'pill'),0,Qt.AlignmentFlag.AlignVCenter);heading_line.addWidget(self.brand_widget);top.addWidget(window_controls(self.frame_controller));outer.addWidget(toolbar)
         lower=row(spacing=0);outer.addLayout(lower,1)
         side=NavigationSurface();side.setObjectName('sidebar');side.setFixedWidth(220)
+        self.sidebar=side
         self.sidebar_body=column(side,0,0);self.sidebar_body.setSizeConstraint(self.sidebar_body.SizeConstraint.SetDefaultConstraint);self.nav={};self.account_button=None
         self.nav_motion=side.selection;self.sidebar_scheme=None
         lower.addWidget(side)
@@ -59,7 +65,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
             if isinstance(page,Page):page.body.setContentsMargins(24,20,24,20)
             else:page.body=column(page,0,0)
             self.page_map[key]=page;self.stack.addWidget(page)
-        self.status=label('就绪','muted');self.status.setContentsMargins(14,4,14,4);body.addWidget(self.status)
+        self.status=FeedbackLabel();self.status.setContentsMargins(14,4,14,4);body.addWidget(self.status)
         self.task_strip=QWidget();strip=column(self.task_strip,10,5);info=row(spacing=8)
         self.task_stage=label('','muted');info.addWidget(self.task_stage,1);self.task_amount=label('','muted');info.addWidget(self.task_amount)
         self.task_cancel=button('取消',self.cancel_active_task);info.addWidget(self.task_cancel);strip.addLayout(info)
@@ -73,6 +79,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
         view.setMinimumSize(0,0);self.stack.addWidget(view);self.subpages.append(view)
         view.finished.connect(lambda _:self.finish_subpage(view))
         self.stack.setCurrentWidget(view);view.show();self.title.setText(getattr(view,'navigation_title',view.windowTitle()));self.back_button.show()
+        self.sync_header_layout()
 
     def finish_subpage(self,view):
         if view not in self.subpages:return
@@ -81,6 +88,18 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
             target=self.subpages[-1];self.stack.setCurrentWidget(target);self.title.setText(getattr(target,'navigation_title',target.windowTitle()))
         else:
             self.stack.setCurrentWidget(self.page_map[self.current_page]);self.title.setText(getattr(self,'page_title','Onion'));self.back_button.setVisible(self.current_page!='home')
+        self.sync_header_layout()
+
+    def sync_header_layout(self):
+        home=getattr(self,'current_page',None)=='home' and not self.subpages
+        parent=self.home_area if home else self.heading_area
+        if self.brand_widget.parentWidget() is not parent:
+            self.home_line.removeWidget(self.brand_widget);self.heading_line.removeWidget(self.brand_widget)
+            self.brand_widget.setParent(parent)
+            if home:self.home_line.insertWidget(0,self.brand_widget)
+            else:self.heading_line.addWidget(self.brand_widget)
+            self.brand_widget.show()
+        self.home_button.setVisible(not home)
 
     def go_back(self):
         if self.subpages:
@@ -124,7 +143,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
             nav.addStretch();entry('import','导入整合包','plus',self.import_modpack)
         else:
             heading('账户');account=self.accounts.current()
-            self.account_button=entry('account',account.username if account else '添加账户','account',self.open_accounts,{'microsoft':'微软账户','authlib':'外置登录','offline':'离线模式'}.get(account.type,'') if account else 'Microsoft / 离线 / 外置')
+            self.account_button=entry('account',account.username if account else '添加账户','account',self.open_accounts)
             self.account_button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);self.account_button.customContextMenuRequested.connect(self.show_account_menu)
             heading('游戏');entry('instance','实例管理','settings',lambda:self.navigate('instance'),self.instances.display_name(self.selected_version) if self.selected_version else '尚未选择游戏实例')
             entry('versions','实例列表','grid',lambda:self.navigate('versions'));entry('download','下载','download',lambda:self.navigate('download'))
@@ -177,7 +196,8 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
             self.nav_history.append(self.current_route);self.nav_history=self.nav_history[-40:]
         self.current_route=route
         self.current_page=key;self.back_button.setVisible(key!='home');self.stack.setCurrentWidget(self.page_map[key])
-        titles={'home':'开始游戏','instance':'实例管理 · '+self.instances.display_name(self.selected_version),'versions':'实例列表','download':'下载','settings':'设置','about':'关于 Onion'}
+        self.sync_header_layout()
+        titles={'home':'','instance':'实例管理 · '+self.instances.display_name(self.selected_version),'versions':'实例列表','download':'下载','settings':'设置','about':'关于 Onion'}
         self.page_title=titles[key];self.title.setText(titles[key])
         if key=='instance':self.build_instance()
         elif key!='settings' or self.settings_editor is None:getattr(self,'build_'+key)()
@@ -205,7 +225,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
 
     def show_account_menu(self,point):
         from PySide6.QtWidgets import QMenu
-        menu=QMenu(self)
+        menu=ActionMenu(self)
         for record in self.accounts.accounts:
             action=menu.addAction(record.label);action.setCheckable(True);action.setChecked(record.uuid==self.accounts.current_uuid)
             action.triggered.connect(lambda checked=False,uid=record.uuid:self.switch_account(uid))
@@ -258,20 +278,26 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
         from .widgets import HomeCanvas
         style=themed_style(self.config_obj.get('accent_color'),self.config_obj)
         if self.styleSheet()!=style:self.setStyleSheet(style)
+        shared=self.config_obj.get('background_scope')=='window'
+        for surface in (self.sidebar,self.title_bar):
+            if surface.property('wallpaperUnderlay')!=shared:
+                surface.setProperty('wallpaperUnderlay',shared)
+                surface.style().unpolish(surface);surface.style().polish(surface);surface.update()
         for canvas in self.findChildren(HomeCanvas):
             canvas.set_background(self.config_obj.get('background_image'));canvas.update()
         for field in self.findChildren(QLineEdit):
             for action in field.actions():
                 if action.property('onionGlyph'):action.setIcon(icon(action.property('onionGlyph'),paint_color(field,'icon')))
         for dialog in self.findChildren(QDialog):
-            if getattr(dialog,'_chrome_header',None) and dialog.styleSheet()!=style:dialog.setStyleSheet(style)
+            if getattr(dialog,'_chrome_header',None):
+                if dialog.styleSheet()!=style:dialog.setStyleSheet(style)
         self.centralWidget().update()
 
     def refresh_account(self):
         account=self.accounts.current()
         if self.account_button:
             self.account_button.setText(account.username if account else '添加账户')
-            self.account_button.setSubtitle({'microsoft':'微软账户','authlib':'外置登录','offline':'离线模式'}.get(account.type,'') if account else 'Microsoft / 离线 / 外置')
+            self.account_button.setSubtitle('')
 
     def open_accounts(self):
         from .accounts import AccountsDialog

@@ -183,7 +183,7 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
         assert all(item.width()>=200 for item in window.nav.values()),'Sidebar labels are clipped'
         for field in window.settings_editor.fields.values():
             if hasattr(field,'lineEdit') and field.isVisible() and field.lineEdit():
-                assert field.lineEdit().width()>=100,'Numeric editor was collapsed by the style'
+                assert field.lineEdit().width()>=76,'Numeric editor was collapsed by the style'
     window.resize(1440,900);window.navigate('home')
     window.open_accounts();embedded_accounts=window.dialogs[-1]
     assert not embedded_accounts.isWindow() and window.stack.currentWidget() is embedded_accounts

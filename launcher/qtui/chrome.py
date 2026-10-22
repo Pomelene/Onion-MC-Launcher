@@ -4,7 +4,8 @@ The header stays inside the client area. Launcher dialogs are decorated before
 display; file pickers use the platform dialog. Embedded subpages and popups keep
 their existing layout and input behavior.
 """
-from PySide6.QtCore import QObject, QEvent, Qt, QRect
+from .choices import ActionMenu
+from PySide6.QtCore import QObject, QEvent, Qt, QRect, QTimer
 from PySide6.QtGui import QPainter,QFontMetrics
 from PySide6.QtWidgets import (QApplication, QMainWindow, QDialog, QWidget,
     QHBoxLayout, QLabel, QMenu, QSizePolicy, QFileDialog, QColorDialog)
@@ -33,6 +34,7 @@ class FrameController(QObject):
         super().__init__(window)
         self.window = window
         self.allow_maximize = maximize
+        window.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground,True)
         window.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         window.installEventFilter(self)
         top, bottom, left, right = Qt.Edge.TopEdge, Qt.Edge.BottomEdge, Qt.Edge.LeftEdge, Qt.Edge.RightEdge
@@ -110,7 +112,7 @@ class TitleBar(QWidget):
 
     def contextMenuEvent(self, event):
         window = self.controller.window
-        menu = QMenu(self)
+        menu = ActionMenu(self)
         if self.controller.allow_maximize:
             menu.addAction('还原', window.showNormal).setEnabled(window.isMaximized())
             menu.addAction('最小化', window.showMinimized)
@@ -146,6 +148,21 @@ class ChromeMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.frame_controller = FrameController(self)
+        self._resize_flush=QTimer(self);self._resize_flush.setSingleShot(True)
+        self._resize_flush.timeout.connect(self._finish_resize)
+
+    def resizeEvent(self,event):
+        super().resizeEvent(event)
+        # Windows layered surfaces need a complete dirty region after shrinking too.
+        # Coalesce resize/layout events; never repaint synchronously inside resize.
+        if hasattr(self,'_resize_flush'):self._resize_flush.start(0)
+
+    def _finish_resize(self):
+        central=self.centralWidget()
+        if central is not None:
+            if central.layout() is not None:central.layout().activate()
+            central.update()
+        self.update()
 
 
 class WindowTitle(QLabel):

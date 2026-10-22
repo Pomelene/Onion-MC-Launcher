@@ -1,32 +1,36 @@
 """Qt pages delegate filesystem, network and installation work to existing services."""
 from pathlib import Path
+from .choices import ChoiceComboBox,ActionMenu
 from PySide6.QtCore import Qt,QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QWidget,QLineEdit,QComboBox,QFormLayout,QCheckBox,QSpinBox,
     QTabWidget,QFileDialog,QMessageBox,QDialog,QTreeWidget,QTreeWidgetItem,QMenu)
-from .widgets import Page,Card,Empty,HomeCanvas,ContentRow,label,button,column,row,clear,icon
+from .widgets import Page,Card,Empty,HomeCanvas,ContentRow,WelcomeLine,label,button,column,row,clear,icon
 
 
 class Pages:
     def build_home(self):
         body=self.page('home');canvas=HomeCanvas(self.config_obj.get('background_image') or '',config=self.config_obj)
+        self.home_canvas=canvas
         overlay=column(canvas,40,12)
-        hero=column(spacing=12);hero.addWidget(label('ONION / JAVA EDITION','eyebrow'))
-        hero.addWidget(label('下一段冒险，由此开始。','heroTitle'))
-        hero.addWidget(label('选择你的世界，继续上次的旅程。','heroSubtitle'))
+        hero=column(spacing=12)
+        self.welcome_large=WelcomeLine(True);self.welcome_small=WelcomeLine()
+        hero.addWidget(self.welcome_large);hero.addWidget(self.welcome_small);self.update_home_welcome()
         overlay.addSpacing(44);overlay.addLayout(hero);overlay.addStretch()
-        bottom=row(spacing=20);caption=column(spacing=4)
-        caption.addWidget(label('你的启动器，你的世界。','heading'))
-        self.wallpaper_button=button('自定义首页背景',self.open_appearance)
-        self.wallpaper_button.setStyleSheet('text-align:left;padding-left:0;')
-        caption.addWidget(self.wallpaper_button);bottom.addLayout(caption);bottom.addStretch()
-        start=QWidget();start.setObjectName('startPanel');actions=row(start,0,0)
-        self.launch_button=button('',self.launch_selected,'primary','play');self.launch_button.setMinimumSize(238,78)
-        self.launch_button.setStyleSheet('QPushButton {border-top-right-radius:0;border-bottom-right-radius:0;font-size:16px;text-align:left;padding:12px 24px;}')
-        self.quick_button=button('',self.quick_select,'primary','up');self.quick_button.setToolTip('快捷选择实例');self.quick_button.setFixedSize(48,78)
-        self.quick_button.setStyleSheet('QPushButton {border-top-left-radius:0;border-bottom-left-radius:0;border-left:1px solid rgba(255,255,255,60);font-size:22px;}')
-        actions.addWidget(self.launch_button);actions.addWidget(self.quick_button);bottom.addWidget(start)
+        bottom=row(spacing=20);bottom.addStretch()
+        from .launch_control import LaunchControl
+        start=LaunchControl(self.launch_selected,self.quick_select)
+        self.launch_button=start.launch;self.quick_button=start.quick;bottom.addWidget(start)
         overlay.addLayout(bottom);body.addWidget(canvas,1);self.update_selection()
+
+    def update_home_welcome(self,settings=None):
+        if not hasattr(self,'welcome_large'):return
+        settings=settings if settings is not None else self.config_obj
+        custom=settings.get('custom_home_welcome')
+        large=(settings.get('home_welcome_large') or '') if custom else ''
+        small=(settings.get('home_welcome_small') or '') if custom else ''
+        for widget,text in ((self.welcome_large,large),(self.welcome_small,small)):
+            widget.setText(text);widget.setVisible(bool(text))
 
     def open_appearance(self):
         self.navigate('settings');self.open_settings_tab(self.settings_editor.tab_names['外观'])
@@ -47,8 +51,8 @@ class Pages:
 
     def build_versions(self):
         body=self.page('versions');toolbar=row();query=QLineEdit();self.library_search=query;query.setPlaceholderText('搜索实例名称、版本或分组');query.setText(getattr(self,'library_query',''));toolbar.addWidget(query,1)
-        kinds=QComboBox();kinds.addItems(['全部类型','原版','Fabric','Forge','NeoForge','Quilt','OptiFine']);kinds.setCurrentIndex(getattr(self,'library_kind',0));toolbar.addWidget(kinds)
-        sort=QComboBox();sort.addItems(['名称排序','最近游玩','游玩时长']);sort.setCurrentIndex(getattr(self,'library_sort',0));toolbar.addWidget(sort)
+        kinds=ChoiceComboBox();kinds.addItems(['全部类型','原版','Fabric','Forge','NeoForge','Quilt','OptiFine']);kinds.setCurrentIndex(getattr(self,'library_kind',0));toolbar.addWidget(kinds)
+        sort=ChoiceComboBox();sort.addItems(['名称排序','最近游玩','游玩时长']);sort.setCurrentIndex(getattr(self,'library_sort',0));toolbar.addWidget(sort)
         toolbar.addWidget(button('安装游戏',self.install_dialog,'primary','plus'));toolbar.addWidget(button('导入整合包',self.import_modpack,glyph='package'));body.addLayout(toolbar)
         library=row();library.addWidget(label(str(self.repo.game_dir),'muted',True),1);library.addWidget(button('切换游戏目录',lambda:self.navigate('settings'),glyph='folder'));library.addWidget(button('刷新',self.reload_versions));body.addLayout(library)
         tree=QTreeWidget();self.version_tree=tree;tree.setRootIsDecorated(False);tree.setHeaderLabels(['实例名称','游戏版本 / 加载器','分组','上次游玩']);tree.setColumnWidth(0,240);tree.setColumnWidth(1,240);tree.setColumnWidth(2,100);tree.setMinimumHeight(380);body.addWidget(tree,1)
@@ -60,7 +64,8 @@ class Pages:
             for vid in versions:
                 meta=self.instances.get(vid);item=QTreeWidgetItem([meta.display_name,vid+' · '+self.kinds.get(vid,'原版'),meta.group,meta.last_played_text()]);item.setData(0,Qt.ItemDataRole.UserRole,vid);tree.addTopLevelItem(item)
                 if vid==self.selected_version:tree.setCurrentItem(item)
-            summary.setText(f'{len(versions)} / {len(self.versions)} 个实例 · 单击选择，双击返回首页 · 右键管理实例')
+            summary.setText(f'{len(versions)} / {len(self.versions)} 个实例')
+        tree.setToolTip('单击选择，双击返回首页；右键管理实例')
         def chosen():
             item=tree.currentItem();return item.data(0,Qt.ItemDataRole.UserRole) if item else ''
         def select_home(*args):
@@ -72,7 +77,7 @@ class Pages:
         def context(point):
             item=tree.itemAt(point)
             if not item:return
-            tree.setCurrentItem(item);vid=chosen();menu=QMenu(tree)
+            tree.setCurrentItem(item);vid=chosen();menu=ActionMenu(tree)
             for title,callback in [('选择并返回首页',select_home),('重命名实例',lambda:self.rename_instance(vid)),('管理实例',lambda:self.instance_settings(vid)),('启动游戏',lambda:self.launch_version_id(vid)),('打开目录',lambda:self.open_folder(self.repo.run_dir(vid))),('导出整合包',lambda:self.export_modpack(vid)),('移入恢复中心',lambda:self.delete_version(vid))]:menu.addAction(title,callback)
             menu.exec(tree.viewport().mapToGlobal(point))
         tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);tree.customContextMenuRequested.connect(context)
@@ -146,7 +151,7 @@ class Pages:
     def build_mods(self,content_kind='mods'):
         body=self.page('mods');seq=self.page_seq['mods'];vid=self.selected_version
         if not vid:body.addWidget(Empty('先选择一个游戏实例','所有内容都按实例独立管理。','grid','选择实例',lambda:self.navigate('versions')));return
-        tabs=row();kind=QComboBox()
+        tabs=row();kind=ChoiceComboBox()
         for title,key in [('模组','mods'),('资源包','resourcepacks'),('光影','shaderpacks')]:kind.addItem(title,key)
         kind.setCurrentIndex(max(0,kind.findData(content_kind)));kind.hide()
         tabs.addWidget(label({'mods':'模组','resourcepacks':'资源包','shaderpacks':'光影'}[content_kind]+' · '+self.instances.display_name(vid),'muted'),1);tabs.addWidget(button('打开目录',lambda:self.open_folder(self.repo.run_dir(vid)/content_kind),glyph='folder'));tabs.addStretch();tabs.addWidget(button('搜索安装',lambda:self.open_content_download(content_kind),'soft','search'));body.addLayout(tabs)
@@ -267,7 +272,7 @@ class Pages:
             status.setText(f'发现 {len(infos)} 个运行时；游戏启动时也会按需自动下载匹配版本。')
         from ..java import find_all_java,download_java
         self.tasks.submit(lambda job:find_all_java(),done,lambda e:status.setText(str(e)))
-        actions=row();major=QComboBox();major.addItems(['8','17','21','25']);actions.addWidget(major)
+        actions=row();major=ChoiceComboBox();major.addItems(['8','17','21','25']);actions.addWidget(major)
         def selected(path):
             if on_selected:on_selected(path)
             elif self.settings_editor:

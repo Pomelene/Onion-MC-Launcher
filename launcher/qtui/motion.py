@@ -1,8 +1,8 @@
 """Local, interruptible control motion on a stable page and sidebar layout."""
 from PySide6.QtCore import QObject, QEvent, Qt, QPoint, QPointF, QRectF, QTimer, QVariantAnimation, QEasingCurve, QAbstractAnimation
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QColor, QPainter, QFontMetrics,QPen
 from PySide6.QtWidgets import QWidget, QPushButton, QStyle, QStyleOption, QStyleOptionButton, QStylePainter
-from .theme import config_for,paint_color
+from .theme import config_for,paint_color,surface_opacity
 
 
 HOVER_DURATION = 140
@@ -137,7 +137,7 @@ class NavigationSurface(QWidget):
         if self.selection.visible:
             config = config_for(self)
             color = QColor(config.get('accent_color') if config else '#cebafa')
-            color.setAlpha(44)
+            color.setAlpha(round(44*surface_opacity(config)))
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(color)
@@ -216,6 +216,22 @@ class MotionButton(QPushButton):
                 self._icon_signature=signature;self.setIcon(icon(glyph,color))
         option = QStyleOptionButton()
         self.initStyleOption(option)
+        if self.property('settingAction'):
+            p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            if self.isEnabled() and self.hover_amount:
+                fill=paint_color(self,'hover');fill.setAlpha(round(20*self.hover_amount*surface_opacity(config_for(self))))
+                p.setPen(Qt.PenStyle.NoPen);p.setBrush(fill);p.drawRoundedRect(QRectF(self.rect()).adjusted(1,2,-1,-2),7,7)
+            color=option.palette.color(self.foregroundRole());p.setPen(color);p.setFont(self.font())
+            reserve=26 if not self.icon().isNull() else 0;rect=QRectF(self.rect()).adjusted(8,0,-8,0)
+            text=QFontMetrics(self.font()).elidedText(self.text(),Qt.TextElideMode.ElideRight,max(0,int(rect.width()-reserve)))
+            if reserve:
+                x=int(rect.right()-QFontMetrics(self.font()).horizontalAdvance(text)-26)
+                self.icon().paint(p,x,int(rect.center().y()-9),18,18)
+            p.drawText(rect,Qt.AlignmentFlag.AlignRight|Qt.AlignmentFlag.AlignVCenter,text)
+            if self.hasFocus():
+                focus=QColor(color);focus.setAlpha(90);p.setPen(QPen(focus,1));p.setBrush(Qt.BrushStyle.NoBrush)
+                p.drawRoundedRect(QRectF(self.rect()).adjusted(2,2,-2,-2),7,7)
+            p.end();return
         native = QStylePainter(self)
         native.setRenderHint(QPainter.RenderHint.Antialiasing)
         # Scale the visual button as one unit; its layout and hit area stay fixed.
@@ -229,7 +245,7 @@ class MotionButton(QPushButton):
         native.drawControl(QStyle.ControlElement.CE_PushButtonLabel, option)
         if self.isEnabled() and self.hover_amount > 0:
             native.setPen(Qt.PenStyle.NoPen)
-            hover=paint_color(self,'hover');hover.setAlpha(round(255*.075*self.hover_amount));native.setBrush(hover)
+            hover=paint_color(self,'hover');hover.setAlpha(round(255*.075*self.hover_amount*surface_opacity(config_for(self))));native.setBrush(hover)
             native.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 6, 6)
         native.end()
 

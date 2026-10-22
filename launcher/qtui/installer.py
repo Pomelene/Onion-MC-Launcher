@@ -1,4 +1,5 @@
 """Version-first installation dialog, using the existing installer services."""
+from .choices import ChoiceComboBox
 from PySide6.QtCore import Qt,QTimer
 from PySide6.QtWidgets import QDialog,QLineEdit,QComboBox,QCheckBox,QTreeWidget,QTreeWidgetItem,QWidget
 from .widgets import column,row,label,button,Card
@@ -8,7 +9,7 @@ class InstallDialog(QDialog):
     def __init__(self,window):
         super().__init__(window);self.launcher=window;self.entries=[];self.loading=False;self.active=True
         self.setWindowTitle('安装 Minecraft');self.resize(940,670);self.setMinimumSize(820,570)
-        body=column(self,26,18);body.addWidget(label('安装 Minecraft','title'));body.addWidget(label('选择游戏版本，再添加喜欢的模组加载器。','muted'))
+        body=column(self,26,18);body.addWidget(label('安装 Minecraft','title'))
         panels=row(spacing=20);body.addLayout(panels,1)
         left=QWidget();list_body=column(left,0,12);panels.addWidget(left,3)
         search=row();self.query=QLineEdit();self.query.setPlaceholderText('筛选版本，例如 1.21');search.addWidget(self.query,1)
@@ -16,9 +17,9 @@ class InstallDialog(QDialog):
         self.tree=QTreeWidget();self.tree.setHeaderLabels(['游戏版本','类型','发布时间']);self.tree.setRootIsDecorated(False);self.tree.setColumnWidth(0,150);self.tree.setColumnWidth(1,85);list_body.addWidget(self.tree,1)
         self.status=label('正在获取版本列表…','muted',True);list_body.addWidget(self.status)
         self.retry=button('刷新版本列表',self.fetch,glyph='history');list_body.addWidget(self.retry,alignment=Qt.AlignmentFlag.AlignLeft)
-        options=Card('安装选项','原版与加载器将安装到当前游戏库。');options.setFixedWidth(290);panels.addWidget(options)
+        options=Card('安装选项');options.setFixedWidth(290);panels.addWidget(options)
         options.body.addWidget(label('Minecraft 版本','heading'));self.version=QLineEdit();self.version.setPlaceholderText('从左侧选择，或输入版本号');options.body.addWidget(self.version)
-        options.body.addWidget(label('模组加载器','heading'));self.loader=QComboBox()
+        options.body.addWidget(label('模组加载器','heading'));self.loader=ChoiceComboBox()
         for title,key in [('原版 Minecraft','vanilla'),('Fabric','fabric'),('Forge','forge'),('NeoForge','neoforge'),('Quilt','quilt'),('OptiFine','optifine')]:self.loader.addItem(title,key)
         options.body.addWidget(self.loader)
         self.instance_name=QLineEdit();self.instance_name.setPlaceholderText('版本号 + 加载器');options.body.addWidget(label('实例名称','heading'));options.body.addWidget(self.instance_name);self.custom_name=False
@@ -32,7 +33,7 @@ class InstallDialog(QDialog):
         self.loader_tree=QTreeWidget();self.loader_tree.setRootIsDecorated(False);self.loader_tree.setHeaderLabels(['加载器版本','渠道','Minecraft']);self.loader_tree.setColumnWidth(0,210);self.loader_tree.setMaximumHeight(200);list_body.addWidget(self.loader_tree)
         self.loader_status=label('选择模组加载器后列出适用版本。','muted',True);list_body.addWidget(self.loader_status)
         self.loader_seq=0;self.loader_timer=QTimer(self);self.loader_timer.setSingleShot(True);self.loader_timer.setInterval(350);self.loader_timer.timeout.connect(self.fetch_loaders)
-        options.body.addWidget(label('Java 将根据游戏版本自动匹配。安装完成后可在实例设置中调整内存与窗口。','muted',True));options.body.addStretch()
+        options.body.addStretch()
         options.body.addWidget(label('下载位置','eyebrow'));options.body.addWidget(label(str(window.repo.game_dir),'muted',True))
         actions=row();actions.addStretch();actions.addWidget(button('取消',self.reject));self.install_button=button('开始安装',self.install,'primary','download');actions.addWidget(self.install_button);body.addLayout(actions)
         self.query.textChanged.connect(self.render_versions);self.snapshots.toggled.connect(self.render_versions)

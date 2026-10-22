@@ -32,12 +32,19 @@ def config_for(widget):
 def appearance_values(config=None):
     config=config if config is not None else {}
     values={'color_mode':config.get('color_mode','dark')}
+    preview=getattr(config,'_qt_appearance_preview',{})
+    values['bold_text']=bool(preview.get('bold_text',config.get('bold_text',False)))
     if values['color_mode'] not in PALETTES:values['color_mode']='dark'
     for key in ('text_transparency','ui_transparency','background_transparency'):
-        try:value=int(config.get(key,0))
+        try:value=int(preview.get(key,config.get(key,0)))
         except (TypeError,ValueError):value=0
-        values[key]=max(0,min(70 if key=='text_transparency' else 100,value))
+        values[key]=max(0,min(70 if key=='text_transparency' else 90 if key=='ui_transparency' else 100,value))
     return values
+
+
+def surface_opacity(config=None):
+    """Opacity of non-text surfaces; text retains its independent setting."""
+    return 1-appearance_values(config)['ui_transparency']/100
 
 
 def palette_for(widget):return PALETTES[appearance_values(config_for(widget))['color_mode']]
@@ -106,20 +113,25 @@ QLabel#authCode { color:ACCENT; }
             color=match.group(1);rgb=tuple(int(color[i:i+2],16) for i in (1,3,5))
             return 'color:rgba(%d,%d,%d,%d)'%(*rgb,alpha)
         style=re.sub(r'(?<![-\w])color:\s*(#[0-9a-fA-F]{6})',text_alpha,style)
-    factor=1-values['ui_transparency']/100
-    panels=('QFrame#card','QWidget#settingsSection','QWidget#sidebar','QWidget#toolbar','QWidget#contextPanel','QTreeWidget','QWidget#listRow')
-    def surface_alpha(match):
-        selector,body=match.group(1),match.group(2)
-        if any(panel in selector for panel in panels):
-            def background(match):
-                value=match.group(1)
-                if value.startswith('#'):
-                    rgba=[int(value[i:i+2],16) for i in (1,3,5)]+[255]
-                else:rgba=[int(v) for v in re.findall(r'\d+',value)]
-                return 'background:rgba(%d,%d,%d,%d)'%(*rgba[:3],round(rgba[3]*factor))
-            body=re.sub(r'background:\s*(#[0-9a-fA-F]{6}|rgba\([\d,]+\))',background,body)
-        return selector+'{'+body+'}'
-    return re.sub(r'([^{}]+)\{([^{}]*)\}',surface_alpha,style)
+    from PySide6.QtGui import QColor
+    tint=QColor(PALETTES[mode]['base'])
+    backdrop='rgba(%d,%d,%d,150)'%tint.getRgb()[:3]
+    style+='\nQWidget#sidebar[wallpaperUnderlay="true"],QWidget#toolbar[wallpaperUnderlay="true"] { background:'+backdrop+'; border:0; }\n'
+    factor=surface_opacity(config)
+    def fade_surface(match):
+        def fade_color(color_match):
+            color=QColor(color_match.group())
+            # QColor's CSS rgba parsing varies across Qt versions; parse explicitly.
+            if color_match.group().startswith('rgba'):
+                rgba=[int(part) for part in re.findall(r'\d+',color_match.group())]
+                color=QColor(*rgba)
+            return 'rgba(%d,%d,%d,%d)'%(*color.getRgb()[:3],round(color.alpha()*factor))
+        return match.group(1)+re.sub(r'#[0-9a-fA-F]{6}|rgba\([\d,]+\)',fade_color,match.group(2))
+    # Fade only fills and outlines. Foreground color declarations stay untouched.
+    style=re.sub(r'((?<![-\w])(?:background(?:-color)?|selection-background-color|border(?:-(?:top|right|bottom|left))?(?:-color)?)\s*:\s*)([^;}]+)',fade_surface,style)
+    style+='\nQMainWindow { background:transparent; }\n'
+    if values['bold_text']:style+='\nQWidget,QLabel#eyebrow,QLabel#muted { font-weight:600; }\n'
+    return style
 
 STYLE = '''
 QMainWindow,QDialog { background:#14181d; }
@@ -160,11 +172,16 @@ QPushButton[role='tab'] { border-radius:0; border-bottom:2px solid transparent; 
 QPushButton[role='tab']:checked { border-bottom-color:#cebafa; background:#352d41; }
 QLineEdit,QComboBox,QSpinBox,QPlainTextEdit,QListWidget { background:#252d35; color:#edf2f4; border:1px solid #35404a; border-radius:6px; padding:7px 10px; selection-background-color:#66557c; }
 QLineEdit,QComboBox,QSpinBox { min-height:22px; }
+QSlider::groove:horizontal { height:4px; border-radius:2px; background:#35404a; }
+QSlider::sub-page:horizontal { background:#cebafa; border-radius:2px; }
+QSlider::handle:horizontal { background:#cebafa; width:14px; margin:-5px 0; border-radius:7px; }
+QSlider::handle:horizontal:hover { background:#e0d1ff; }
 QLineEdit:focus,QComboBox:focus,QPlainTextEdit:focus,QSpinBox:focus { border-color:#a58acb; }
 QComboBox::drop-down { border:0; width:24px; }
 QComboBox QAbstractItemView,QMenu { background:#252d35; color:#edf2f4; border:1px solid #43515a; selection-background-color:#493e59; }
-QMenu::item { padding:9px 22px; }
+QMenu::item { padding:9px 22px; border-radius:6px; }
 QMenu::item:selected { background:#493e59; }
+QMenu::separator { height:1px; margin:5px 8px; background:#35404a; }
 QTreeWidget { background:#1c2229; color:#edf2f4; border:1px solid #303941; border-radius:8px; padding:0; selection-background-color:#443852; }
 QTreeWidget::item { padding:12px 9px; border-bottom:1px solid #303941; }
 QTreeWidget::item:hover { background:#252f37; }
@@ -182,7 +199,7 @@ QCheckBox { spacing:9px; padding:5px 0; min-height:20px; }
 QCheckBox::indicator { width:16px; height:16px; border:1px solid #8a9ba5; border-radius:4px; background:transparent; }
 QCheckBox::indicator:checked { background:#cebafa; border-color:#cebafa; }
 QCheckBox::indicator:disabled { background:#2a3239; border-color:#4b575f; }
-QToolTip { background:#303c44; color:#f2f7f8; border:1px solid #50616a; padding:8px; }
+QToolTip { background:#303c44; color:#f2f7f8; border:1px solid #50616a; border-radius:6px; padding:8px; }
 QWidget#settingRow { background:transparent; border-bottom:1px solid #303941; }
 QWidget#settingRow:hover { background:rgba(187,221,221,7); }
 QWidget#settingRow QLineEdit,QWidget#settingRow QComboBox,QWidget#settingRow QSpinBox { background:transparent; border:1px solid transparent; padding:6px 8px; }
@@ -191,4 +208,11 @@ QSpinBox QLineEdit,QWidget#settingRow QSpinBox QLineEdit { padding:0; min-height
 QWidget#listRow { background:#1c2229; border-bottom:1px solid #303941; }
 QWidget#listRow:hover { background:#252f37; }
 QDialog[embedded='true'] { background:transparent; }
+QDialog#instancePicker,QTreeWidget#instancePickerList { background:transparent; border:0; }
+QTreeWidget#instancePickerList::item,QTreeWidget#instancePickerList::item:selected,QTreeWidget#instancePickerList::item:hover { padding:0; border:0; background:transparent; }
+QFrame#choicePopup,QListView#choiceList,QMenu { background:transparent; border:0; }
+QMenu { padding:6px; }
+QListView#choiceList { outline:0; padding:0; }
+QListView#choiceList::item,QListView#choiceList::item:selected,QListView#choiceList::item:hover { background:transparent; border:0; padding:0; }
+QLineEdit#choiceSearch { background:#252d35; border:1px solid #35404a; border-radius:7px; padding:7px 10px; }
 '''

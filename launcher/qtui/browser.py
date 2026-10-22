@@ -1,4 +1,5 @@
 """Persistent content browser: fixed controls, one scrolling result surface."""
+from .choices import ChoiceComboBox
 from PySide6.QtCore import Qt,QTimer
 from PySide6.QtWidgets import QWidget,QLineEdit,QComboBox
 from .widgets import Page,Empty,ContentRow,column,row,label,button,clear
@@ -15,16 +16,16 @@ class ContentBrowser(QWidget):
         body=column(self,24,14)
         header=row();header.addWidget(label(TITLES[kind],'title'),1);header.addWidget(label('MODRINTH','eyebrow'));body.addLayout(header)
         self.context=QWidget();self.context.setObjectName('contextPanel');context=row(self.context,12,12)
-        context.addWidget(label('安装目标','muted'));self.target=QComboBox();self.target.setMinimumWidth(200);context.addWidget(self.target,1)
+        context.addWidget(label('安装目标','muted'));self.target=ChoiceComboBox();self.target.setMinimumWidth(200);context.addWidget(self.target,1)
         self.target_detail=label('','muted');context.addWidget(self.target_detail)
         self.switch_target=button('切换实例',self.target.showPopup,'soft');context.addWidget(self.switch_target);body.addWidget(self.context)
         filters=row(spacing=10);self.query=QLineEdit();self.query.setPlaceholderText('搜索名称、作者或关键词');self.query.setClearButtonEnabled(True);filters.addWidget(self.query,1)
         self.game=QLineEdit();self.game.setPlaceholderText('游戏版本');self.game.setToolTip('筛选 Minecraft 版本');self.game.setFixedWidth(118);filters.addWidget(self.game)
-        self.loader=QComboBox();self.loader.setFixedWidth(136)
+        self.loader=ChoiceComboBox();self.loader.setFixedWidth(136)
         for title,value in [('不限加载器',''),('Fabric','fabric'),('Forge','forge'),('NeoForge','neoforge'),('Quilt','quilt')]:self.loader.addItem(title,value)
         self.loader.setEnabled(kind in ('mod','modpack'));filters.addWidget(self.loader)
         self.go=button('搜索',lambda:self.search(0),'primary','search');filters.addWidget(self.go);body.addLayout(filters)
-        summary=row();self.summary=label('搜索并选择适合你的内容','muted');summary.addWidget(self.summary,1)
+        summary=row();self.summary=label('','muted');summary.addWidget(self.summary,1)
         self.reset=button('按实例匹配',self.match_target);self.reset.setToolTip('恢复当前实例的游戏版本和加载器筛选');summary.addWidget(self.reset);body.addLayout(summary)
         self.results=Page();self.results.body.setSpacing(0);body.addWidget(self.results,1)
         footer=row();self.message=label('','muted');footer.addWidget(self.message,1)
@@ -73,7 +74,7 @@ class ContentBrowser(QWidget):
     def empty(self):
         clear(self.results.body);self.total=0;self.page_number=0
         self.results.body.addWidget(Empty('搜索'+TITLES[self.kind],'输入名称或关键词，查看兼容版本并安装。','search'))
-        self.summary.setText('搜索并选择适合你的内容');self.message.setText('整合包将创建新实例' if self.kind=='modpack' else '内容会安装到上方选中的实例')
+        self.summary.setText('');self.message.setText('整合包将创建新实例' if self.kind=='modpack' else '')
 
     def update_paging(self):
         pages=max(1,(self.total+self.PAGE_SIZE-1)//self.PAGE_SIZE)

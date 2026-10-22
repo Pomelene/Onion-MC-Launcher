@@ -1,24 +1,82 @@
 """Instance selection and management keep every action bound to one instance."""
-from PySide6.QtCore import Qt,QPoint
-from PySide6.QtWidgets import QWidget,QDialog,QLineEdit,QTreeWidget,QTreeWidgetItem,QStackedWidget,QFormLayout,QMessageBox
-from .widgets import Page,Card,column,row,label,button,clear
+from PySide6.QtCore import Qt,QPoint,QRectF,QSize,QEvent
+from PySide6.QtGui import QColor,QPainter,QPen,QFont,QFontMetrics
+from PySide6.QtWidgets import QWidget,QDialog,QLineEdit,QTreeWidget,QTreeWidgetItem,QStackedWidget,QFormLayout,QMessageBox,QStyledItemDelegate,QStyle
+from .widgets import Page,Card,column,row,label,button,clear,icon,control_accent
+from .theme import paint_color,surface_opacity,config_for,contrasting_accent,appearance_values
+
+
+class InstanceChoiceDelegate(QStyledItemDelegate):
+    def __init__(self,picker):super().__init__(picker.tree);self.picker=picker
+
+    def sizeHint(self,option,index):return QSize(320,64)
+
+    def paint(self,painter,option,index):
+        picker=self.picker;vid=index.data(Qt.ItemDataRole.UserRole)
+        current=vid==picker.launcher.selected_version
+        painter.save();painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        rect=QRectF(option.rect).adjusted(2,2,-2,-2);accent=QColor(control_accent(picker));factor=surface_opacity(config_for(picker))
+        if current or option.state & (QStyle.StateFlag.State_Selected|QStyle.StateFlag.State_MouseOver):
+            fill=QColor(accent);fill.setAlpha(round((42 if current else 22)*factor))
+            painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(fill);painter.drawRoundedRect(rect,10,10)
+        badge=QRectF(rect.left()+12,rect.top()+12,36,36)
+        tint=QColor(accent);tint.setAlpha(round(25*factor));painter.setBrush(tint);painter.setPen(Qt.PenStyle.NoPen);painter.drawRoundedRect(badge,9,9)
+        icon('package',paint_color(picker,'icon')).paint(painter,int(badge.x()+8),int(badge.y()+8),20,20)
+        x=rect.left()+60;width=max(0,int(rect.width()-x+rect.left()-36))
+        bold=appearance_values(config_for(picker))['bold_text']
+        font=QFont(picker.font());font.setPixelSize(14);font.setWeight(QFont.Weight.DemiBold if current or bold else QFont.Weight.Normal)
+        painter.setFont(font);painter.setPen(paint_color(picker,'text',text=True))
+        painter.drawText(QRectF(x,rect.top()+10,width,22),Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(index.data() or '',Qt.TextElideMode.ElideRight,width))
+        font.setPixelSize(12);font.setWeight(QFont.Weight.DemiBold if bold else QFont.Weight.Normal);painter.setFont(font);painter.setPen(paint_color(picker,'muted',text=True))
+        painter.drawText(QRectF(x,rect.top()+33,width,18),Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(index.data(Qt.ItemDataRole.UserRole+1) or '',Qt.TextElideMode.ElideRight,width))
+        if current:
+            marker=QColor(contrasting_accent(accent.name(),appearance_values(config_for(picker))['color_mode']))
+            painter.setPen(QPen(marker,1.8,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
+            right=rect.right()-14;y=rect.center().y();painter.drawLine(QPoint(int(right-8),int(y)),QPoint(int(right-5),int(y+3)));painter.drawLine(QPoint(int(right-5),int(y+3)),QPoint(int(right+1),int(y-4)))
+        painter.restore()
 
 
 class InstancePicker(QDialog):
     def __init__(self,launcher):
-        super().__init__(launcher,Qt.WindowType.Popup);self.launcher=launcher;self.resize(380,390)
-        body=column(self,12,10);self.query=QLineEdit();self.query.setPlaceholderText('搜索实例名称、版本或分组');body.addWidget(self.query)
-        self.tree=QTreeWidget();self.tree.setHeaderHidden(True);self.tree.setRootIsDecorated(False);self.tree.setColumnCount(2);self.tree.setColumnWidth(0,210);self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff);body.addWidget(self.tree,1)
-        body.addWidget(button('打开完整实例列表',self.open_list,'soft','grid'))
+        super().__init__(launcher,Qt.WindowType.Popup|Qt.WindowType.FramelessWindowHint);self.launcher=launcher;self.resize(400,420)
+        self.setObjectName('instancePicker');self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground,True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoMouseReplay,True)
+        body=column(self,14,10);heading=row();heading.addWidget(label('选择实例','heading'),1);self.count=label('','muted');heading.addWidget(self.count);body.addLayout(heading)
+        self.query=QLineEdit();self.query.setPlaceholderText('搜索实例');self.query.setClearButtonEnabled(True);self.query.addAction(icon('search',paint_color(self,'icon')),QLineEdit.ActionPosition.LeadingPosition);body.addWidget(self.query)
+        self.tree=QTreeWidget();self.tree.setObjectName('instancePickerList');self.tree.setHeaderHidden(True);self.tree.setRootIsDecorated(False);self.tree.setColumnCount(1)
+        self.tree.setUniformRowHeights(True);self.tree.setMouseTracking(True);self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.tree.setItemDelegate(InstanceChoiceDelegate(self));body.addWidget(self.tree,1)
+        self.empty=label('没有匹配的实例','muted');self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter);body.addWidget(self.empty)
+        body.addWidget(button('管理实例',self.open_list,'soft','grid'))
         self.query.textChanged.connect(self.filter);self.tree.itemClicked.connect(self.choose)
         self.query.returnPressed.connect(lambda:self.choose(self.tree.currentItem()) if self.tree.currentItem() else None);self.filter()
+        self.query.installEventFilter(self);self.tree.installEventFilter(self)
+
+    def paintEvent(self,event):
+        p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        fill=paint_color(self,'surface');factor=surface_opacity(config_for(self));fill.setAlpha(round(250*factor))
+        border=paint_color(self,'icon');border.setAlpha(round(55*factor));p.setPen(QPen(border,1));p.setBrush(fill)
+        p.drawRoundedRect(QRectF(self.rect()).adjusted(.5,.5,-.5,-.5),16,16)
+
+    def eventFilter(self,watched,event):
+        if event.type()==QEvent.Type.KeyPress:
+            if event.key()==Qt.Key.Key_Down and watched is self.query and self.tree.topLevelItemCount():
+                self.tree.setFocus();self.tree.setCurrentItem(self.tree.topLevelItem(0));return True
+            if event.key() in (Qt.Key.Key_Return,Qt.Key.Key_Enter) and watched is self.tree:
+                self.choose(self.tree.currentItem());return True
+        return super().eventFilter(watched,event)
 
     def filter(self):
         w=self.launcher;query=self.query.text().strip().lower();self.tree.clear()
-        for vid in w.versions:
+        for vid in sorted(w.versions,key=lambda v:(w.instances.display_name(v).casefold(),v.casefold())):
             if query not in (vid+' '+w.instances.display_name(vid)+' '+w.instances.get(vid).group).lower():continue
-            item=QTreeWidgetItem([w.instances.display_name(vid),w.kinds.get(vid,'原版')]);item.setData(0,Qt.ItemDataRole.UserRole,vid);item.setToolTip(0,vid);self.tree.addTopLevelItem(item)
+            kind=w.kinds.get(vid,'原版');version=vid[:-(len(kind)+1)] if vid.casefold().endswith('-'+kind.casefold()) else vid
+            detail=' · '.join(part for part in (version,kind,w.instances.get(vid).group) if part)
+            item=QTreeWidgetItem([w.instances.display_name(vid)]);item.setData(0,Qt.ItemDataRole.UserRole,vid);item.setData(0,Qt.ItemDataRole.UserRole+1,detail)
+            item.setToolTip(0,w.instances.display_name(vid)+'\n'+vid+' · '+kind);self.tree.addTopLevelItem(item)
             if vid==w.selected_version:self.tree.setCurrentItem(item)
+        count=self.tree.topLevelItemCount();self.count.setText(str(count));self.empty.setVisible(not count);self.tree.setVisible(bool(count))
+        if count and self.tree.currentItem() is None:self.tree.setCurrentItem(self.tree.topLevelItem(0))
 
     def choose(self,item,column=0):
         if item and self.launcher.set_selected(item.data(0,Qt.ItemDataRole.UserRole)):self.accept()
@@ -26,9 +84,12 @@ class InstancePicker(QDialog):
     def open_list(self):self.accept();self.launcher.navigate('versions')
 
     def show_above(self,anchor):
-        point=anchor.mapToGlobal(QPoint(anchor.width()-self.width(),-self.height()-8))
-        screen=anchor.screen().availableGeometry();self.move(max(screen.left(),min(point.x(),screen.right()-self.width())),max(screen.top(),point.y()))
+        screen=anchor.screen().availableGeometry();height=164+max(1,min(5,self.tree.topLevelItemCount()))*64
+        self.resize(min(400,screen.width()-16),min(height,460,screen.height()-32))
+        point=anchor.mapToGlobal(QPoint(anchor.width()-self.width(),-self.height()-10))
+        self.move(max(screen.left()+8,min(point.x(),screen.right()-self.width()-8)),max(screen.top()+8,min(point.y(),screen.bottom()-self.height()-8)))
         self.show();self.query.setFocus()
+        if self.tree.currentItem():self.tree.scrollToItem(self.tree.currentItem())
 
 
 class InstanceWorkspace(QWidget):

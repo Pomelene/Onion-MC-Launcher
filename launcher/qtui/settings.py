@@ -1,7 +1,7 @@
 """Grouped settings with debounced, validated automatic persistence."""
 from PySide6.QtCore import Qt,QTimer
 from PySide6.QtWidgets import (QWidget,QStackedWidget,QLineEdit,QComboBox,QSpinBox,
-    QCheckBox,QFileDialog,QMessageBox,QDialog,QColorDialog)
+    QCheckBox,QFileDialog,QMessageBox,QDialog,QSlider)
 from PySide6.QtGui import QColor
 from .widgets import Page,SettingsSection as Card,ToggleSwitch,InlineSpinBox,SettingsComboBox,column,row,label,button,setting_row,icon
 from .theme import paint_color
@@ -12,6 +12,10 @@ class SettingsEditor(QWidget):
         super().__init__();self.launcher=window;self.vid=version_id;self.fields={};self.overrides={};self.flat=flat;self.custom_controls=[]
         self.values=window.version_settings.get(version_id) if version_id else window.config_obj.data.copy()
         self.dirty=False
+        self.sliders={}
+        self.unit_labels={};self.number_hints={};self.numeric_holders={}
+        self.preview_timer=QTimer(self);self.preview_timer.setSingleShot(True);self.preview_timer.setInterval(33)
+        self.preview_timer.timeout.connect(self.preview_transparency)
         self.ready=False
         self.autosave_timer=QTimer(self);self.autosave_timer.setSingleShot(True)
         self.autosave_timer.setInterval(450);self.autosave_timer.timeout.connect(self._autosave)
@@ -87,8 +91,9 @@ class SettingsEditor(QWidget):
         if not version_id:
             body=tab('下载与网络','download');card=Card('下载设置','修改后会用于后续下载任务。')
             self.combo(card,'download_source','下载源','游戏与资源文件的下载服务',[('Mojang 官方','mojang'),('BMCLAPI 镜像','bmclapi')])
-            self.spin(card,'max_download_threads','并发下载数','同时进行的文件下载数量',1,32,1)
-            self.spin(card,'download_speed_limit','下载限速','单位 KiB/s；0 表示不限速',0,100000,256);body.addWidget(card)
+            self.number_slider(card,'max_download_threads','并发下载数','同时进行的文件下载数量',1,32,' 个')
+            self.spin(card,'download_speed_limit','下载限速','单位 KiB/s；0 表示不限速',0,100000,256)
+            body.addWidget(card)
             card=Card('代理连接','留空时直连。仅影响启动器网络请求。')
             self.edit(card,'proxy_host','代理主机','HTTP 代理服务器地址','例如 127.0.0.1')
             self.spin(card,'proxy_port','代理端口','0 表示不启用代理',0,65535,1);body.addWidget(card)
@@ -100,38 +105,59 @@ class SettingsEditor(QWidget):
             card.body.addWidget(button('管理游戏账号',window.open_accounts,'soft','account'));body.addWidget(card)
             body=tab('外观','grid');card=Card('界面外观','透明度越高，显示越淡；修改后自动保存。')
             self.combo(card,'color_mode','显示模式','切换启动器的深色或浅色外观',[('深色','dark'),('浅色','light')])
+            self.check(card,'bold_text','粗体文字','加粗启动器界面文字');self.fields['bold_text'].toggled.connect(self.queue_preview)
             for key,title,description,high in [
                 ('text_transparency','文字透明度','0% 为不透明，最高 70%，保留基本可读性',70),
-                ('ui_transparency','UI 透明度','调整导航、面板和列表底色的透明程度',100)]:
-                self.spin(card,key,title,description,0,high,5);self.fields[key].setSuffix('%')
+                ('ui_transparency','UI 透明度','窗口背景与控件底色透出后方窗口；文字透明度独立控制',90)]:
+                self.percentage(card,key,title,description,high)
             body.addWidget(card)
             card=Card('特征色','用于高亮设置行中可点击或编辑的文字。')
             self.edit(card,'accent_color','高亮颜色','输入六位十六进制颜色，例如 #cebafa','#cebafa')
             if not self.fields['accent_color'].text():self.fields['accent_color'].setText('#cebafa')
             def choose_accent():
-                color=QColorDialog.getColor(QColor(self.fields['accent_color'].text()),self,'选择特征色')
-                if color.isValid():self.fields['accent_color'].setText(color.name())
+                from .color_picker import ColorPicker
+                picker=ColorPicker(QColor(self.fields['accent_color'].text()),self)
+                if picker.exec()==QDialog.DialogCode.Accepted:self.fields['accent_color'].setText(picker.color.name())
             setting_row(card.body,'颜色选择器','选择后自动保存',button('选择颜色',choose_accent,'soft'));body.addWidget(card)
             card=Card('动态效果','关闭后，页面与控件立即切换。')
             self.check(card,'ui_animations','界面动效','导航胶囊滑动、按钮按压和开关滑动；关闭可减少动态效果');body.addWidget(card)
             card=Card('首页背景','独立设置背景显示方式与透明度，不改变首页按钮和文字。')
+            self.combo(card,'background_scope','背景范围','整个窗口会将背景延伸至导航栏和标题栏',[
+                ('仅主页内容区','content'),('整个窗口（含导航栏）','window')])
             self.combo(card,'background_mode','图片显示方式','填充会裁切，适应会保留完整图片',[
                 ('填充（保持比例，裁切）','fill'),('自适应（完整显示）','fit'),
                 ('拉伸（铺满）','stretch'),('居中（原始大小）','center'),('平铺','tile')])
-            self.spin(card,'background_transparency','背景透明度','0% 为完整显示；100% 为隐藏图片及装饰',0,100,5)
-            self.fields['background_transparency'].setSuffix('%')
-            field=QLineEdit(str(self.initial('background_image') or ''));field.setPlaceholderText('使用默认背景');self.add(card,'background_image','自定义图片','支持 PNG、JPG 和 WebP',field)
+            self.percentage(card,'background_transparency','背景透明度','0% 为完整显示；100% 为隐藏图片及装饰',100)
+            field=QLineEdit(str(self.initial('background_image') or ''));field.setPlaceholderText('使用默认背景');field.setProperty('wideEditor',True);self.add(card,'background_image','自定义图片','支持 PNG、JPG 和 WebP',field)
             def choose_background():
                 path,_=QFileDialog.getOpenFileName(self,'选择首页背景','','图片 (*.png *.jpg *.jpeg *.webp)')
                 if path:field.setText(path)
-            actions=row();actions.addWidget(button('选择图片',choose_background,'soft','folder'));actions.addWidget(button('恢复默认',lambda:field.clear()));actions.addStretch();card.body.addLayout(actions);body.addWidget(card)
+            picture_actions=QWidget();actions=row(picture_actions,0,12)
+            for title,callback,glyph in [('选择图片',choose_background,'folder'),('恢复默认',lambda:field.clear(),None)]:
+                action=button(title,callback,'soft',glyph);action.setProperty('settingAction',True);action.setMinimumWidth(112);actions.addWidget(action)
+            setting_row(card.body,'图片操作','',picture_actions);body.addWidget(card)
+            card=Card('首页欢迎语')
+            self.check(card,'custom_home_welcome','自定义主界面欢迎字样','默认不显示；开启后显示下方自定义内容')
+            self.edit(card,'home_welcome_large','大字','','输入欢迎语；留空不显示')
+            self.edit(card,'home_welcome_small','小字','','输入欢迎语；留空不显示')
+            for key in ('home_welcome_large','home_welcome_small'):self.fields[key].setMaxLength(120)
+            def preview_welcome(*args):
+                custom=self.fields['custom_home_welcome'].isChecked()
+                for key in ('home_welcome_large','home_welcome_small'):self.fields[key].setEnabled(custom)
+                window.update_home_welcome({
+                    'custom_home_welcome':custom,
+                    'home_welcome_large':self.fields['home_welcome_large'].text().strip(),
+                    'home_welcome_small':self.fields['home_welcome_small'].text().strip()})
+            self.fields['custom_home_welcome'].toggled.connect(preview_welcome)
+            for key in ('home_welcome_large','home_welcome_small'):self.fields[key].textChanged.connect(preview_welcome)
+            preview_welcome();body.addWidget(card)
         body=tab('高级参数','settings');card=Card('启动参数','通常保持默认即可。额外参数会传递给 Java 或游戏。')
         self.edit(card,'jvm_args','JVM 参数','支持用引号包裹含空格的参数','留空使用默认参数')
         self.edit(card,'game_args','游戏参数','附加到游戏启动命令','留空使用默认参数')
         if not version_id:self.check(card,'demo','试玩模式','仅在需要 Minecraft 试玩时开启')
         body.addWidget(card)
         nav.addStretch();self.select_tab(0)
-        bar=row();self.hint=label('设置将自动保存','muted');bar.addWidget(self.hint,1)
+        bar=row();self.hint=label('','muted');bar.addWidget(self.hint,1)
         if version_id and not flat:bar.addWidget(button('全部跟随全局',self.inherit_all))
         outer.addLayout(bar)
         if flat:
@@ -146,10 +172,8 @@ class SettingsEditor(QWidget):
                 self.global_settings_button.setVisible(not checked)
             def specific_changed(checked):
                 enable_controls(checked);self.mark_dirty()
-                self.hint.setText('实例独立配置将自动保存' if checked else '将自动恢复使用全局游戏设置')
             self.specific.toggled.connect(specific_changed)
             enable_controls(self.specific.isChecked())
-            self.hint.setText('当前使用实例特定设置' if self.specific.isChecked() else '当前跟随全局游戏设置；勾选上方选项后可独立调整')
 
         self.ready=True;self.dirty=False
 
@@ -174,7 +198,6 @@ class SettingsEditor(QWidget):
     def mark_dirty(self,*args):
         if not self.ready:return
         self.dirty=True
-        self.hint.setText('正在自动保存…')
         self.autosave_timer.start()
 
     def initial(self,key):
@@ -182,13 +205,14 @@ class SettingsEditor(QWidget):
         translated={'width':'window_width','height':'window_height','isolate':'version_isolation'}
         return self.launcher.config_obj.get(translated.get(key,key))
 
-    def add(self,card,key,title,description,field):
+    def add(self,card,key,title,description,field,control=None):
         field.setObjectName('setting_'+key);self.fields[key]=field
         if self.vid and not self.flat:
-            field.setMinimumWidth(220);field.setMaximumWidth(310)
-            holder=column(spacing=5);holder.addWidget(field)
+            if control is None:field.setMinimumWidth(360 if field.property('wideEditor') else 220);field.setMaximumWidth(960 if field.property('wideEditor') else 310)
+            holder=column(spacing=5);holder.addWidget(control if control is not None else field)
             override=QCheckBox('单独设置');override.setChecked(key in self.values);self.overrides[key]=override
             field.setEnabled(override.isChecked());override.toggled.connect(field.setEnabled);override.toggled.connect(self.mark_dirty);holder.addWidget(override)
+            if control is not None:control.setEnabled(override.isChecked());override.toggled.connect(control.setEnabled)
             def inherit(checked):
                 if checked:return
                 translated={'width':'window_width','height':'window_height','isolate':'version_isolation'}
@@ -199,7 +223,7 @@ class SettingsEditor(QWidget):
                 else:field.setText(str(value or ''))
             override.toggled.connect(inherit)
             setting_row(card.body,title,description,holder)
-        else:setting_row(card.body,title,description,field)
+        else:setting_row(card.body,title,description,control if control is not None else field)
         if isinstance(field,QCheckBox):field.toggled.connect(self.mark_dirty)
         elif isinstance(field,QSpinBox):field.valueChanged.connect(self.mark_dirty)
         elif isinstance(field,QComboBox):field.currentIndexChanged.connect(self.mark_dirty)
@@ -207,6 +231,7 @@ class SettingsEditor(QWidget):
 
     def edit(self,card,key,title,description,placeholder,browse=None):
         field=QLineEdit(str(self.initial(key) or ''));field.setPlaceholderText(placeholder)
+        if browse or key in ('jvm_args','game_args','server_address','home_welcome_large','home_welcome_small'):field.setProperty('wideEditor',True)
         self.add(card,key,title,description,field)
         if browse:
             def choose():
@@ -218,7 +243,46 @@ class SettingsEditor(QWidget):
 
     def spin(self,card,key,title,description,low,high,step):
         field=InlineSpinBox();field.setRange(low,high);field.setSingleStep(step);field.setKeyboardTracking(False);field.setValue(int(self.initial(key) or 0))
-        self.add(card,key,title,description,field)
+        unit='MiB' if key in ('min_memory','max_memory') else 'px' if key in ('width','height','window_width','window_height') else 'KiB/s' if key=='download_speed_limit' else ''
+        holder=self.number_holder(key,field,unit) if unit else None
+        self.add(card,key,title,description,field,holder)
+
+    def number_holder(self,key,field,unit,slider=None):
+        holder=QWidget();holder.setObjectName('numberEditor');holder.setMinimumWidth(320);holder.setMaximumWidth(420)
+        line=row(holder,0,8)
+        if slider is not None:line.addWidget(slider,1)
+        else:line.addStretch(1)
+        if key=='download_speed_limit':
+            hint=label('','muted');hint.setFixedWidth(60);self.number_hints[key]=hint;line.addWidget(hint)
+            def update_hint(value):hint.setText('不限速' if value==0 else '')
+            field.valueChanged.connect(update_hint);update_hint(field.value())
+        field.setSuffix('');field.setSpecialValueText('');field.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+        field.setAlignment(Qt.AlignmentFlag.AlignRight);field.setFixedWidth(96);line.addWidget(field)
+        caption=label(unit,'muted');caption.setFixedWidth(48);caption.setAlignment(Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter)
+        line.addWidget(caption);self.unit_labels[key]=caption;self.numeric_holders[key]=holder
+        return holder
+
+    def percentage(self,card,key,title,description,high):
+        self.number_slider(card,key,title,description,0,high,'%',preview=True)
+
+    def number_slider(self,card,key,title,description,low,high,suffix='',preview=False):
+        field=InlineSpinBox();field.setRange(low,high);field.setSingleStep(1);field.setKeyboardTracking(False)
+        field.setValue(int(self.initial(key) or 0));field.setAccessibleName(title+'数值')
+        slider=QSlider(Qt.Orientation.Horizontal);slider.setRange(low,high);slider.setSingleStep(1);slider.setPageStep(5)
+        slider.setMinimumHeight(28);slider.setValue(field.value());slider.setAccessibleName(title+'滑动条')
+        slider.valueChanged.connect(field.setValue);field.valueChanged.connect(slider.setValue)
+        holder=self.number_holder(key,field,suffix.strip(),slider);self.sliders[key]=slider
+        self.add(card,key,title,description,field,holder)
+        if preview:field.valueChanged.connect(self.queue_preview)
+
+    def queue_preview(self,*args):
+        if self.ready and not self.preview_timer.isActive():self.preview_timer.start()
+
+    def preview_transparency(self):
+        if self.vid:return
+        self.launcher.config_obj._qt_appearance_preview={key:self.fields[key].value() for key in ('ui_transparency','text_transparency','background_transparency') if key in self.fields}
+        self.launcher.config_obj._qt_appearance_preview['bold_text']=self.fields['bold_text'].isChecked()
+        self.launcher.apply_appearance()
 
     def check(self,card,key,title,description):
         field=ToggleSwitch();field.setChecked(bool(self.initial(key)));self.add(card,key,title,description,field)
@@ -252,6 +316,7 @@ class SettingsEditor(QWidget):
 
     def save(self,quiet=False):
         self.autosave_timer.stop()
+        self.preview_timer.stop()
         w=self.launcher
         try:
             if w.mutating or w.launch_pending:
@@ -277,7 +342,8 @@ class SettingsEditor(QWidget):
                 previous={key:w.config_obj.get(key) for key in values}
                 changed={key for key,value in values.items() if previous[key]!=value}
                 w.config_obj.update(values)
-                if changed & {'accent_color','color_mode','text_transparency','ui_transparency','background_image','background_mode','background_transparency'}:
+                w.config_obj._qt_appearance_preview={}
+                if changed & {'accent_color','color_mode','bold_text','text_transparency','ui_transparency','background_image','background_mode','background_transparency','background_scope'}:
                     w.apply_appearance()
                 from .motion import apply_motion_preferences
                 apply_motion_preferences(w)
@@ -286,7 +352,7 @@ class SettingsEditor(QWidget):
                     w.repo=GameRepository(w.config_obj)
                 if 'game_dir' in changed:w.reload_versions(refresh_page=True)
                 if w.instance_editor:w.instance_editor.refresh_inherited()
-            self.dirty=False;self.refresh_inherited();self.hint.setText('已自动保存');w.status.setText('设置已自动保存')
+            self.dirty=False;self.refresh_inherited();self.hint.setText('');w.status.setText('')
             if self.vid and metadata:w.reload_versions(refresh_page=False)
             return True
         except Exception as error:

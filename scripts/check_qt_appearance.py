@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'.deps/qt')]
 os.environ['QT_QPA_PLATFORM']='offscreen'
-from PySide6.QtCore import QSize,QRectF
+from PySide6.QtCore import QSize,QRectF,QRect,QPoint
 from PySide6.QtGui import QImage,QColor,QPainter
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication,QLabel,QLineEdit,QSpinBox,QComboBox
@@ -70,7 +70,8 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-appearance-') as fold
     screenshot(window,'qt-appearance-light.png')
     for size in ((1100,740),(1440,900)):
         window.resize(*size);app.processEvents()
-        assert all(field.width()>=100 for field in editor.fields.values() if field.isVisible() and isinstance(field,(QLineEdit,QSpinBox,QComboBox)))
+        assert all(field.width()>=(76 if key in editor.sliders else 100) for key,field in editor.fields.items() if field.isVisible() and isinstance(field,(QLineEdit,QSpinBox,QComboBox)))
+        assert all(slider.width()>=150 for slider in editor.sliders.values() if slider.isVisible())
     change('text_transparency',0);change('ui_transparency',0)
     screenshot(window,'qt-appearance-light-default.png')
     # Custom painted content text and fallback icons adopt the same palette.
@@ -85,12 +86,15 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-appearance-') as fold
     change('background_image',str(wallpaper))
     window.navigate('home');app.processEvents();canvas=next(c for c in window.findChildren(HomeCanvas) if c.isVisible())
     assert canvas.image.size()==image.size()
-    visible=render(canvas)
+    def render_wallpaper():
+        root=window.centralWidget()
+        return render(root).copy(QRect(canvas.mapTo(root,QPoint(0,0)),canvas.size()))
+    visible=render_wallpaper()
     window.config_obj.set('background_transparency',100);window.apply_appearance()
-    hidden=render(canvas)
+    hidden=render_wallpaper()
     assert visible!=hidden and canvas.image.size()==image.size()
     window.config_obj.set('background_transparency',0);window.config_obj.set('background_mode','tile');window.apply_appearance()
-    tiled=render(canvas)
+    tiled=render_wallpaper()
     assert tiled.pixelColor(3,8)==tiled.pixelColor(35,8)
     assert tiled.pixelColor(3,8)!=tiled.pixelColor(19,8)
     screenshot(window,'qt-home-light-tile.png')

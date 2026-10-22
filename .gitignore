@@ -3,6 +3,7 @@
 !/.gitignore
 !/.gitattributes
 !/README.md
+!/README.en.md
 !/LICENSE
 !/SECURITY.md
 !/CONTRIBUTING.md
@@ -36,6 +37,7 @@ settings.json
 !/docs/development.md
 !/docs/microsoft-auth.md
 !/docs/ui-motion-audit.md
+!/docs/ui-copy-audit.md
 
 # Portable user data and build output must never be published.
 onionmcl.json

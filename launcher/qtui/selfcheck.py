@@ -34,6 +34,23 @@ def render_hidden(window):
     image=QImage(window.size(),QImage.Format.Format_ARGB32_Premultiplied);image.fill(0)
     window.render(image)
     assert image.pixelColor(image.width()//2,image.height()//2).alpha()>0
+    return image
+
+
+def check_transparency(window):
+    previous={key:window.config_obj.get(key) for key in ('ui_transparency','text_transparency','background_scope')}
+    try:
+        window.navigate('home')
+        for value in (0,5,90):
+            window.config_obj.update({'ui_transparency':value,'text_transparency':0,'background_scope':'window'})
+            window.apply_appearance();QApplication.processEvents()
+            image=render_hidden(window)
+            assert abs(image.pixelColor(600,400).alpha()-round(255*(1-value/100)))<=2,'Window backdrop alpha must follow the configured percentage'
+        assert window.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        assert window.windowOpacity()==1,'Global window opacity would also fade text'
+        assert window.title.palette().color(window.title.foregroundRole()).alpha()==255
+    finally:
+        window.config_obj.update(previous);window.apply_appearance()
 
 
 def run_raster(output):
@@ -53,11 +70,11 @@ def run_raster(output):
             window.config_obj.update({'color_mode':mode});window.apply_appearance()
             for page in ('home','versions','settings'):
                 window.navigate(page);render_hidden(window)
-        formats=check_images(window)
+        check_transparency(window);formats=check_images(window)
         assert not any(w.isVisible() for w in application.topLevelWidgets()),'Raster probe must not show windows'
         window.close();application.processEvents()
         output.write_text(json.dumps({'result':'pass','platform':'windows','surface':'RasterSurface',
-            'visible_windows':False,'fixture_only':True,'image_formats':formats,'color_modes':['dark','light']},indent=2),encoding='utf-8')
+            'visible_windows':False,'fixture_only':True,'image_formats':formats,'color_modes':['dark','light'],'per_pixel_transparency':True,'independent_text_alpha':True},indent=2),encoding='utf-8')
     return 0
 
 
@@ -74,6 +91,18 @@ def run(output):
         for page in ('home','versions','download','instance','settings','about'):
             window.navigate(page);application.processEvents()
         assert window.settings_editor.fields['auto_memory'] is not None
+        assert {'ui_transparency','text_transparency','background_transparency','max_download_threads'}<=window.settings_editor.sliders.keys()
+        assert window.settings_editor.fields['download_speed_limit'].specialValueText()==''
+        assert window.settings_editor.unit_labels['download_speed_limit'].text()=='KiB/s'
+        assert window.settings_editor.number_hints['download_speed_limit'].text()=='不限速'
+        assert window.settings_editor.unit_labels['max_memory'].text()=='MiB'
+        from .color_picker import ColorPicker
+        picker=ColorPicker('#cebafa',window.settings_editor)
+        picker.ensurePolished();picker.resize(picker.sizeHint());application.processEvents()
+        assert picker.hex.text()=='#cebafa' and tuple(field.value() for field in picker.rgb)==(206,186,250)
+        picker.rgb[0].setValue(128);assert picker.color.name()=='#80bafa'
+        sample=QImage(picker.size(),QImage.Format.Format_ARGB32_Premultiplied);sample.fill(0);picker.render(sample)
+        assert not sample.isNull();picker.reject()
         assert window.windowFlags() & Qt.WindowType.FramelessWindowHint
         assert not any(b.text()=='保存设置' for b in window.settings_editor.findChildren(QPushButton))
         window.settings_editor.fields['window_width'].setValue(1280)
@@ -110,6 +139,7 @@ def run(output):
             editor=window.settings_editor
             editor.fields['color_mode'].setCurrentIndex(editor.fields['color_mode'].findData(mode))
             window.flush_settings();window.navigate('home');render_hidden(window)
+        check_transparency(window)
         assert window.accounts.path==window.instances.path==window.version_settings.path==config.path
         assert config.path.exists()
         if __import__('os').name=='nt':
@@ -118,5 +148,5 @@ def run(output):
             get_attributes.argtypes=[ctypes.c_wchar_p];get_attributes.restype=ctypes.c_uint32
             assert get_attributes(str(config.path)) & 2
         window.close();application.processEvents()
-        output.write_text(json.dumps({'result':'pass','launcher_version':LAUNCHER_VERSION,'packaged_runtime':True,'offscreen':True,'game_started':False,'network_auth':False,'pages':6,'microsoft_login_button':True,'grouped_settings':True,'installer_filters':True,'unified_hidden_storage':True,'frameless_window':True,'automatic_settings_save':True,'image_formats':formats,'python_tls':True,'raster_render':True,'color_modes':['light','dark']},indent=2),encoding='utf-8')
+        output.write_text(json.dumps({'result':'pass','launcher_version':LAUNCHER_VERSION,'packaged_runtime':True,'offscreen':True,'game_started':False,'network_auth':False,'pages':6,'microsoft_login_button':True,'grouped_settings':True,'installer_filters':True,'unified_hidden_storage':True,'frameless_window':True,'automatic_settings_save':True,'image_formats':formats,'python_tls':True,'raster_render':True,'color_modes':['light','dark'],'per_pixel_transparency':True,'independent_text_alpha':True},indent=2),encoding='utf-8')
     return 0

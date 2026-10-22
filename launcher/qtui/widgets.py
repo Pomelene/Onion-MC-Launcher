@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (QWidget,QFrame,QVBoxLayout,QHBoxLayout,QLabel,QPu
     QScrollArea,QSizePolicy,QDialog,QProgressBar,QMessageBox,QLayout,QAbstractButton,QCheckBox,QSpinBox,QComboBox,QLineEdit,QAbstractSpinBox,QStyle,QStyleOptionComboBox)
 
 from .theme import STYLE
+from .motion import MotionButton,motion_enabled
 
 
 class GlassBackdrop(QWidget):
@@ -63,10 +64,15 @@ class NavigationItem(QAbstractButton):
 
     def _hover_changed(self,value):self.hover_amount=float(value);self.update()
 
+    def settle_motion(self):
+        self.hover_animation.stop();self._hover_changed(float(self.underMouse()))
+
     def enterEvent(self,event):
+        if not motion_enabled(self):self.settle_motion();return super().enterEvent(event)
         self.hover_animation.stop();self.hover_animation.setStartValue(self.hover_amount);self.hover_animation.setEndValue(1.0);self.hover_animation.start();super().enterEvent(event)
 
     def leaveEvent(self,event):
+        if not motion_enabled(self):self.hover_animation.stop();self._hover_changed(0.0);return super().leaveEvent(event)
         self.hover_animation.stop();self.hover_animation.setStartValue(self.hover_amount);self.hover_animation.setEndValue(0.0);self.hover_animation.start();super().leaveEvent(event)
 
     def setSubtitle(self,text):
@@ -155,7 +161,7 @@ def label(text,kind='',wrap=False):
 
 
 def button(text, callback=None, role='', glyph=None):
-    item=QPushButton(text);item.setCursor(Qt.CursorShape.PointingHandCursor)
+    item=MotionButton(text);item.setCursor(Qt.CursorShape.PointingHandCursor)
     item.setProperty('role',role)
     if glyph:item.setIcon(icon(glyph,'#281f35' if role=='primary' else '#bac7cd'));item.setIconSize(QSize(18,18))
     if callback:item.clicked.connect(lambda checked=False: callback())
@@ -197,9 +203,12 @@ class ToggleSwitch(QCheckBox):
 
     def _move(self,value):self.position=float(value);self.update()
 
+    def settle_motion(self):
+        self.motion.stop();self._move(float(self.isChecked()))
+
     def _animate(self,checked):
         self.motion.stop()
-        if not self.isVisible():self._move(float(checked));return
+        if not self.isVisible() or not motion_enabled(self):self._move(float(checked));return
         self.motion.setStartValue(self.position);self.motion.setEndValue(float(checked));self.motion.start()
 
     def hitButton(self,point):return self.rect().contains(point)

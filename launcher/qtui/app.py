@@ -7,6 +7,7 @@ from PySide6.QtGui import QDesktopServices,QIcon
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QStackedWidget,QComboBox,
     QLineEdit,QPlainTextEdit,QMessageBox,QInputDialog,QDialog,QFormLayout,QCheckBox,QSpinBox,QProgressBar,QSizePolicy)
 from .widgets import STYLE,themed_style,Page,Card,Empty,label,button,column,row,clear,icon,TaskDialog,NavigationItem,GlassBackdrop,configure_fonts
+from .motion import PageMotion,animate_change
 from .tasks import TaskManager
 from .actions import Actions
 from .pages import Pages
@@ -48,7 +49,7 @@ class MainWindow(QMainWindow,Actions,Pages):
         self.sidebar_body=column(side,0,0);self.sidebar_body.setSizeConstraint(self.sidebar_body.SizeConstraint.SetDefaultConstraint);self.nav={};self.account_button=None
         lower.addWidget(side)
         main=QWidget();main.setObjectName('workspace');body=column(main,0,0);lower.addWidget(main,1)
-        self.stack=QStackedWidget();self.page_map={};body.addWidget(self.stack,1)
+        self.stack=QStackedWidget();self.motion=PageMotion(self.stack);self.page_map={};body.addWidget(self.stack,1)
         for key in ('home','instance','versions','download','settings','about'):
             page=Page() if key not in ('home','instance','download') else QWidget()
             if isinstance(page,Page):page.body.setContentsMargins(24,20,24,20)
@@ -63,12 +64,14 @@ class MainWindow(QMainWindow,Actions,Pages):
         self.logs=QPlainTextEdit();self.logs.setReadOnly(True);self.logs.setMaximumBlockCount(3000)
         self.instance_tab='game';self.instance_context='';self.instance_editor=None;self.settings_editor=None;self.subpages=[];self.nav_history=[];self.current_route=None
 
+    @animate_change
     def show_subpage(self,view):
         view.embedded=True;view.setProperty('embedded',True);view.setModal(False);view.setParent(self.stack,Qt.WindowType.Widget)
         view.setMinimumSize(0,0);self.stack.addWidget(view);self.subpages.append(view)
         view.finished.connect(lambda _:self.finish_subpage(view))
         self.stack.setCurrentWidget(view);view.show();self.title.setText(getattr(view,'navigation_title',view.windowTitle()));self.back_button.show()
 
+    @animate_change
     def finish_subpage(self,view):
         if view not in self.subpages:return
         self.subpages.remove(view);self.stack.removeWidget(view);view.hide()
@@ -77,6 +80,7 @@ class MainWindow(QMainWindow,Actions,Pages):
         else:
             self.stack.setCurrentWidget(self.page_map[self.current_page]);self.title.setText(getattr(self,'page_title','Onion'));self.back_button.setVisible(self.current_page!='home')
 
+    @animate_change
     def go_back(self):
         if self.subpages:
             view=self.subpages[-1]
@@ -121,6 +125,7 @@ class MainWindow(QMainWindow,Actions,Pages):
             for name,item in self.nav.items():item.setChecked(name==key)
         self.update_selection()
 
+    @animate_change
     def open_instance_tab(self,key):
         route=('instance',key,None)
         if self.current_route and self.current_route!=route:self.nav_history.append(self.current_route)
@@ -128,6 +133,7 @@ class MainWindow(QMainWindow,Actions,Pages):
         self.instance_tab=key;self.instance_workspace.open_tab(key)
         for name,item in self.nav.items():item.setChecked(name==key)
 
+    @animate_change
     def open_settings_tab(self,index):
         self.settings_editor.select_tab(index)
         for name,item in self.nav.items():item.setChecked(name in self.settings_editor.tab_names and self.settings_editor.tab_names[name]==index)
@@ -135,6 +141,7 @@ class MainWindow(QMainWindow,Actions,Pages):
     def choose_download_kind(self,kind):
         self.download_kind=kind;self.navigate('download')
 
+    @animate_change
     def navigate(self,key,record_history=True):
         for view in list(reversed(self.subpages)):
             if not isinstance(view,TaskDialog):view.reject()

@@ -1,6 +1,7 @@
 """Persistent content browser: fixed controls, one scrolling result surface."""
 from PySide6.QtCore import Qt,QTimer
 from PySide6.QtWidgets import QWidget,QLineEdit,QComboBox
+from .motion import PageMotion
 from .widgets import Page,Empty,ContentRow,column,row,label,button,clear
 
 TITLES={'mod':'模组','resourcepack':'资源包','shader':'光影','modpack':'整合包'}
@@ -26,7 +27,7 @@ class ContentBrowser(QWidget):
         self.go=button('搜索',lambda:self.search(0),'primary','search');filters.addWidget(self.go);body.addLayout(filters)
         summary=row();self.summary=label('搜索并选择适合你的内容','muted');summary.addWidget(self.summary,1)
         self.reset=button('按实例匹配',self.match_target);self.reset.setToolTip('恢复当前实例的游戏版本和加载器筛选');summary.addWidget(self.reset);body.addLayout(summary)
-        self.results=Page();self.results.body.setSpacing(0);body.addWidget(self.results,1)
+        self.results=Page();self.results_motion=PageMotion(self.results.viewport());self.results.body.setSpacing(0);body.addWidget(self.results,1)
         footer=row();self.message=label('','muted');footer.addWidget(self.message,1)
         self.previous=button('上一页',lambda:self.search(self.page_number-1));self.next=button('下一页',lambda:self.search(self.page_number+1));footer.addWidget(self.previous)
         self.page_label=label('1 / 1','muted');footer.addWidget(self.page_label);footer.addWidget(self.next);body.addLayout(footer)
@@ -91,17 +92,18 @@ class ContentBrowser(QWidget):
             if request!=self.request_id:return
             self.loading=False;self.go.setEnabled(True);self.last_search=query;self.page_number=page
             hits=data.get('hits') or [];self.total=max(int(data.get('total_hits') or 0),page*self.PAGE_SIZE+len(hits))
-            clear(self.results.body)
-            if not hits:self.results.body.addWidget(Empty('没有匹配结果','试试其他关键词，或放宽游戏版本和加载器条件。','search'))
-            for hit in hits:
-                title=hit.get('title') or hit.get('slug') or '项目'
-                detail=' · '.join(str(v) for v in (hit.get('author'),f"下载 {hit.get('downloads') or 0:,}",hit.get('description')) if v)
-                item=ContentRow(title,detail,{'mod':'package','resourcepack':'grid','shader':'world','modpack':'package'}[self.kind])
-                item.line.addWidget(button('选择版本',lambda pid=hit['project_id'],t=title:self.launcher.choose_project_version(pid,t,self.kind,query[1],query[2],query[3]),'soft','download'))
-                self.results.body.addWidget(item)
-                if hit.get('icon_url'):self.launcher.load_catalog_icon(item,hit['icon_url'])
-            self.summary.setText(f'找到 {self.total:,} 个结果 · '+TITLES[self.kind]);self.message.setText('选择版本后可查看适配信息和文件名');self.update_paging()
-            QTimer.singleShot(0,self.results,lambda:self.results.verticalScrollBar().setValue(0))
+            with self.results_motion.changing():
+                clear(self.results.body)
+                if not hits:self.results.body.addWidget(Empty('没有匹配结果','试试其他关键词，或放宽游戏版本和加载器条件。','search'))
+                for hit in hits:
+                    title=hit.get('title') or hit.get('slug') or '项目'
+                    detail=' · '.join(str(v) for v in (hit.get('author'),f"下载 {hit.get('downloads') or 0:,}",hit.get('description')) if v)
+                    item=ContentRow(title,detail,{'mod':'package','resourcepack':'grid','shader':'world','modpack':'package'}[self.kind])
+                    item.line.addWidget(button('选择版本',lambda pid=hit['project_id'],t=title:self.launcher.choose_project_version(pid,t,self.kind,query[1],query[2],query[3]),'soft','download'))
+                    self.results.body.addWidget(item)
+                    if hit.get('icon_url'):self.launcher.load_catalog_icon(item,hit['icon_url'])
+                self.summary.setText(f'找到 {self.total:,} 个结果 · '+TITLES[self.kind]);self.message.setText('选择版本后可查看适配信息和文件名');self.update_paging()
+                QTimer.singleShot(0,self.results,lambda:self.results.verticalScrollBar().setValue(0))
         def failed(error):
             if request!=self.request_id:return
             self.loading=False;self.go.setEnabled(True);self.message.setText('搜索失败，可重试：'+str(error));self.update_paging()

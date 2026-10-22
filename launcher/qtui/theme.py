@@ -29,6 +29,8 @@ QWidget#contextPanel QComboBox { background:transparent; border:0; font-weight:6
 QPushButton { background:transparent; border:1px solid transparent; border-radius:6px; padding:7px 12px; min-height:22px; color:#dce5e9; }
 QPushButton:hover { background:#303a43; }
 QPushButton:pressed { background:#3a4851; }
+QPushButton[animated='true']:hover,QPushButton[animated='true']:pressed { background:transparent; }
+QPushButton[animated='true'][role='primary']:hover,QPushButton[animated='true'][role='primary']:pressed { background:#cebafa; }
 QPushButton:focus { border-color:#a58acb; }
 QPushButton:disabled { color:#687780; background:transparent; }
 QPushButton[role='primary'] { background:#cebafa; color:#281f35; font-weight:600; border:1px solid transparent; }

@@ -81,6 +81,7 @@ DEFAULTS: dict[str, Any] = {
     "theme": "light",
     "theme_preset": "bridge",
     "accent_color": "#cebafa",      # 可点击设置文字的高亮色
+    "ui_animations": True,        # 页面过渡与控件动效；关闭可减少动态效果
     "ui_scale": 0.0,               # 界面缩放；0 表示自动按 DPI
     "language": "zh-CN",
     "log_level": "info",           # debug | info | warn | error

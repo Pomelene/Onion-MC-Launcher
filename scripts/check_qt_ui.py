@@ -32,6 +32,8 @@ def pump(predicate,seconds=8):
 
 def render(widget,name):
     if getattr(widget,'embedded',False):widget=widget.window()
+    from launcher.qtui.motion import PageMotion
+    pump(lambda:all(controller.layer is None for controller in widget.window().findChildren(PageMotion)))
     app.processEvents();QCoreApplication.sendPostedEvents(None,QEvent.Type.DeferredDelete);app.processEvents()
     image=QImage(widget.size()*2,QImage.Format.Format_ARGB32_Premultiplied);image.setDevicePixelRatio(2);image.fill(0)
     widget.render(image)

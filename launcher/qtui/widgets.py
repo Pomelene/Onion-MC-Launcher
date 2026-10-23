@@ -149,6 +149,13 @@ def configure_fonts(application):
     application.setFont(QFont('Microsoft YaHei UI', 10))
 
 PATHS = {
+ 'schematic':[[(3,3),(9,3),(9,9),(3,9),(3,3)],[(15,15),(21,15),(21,21),(15,21),(15,15)],[(6,9),(6,18),(15,18)],[(9,6),(18,6),(18,15)]],
+ 'image':[[(3,4),(21,4),(21,20),(3,20),(3,4)],[(3,17),(9,11),(14,16),(17,13),(21,17)],[(7,8),(8,8)]],
+ 'edit':[[(4,16),(15,5),(19,9),(8,20),(3,21),(4,16)],[(13,7),(17,11)]],
+ 'refresh':[[(20,5),(20,11),(14,11)],[(4,19),(4,13),(10,13)],[(20,11),(18,6),(12,3),(6,6),(4,10)],[(4,13),(6,18),(12,21),(18,18),(20,14)]],
+ 'tools':[],
+ 'upload':[[(12,3),(12,15)],[(7,8),(12,3),(17,8)],[(4,16),(4,21),(20,21),(20,16)]],
+ 'skin':[[(8,3),(16,3),(16,9),(8,9),(8,3)],[(8,10),(16,10),(16,18),(8,18),(8,10)],[(4,10),(7,10),(7,18),(4,18),(4,10)],[(17,10),(20,10),(20,18),(17,18),(17,10)],[(8,18),(8,23),(11,23),(11,18)],[(13,18),(13,23),(16,23),(16,18)]],
  'minimize':[[(5,12),(19,12)]], 'maximize':[[(5,5),(19,5),(19,19),(5,19),(5,5)]],
  'restore':[[(8,5),(19,5),(19,16)],[(5,8),(16,8),(16,19),(5,19),(5,8)]],
  'close':[[(6,6),(18,18)],[(18,6),(6,18)]],
@@ -173,6 +180,15 @@ def icon(name, color='#bac7cd'):
     image=QPixmap(72,72); image.fill(Qt.GlobalColor.transparent)
     painter=QPainter(image);painter.setRenderHint(QPainter.RenderHint.Antialiasing);painter.scale(3,3)
     painter.setPen(QPen(QColor(color),1.6,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
+    if name=='tools':
+        # Open-jaw spanner, drawn as one continuous rounded outline.
+        path=QPainterPath(QPointF(14.7,6.3))
+        path.cubicTo(14.3,6.7,14.3,7.3,14.7,7.7);path.lineTo(16.3,9.3)
+        path.cubicTo(16.7,9.7,17.3,9.7,17.7,9.3);path.lineTo(21.1,5.9)
+        path.cubicTo(22.7,10.9,18.3,15.3,13.5,13.6);path.lineTo(7.1,20)
+        path.cubicTo(5.1,22,2,18.9,4,16.9);path.lineTo(10.4,10.5)
+        path.cubicTo(8.7,5.7,13.1,1.3,18.1,2.9);path.closeSubpath()
+        painter.drawPath(path)
     if name=='rocket':
         path=QPainterPath(QPointF(8,16));path.cubicTo(8,9,14,3,21,3)
         path.cubicTo(21,10,15,16,8,16);path.closeSubpath();painter.drawPath(path)

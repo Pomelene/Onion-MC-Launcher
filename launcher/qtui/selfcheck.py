@@ -83,6 +83,26 @@ def run(output):
     application=QApplication.instance() or QApplication([]);application.setStyle('Fusion');configure_fonts(application)
     with tempfile.TemporaryDirectory(dir=output.parent,prefix='qt-runtime-') as folder:
         base=Path(folder);config=Config(base/'onionmcl.json');config.set('game_dir',str(base/'empty-library'))
+        from .. import paths as paths_module, log as log_module
+        original_root=paths_module.app_root
+        paths_module.app_root=lambda:base
+        logger=None
+        try:
+            logger=log_module.setup_logging(to_console=False)
+            logger.info('Packaged fixture log')
+            for handler in logger.handlers:handler.flush()
+            assert 'Packaged fixture log' in (base/'.onion/logs/launcher.log').read_text(encoding='utf-8')
+            assert not (base/'logs').exists()
+            if __import__('os').name=='nt':
+                import ctypes
+                attributes=ctypes.WinDLL('kernel32').GetFileAttributesW
+                attributes.argtypes=[ctypes.c_wchar_p];attributes.restype=ctypes.c_uint32
+                assert attributes(str(base/'.onion')) & 2
+        finally:
+            paths_module.app_root=original_root
+            if logger is not None:
+                for handler in logger.handlers[:]:logger.removeHandler(handler);handler.close()
+                log_module._LOGGER=None
         window=MainWindow(config.path,base);errors=[];window.error=lambda exc:errors.append(str(exc))
         deadline=time.monotonic()+10
         application.processEvents()
@@ -140,6 +160,13 @@ def run(output):
             editor.fields['color_mode'].setCurrentIndex(editor.fields['color_mode'].findData(mode))
             window.flush_settings();window.navigate('home');render_hidden(window)
         check_transparency(window)
+        window.navigate('tools');render_hidden(window)
+        window.open_tools_tab('seedmap')
+        from ..seedmap import generate
+        generated=generate('-3829811542736183482','26.3',x=68148,z=80990,y=77,scale=4,size=32,structures=False)
+        assert 188 in generated.ids
+        window.workshop.views['seedmap'].canvas.set_data(generated);render_hidden(window)
+        window.navigate('home')
         assert window.accounts.path==window.instances.path==window.version_settings.path==config.path
         assert config.path.exists()
         if __import__('os').name=='nt':

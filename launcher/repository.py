@@ -229,7 +229,8 @@ class GameRepository:
         from .version_settings import VersionSettingsStore
         from .storage import is_portable
         settings_path=self.config.path if is_portable(self.config.path) else self.config.path.parent/"version_settings.json"
-        overrides = VersionSettingsStore(settings_path).get(version_id)
+        legacy=self.config.get('library_legacy_root')
+        overrides = VersionSettingsStore(settings_path,self.game_dir if legacy else None,legacy or None).get(version_id)
         isolated = overrides.get("isolate", self.config.get("version_isolation"))
         if "isolate" not in overrides and any((instance / d).is_dir() for d in ("mods", "saves", "config")):
             isolated = True

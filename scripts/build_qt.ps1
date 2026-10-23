@@ -3,6 +3,10 @@ param([string]$OutputName='OnionMinecraftLauncher.exe')
 $ErrorActionPreference='Stop'
 if ($OutputName -ne [IO.Path]::GetFileName($OutputName) -or $OutputName -notmatch '\.exe$') { throw 'OutputName must be an executable filename without a directory.' }
 $taskRoot=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+if (-not (Test-Path -LiteralPath (Join-Path $taskRoot 'assets\native\onion_seedmap.dll'))) {
+    & python (Join-Path $taskRoot 'scripts\build_seedmap.py')
+    if ($LASTEXITCODE -ne 0) { throw 'Local seed-map component build failed.' }
+}
 $taskAppManifest=Join-Path $taskRoot 'assets\microsoft-app.json'
 if (-not (Test-Path -LiteralPath $taskAppManifest)) {
     Copy-Item -LiteralPath (Join-Path $taskRoot 'assets\microsoft-app.example.json') -Destination $taskAppManifest

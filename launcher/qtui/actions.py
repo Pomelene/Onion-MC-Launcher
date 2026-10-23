@@ -19,6 +19,7 @@ class Actions:
         record=self.accounts.current()
         if not record:self.open_accounts();return
         self.launch_pending=True;self.running_version=vid
+        self.running_instance_store=self.instances
         repo=self.repo;overrides=self.version_settings.resolve(vid,self.config_obj)
         def work(job):
             from ..launch import Account,LaunchSettings,launch
@@ -30,7 +31,17 @@ class Actions:
             if not java:raise RuntimeError('未找到可用 Java，请在设置中安装运行时。')
             if job.cancel.is_set():raise RuntimeError('启动已取消')
             injector=''
-            if fresh.authlib_url:
+            local_skin=None
+            if fresh.type=='offline':
+                from ..skins import SkinLibrary
+                local_skin=SkinLibrary(self.root).selected(fresh.uuid)
+            authlib_url=fresh.authlib_url
+            if local_skin:
+                from ..offline_skin import OfflineSkinServer
+                job.emit('正在准备本地皮肤')
+                self.offline_skin_server=OfflineSkinServer(fresh,*local_skin)
+                authlib_url=self.offline_skin_server.url
+            if authlib_url:
                 job.emit('正在准备外置登录组件')
                 from ..auth.authlib import ensure_injector
                 injector=str(ensure_injector(repo.downloader,repo.game_dir/'.cache/authlib-injector.jar'))
@@ -38,16 +49,17 @@ class Actions:
                 width=overrides['width'],height=overrides['height'],fullscreen=overrides['fullscreen'],demo=bool(self.config_obj.get('demo')),
                 server_address=overrides['server_address'],extra_jvm_args=shlex.split(overrides['jvm_args']),extra_game_args=shlex.split(overrides['game_args']),
                 launcher_name=LAUNCHER_NAME,launcher_version=LAUNCHER_VERSION,authlib_injector_jar=injector)
-            account=Account(fresh.username,fresh.uuid,fresh.access_token or '0',fresh.user_type,fresh.authlib_url,fresh.client_id,fresh.xuid)
+            if local_skin:settings.extra_jvm_args.append('-Dauthlibinjector.side=client')
+            account=Account(fresh.username,fresh.uuid,fresh.access_token or '0',fresh.user_type,authlib_url,fresh.client_id,fresh.xuid)
             def logged(text,is_error):
                 if fresh.access_token and fresh.access_token!='0':text=text.replace(fresh.access_token,'[已隐藏令牌]')
                 self.game_log.emit(text,is_error)
             job.emit('正在创建游戏进程')
             process=launch(repo,rv,account,settings,str(java.path),on_log=logged,on_exit=lambda code:self.game_exit.emit(code))
-            if job.cancel.is_set():process.stop();raise RuntimeError('启动已取消')
+            if job.cancel.is_set():process.stop();self.stop_offline_skin();raise RuntimeError('启动已取消')
             return process
         def done(process):
-            self.launch_pending=False;self.process=process;self.instances.record_launch(vid);self.refresh_account()
+            self.launch_pending=False;self.process=process;self.running_instance_store.record_launch(vid);self.refresh_account()
             if job.cancel.is_set():process.stop();return
             if process.proc.poll() is None:
                 self.started_at=time.time();self.status.setText('正在运行 · '+self.instances.display_name(vid))
@@ -59,7 +71,7 @@ class Actions:
             # Any failed preparation must release the UI launch guard.
             original=self.tasks.jobs[job.key]
             failed=original[2]
-            def reset(error):self.launch_pending=False;failed(error)
+            def reset(error):self.launch_pending=False;self.stop_offline_skin();failed(error)
             self.tasks.jobs[job.key]=(original[0],original[1],reset,original[3])
 
     def install_dialog(self):
@@ -69,7 +81,7 @@ class Actions:
 
     def installed(self,vid):
         if not (self.instance_editor and self.instance_editor.dirty):
-            self.selected_version=vid;self.config_obj.set('selected_version',vid)
+            self.selected_version=vid;self.game_libraries.remember(vid)
         self.reload_versions();self.status.setText('已安装 · '+vid)
 
     def create_instance(self):

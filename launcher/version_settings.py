@@ -31,8 +31,9 @@ SCHEMA: dict[str, type] = {
 class VersionSettingsStore:
     """版本级设置的读写与合并。"""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, game_root=None, legacy_root=None):
         self.path = Path(path)
+        self.game_root=game_root;self.legacy_root=legacy_root
         self._lock = threading.Lock()
         self._data: dict[str, dict] = {}
         self.load()
@@ -42,12 +43,16 @@ class VersionSettingsStore:
             return
         try:
             raw = read_section(self.path,"version_settings")
+            if self.game_root is not None:
+                from .storage import read_directory_section
+                raw=read_directory_section(self.path,'version_settings',self.game_root,self.legacy_root)
         except (OSError, json.JSONDecodeError):
             return
         if not isinstance(raw, dict):
             return
         cleaned: dict[str, dict] = {}
         for vid, overrides in raw.items():
+            if vid=='__directories__':continue
             if not isinstance(overrides, dict):
                 continue
             entry = {}
@@ -63,13 +68,18 @@ class VersionSettingsStore:
         self._data = cleaned
 
     def save(self) -> None:
+        if self.game_root is not None:
+            from .storage import write_directory_section
+            write_directory_section(self.path,'version_settings',self.game_root,self._data)
+            return
         if is_portable(self.path):
             write_section(self.path,"version_settings",self._data)
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self._data, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp.replace(self.path)
+        from .storage import _replace
+        _replace(tmp,self.path)
 
     def get(self, version_id: str) -> dict[str, Any]:
         with self._lock:

@@ -17,7 +17,7 @@ import time
 from .secrets import protect
 
 FILENAME = 'onionmcl.json'
-VERSION = 1
+VERSION = 2
 SECTIONS = ('settings', 'accounts', 'instances', 'version_settings')
 _locks = {}
 _registry_lock = threading.Lock()
@@ -112,10 +112,35 @@ def _write(path, document):
             output.flush()
             os.fsync(output.fileno())
         _hide(temporary)
+        if is_portable(path) and document.get('format_version')==2 and path.exists():
+            original=path.read_bytes()
+            if json.loads(original).get('format_version')==1:_backup_format_one(path,original)
         _replace(temporary, path)
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
+
+
+def _backup_format_one(path,original):
+    """Retain exact pre-upgrade bytes before making v2 unreadable to old builds."""
+    root=path.parent/'.onion';folder=root/'backups'
+    for directory in (root,folder):
+        if directory.is_symlink() or directory.is_junction():raise StorageError('备份目录不能是链接，旧配置未修改。')
+        directory.mkdir(exist_ok=True)
+    _hide(root)
+    backup=folder/f'onionmcl-format1-{hashlib.sha256(original).hexdigest()[:16]}.json'
+    if backup.is_symlink():raise StorageError('配置备份不能是链接，旧配置未修改。')
+    if backup.exists():
+        if backup.read_bytes()!=original:raise StorageError('已有配置备份内容不匹配，旧配置未修改。')
+        return
+    try:
+        with backup.open('xb') as output:
+            if os.name!='nt':os.chmod(backup,0o600)
+            output.write(original);output.flush();os.fsync(output.fileno())
+        _hide(backup)
+    except Exception:
+        backup.unlink(missing_ok=True)
+        raise
 
 
 def _legacy_payload(section, payload):
@@ -143,10 +168,13 @@ def _read(path):
             document = json.loads(path.read_text(encoding='utf-8'))
         except (OSError, ValueError) as error:
             raise StorageError('onionmcl.json 无法读取，已停止加载以保留原文件。') from error
-        if not isinstance(document, dict) or document.get('format_version') != VERSION:
+        if not isinstance(document, dict) or document.get('format_version') not in (1,VERSION):
             raise StorageError('onionmcl.json 格式或版本不受支持，原文件未修改。')
         if any(not isinstance(document.get(key, {}), dict) for key in SECTIONS):
             raise StorageError('onionmcl.json 数据分区无效，原文件未修改。')
+        # v2 adds directory-scoped records. Older executables must reject this
+        # document rather than flatten and overwrite the nested directory data.
+        document['format_version']=VERSION
         _hide(path)
         return document
     document = {'format_version': VERSION, **{key: {} for key in SECTIONS}}
@@ -184,3 +212,37 @@ def write_section(path, section, payload):
         document = _read(path)
         document[section] = payload
         _write(path, document)
+
+
+def directory_key(root):
+    """One identity for case variants, relative paths and directory aliases."""
+    return os.path.normcase(str(Path(root).expanduser().resolve()))
+
+
+def read_directory_section(path,section,root,legacy_root=None):
+    raw=read_section(path,section)
+    directories=raw.get('__directories__',{})
+    if not isinstance(directories,dict):raise StorageError('游戏目录数据无效，原文件未修改。')
+    key=directory_key(root)
+    if isinstance(directories,dict) and key in directories:
+        value=directories[key]
+        if not isinstance(value,dict):raise StorageError('游戏目录数据无效，原文件未修改。')
+        return value
+    # Existing flat metadata belongs only to the folder selected on migration.
+    if legacy_root is not None and key==directory_key(legacy_root):
+        return {name:value for name,value in raw.items() if name!='__directories__'}
+    return {}
+
+
+def write_directory_section(path,section,root,payload):
+    if section not in ('instances','version_settings') or not isinstance(payload,dict):raise ValueError('无效的游戏目录数据')
+    path=Path(path)
+    with _locked(path):
+        if is_portable(path):
+            document=_read(path);raw=document.setdefault(section,{})
+        else:
+            document=json.loads(path.read_text(encoding='utf-8')) if path.exists() else {};raw=document
+        directories=raw.setdefault('__directories__',{})
+        if not isinstance(directories,dict):raise StorageError('游戏目录数据无效，原文件未修改。')
+        directories[directory_key(root)]=payload
+        _write(path,document)

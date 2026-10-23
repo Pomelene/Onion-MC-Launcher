@@ -10,6 +10,7 @@ from .theme import paint_color
 class SettingsEditor(QWidget):
     def __init__(self,window,version_id=None,flat=False,external_nav=False):
         super().__init__();self.launcher=window;self.vid=version_id;self.fields={};self.overrides={};self.flat=flat;self.custom_controls=[]
+        self.version_store=window.version_settings;self.meta_store=window.instances
         self.values=window.version_settings.get(version_id) if version_id else window.config_obj.data.copy()
         self.dirty=False
         self.sliders={}
@@ -157,6 +158,11 @@ class SettingsEditor(QWidget):
         if not version_id:self.check(card,'demo','试玩模式','仅在需要 Minecraft 试玩时开启')
         body.addWidget(card)
         nav.addStretch();self.select_tab(0)
+        if not version_id:
+            from .java_manager import JavaManager
+            self.java_manager=JavaManager(window);self.tab_names['Java 管理']=self.stack.addWidget(self.java_manager)
+            index=self.tab_names['Java 管理'];item=button('Java 管理',lambda:self.select_tab(index),'nav','java')
+            item.setCheckable(True);nav.insertWidget(nav.count()-1,item);self.tabs.append(item)
         bar=row();self.hint=label('','muted');bar.addWidget(self.hint,1)
         if version_id and not flat:bar.addWidget(button('全部跟随全局',self.inherit_all))
         outer.addLayout(bar)
@@ -336,21 +342,24 @@ class SettingsEditor(QWidget):
             if self.vid:
                 metadata={key:values.pop(key) for key in ('name','group','notes') if key in values}
                 if self.flat and not self.specific.isChecked():values={}
-                w.version_settings.set(self.vid,values)
-                if metadata:w.instances.update(self.vid,**metadata)
+                self.version_store.set(self.vid,values)
+                if metadata:self.meta_store.update(self.vid,**metadata)
             else:
                 previous={key:w.config_obj.get(key) for key in values}
                 changed={key for key,value in values.items() if previous[key]!=value}
+                if 'game_dir' in changed:
+                    w.game_libraries.remember(w.selected_version)
+                    values['selected_version']=w.game_libraries.selection(values['game_dir'])
                 w.config_obj.update(values)
                 w.config_obj._qt_appearance_preview={}
                 if changed & {'accent_color','color_mode','bold_text','text_transparency','ui_transparency','background_image','background_mode','background_transparency','background_scope'}:
                     w.apply_appearance()
                 from .motion import apply_motion_preferences
                 apply_motion_preferences(w)
-                if changed & {'game_dir','download_source','proxy_host','proxy_port','max_download_threads','download_speed_limit'}:
+                if 'game_dir' in changed:w.activate_game_library()
+                elif changed & {'download_source','proxy_host','proxy_port','max_download_threads','download_speed_limit'}:
                     from ..repository import GameRepository
                     w.repo=GameRepository(w.config_obj)
-                if 'game_dir' in changed:w.reload_versions(refresh_page=True)
                 if w.instance_editor:w.instance_editor.refresh_inherited()
             self.dirty=False;self.refresh_inherited();self.hint.setText('');w.status.setText('')
             if self.vid and metadata:w.reload_versions(refresh_page=False)

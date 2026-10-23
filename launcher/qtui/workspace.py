@@ -43,6 +43,18 @@ class InstancePicker(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_NoMouseReplay,True)
         body=column(self,14,10);heading=row();heading.addWidget(label('选择实例','heading'),1);self.count=label('','muted');heading.addWidget(self.count);body.addLayout(heading)
         self.query=QLineEdit();self.query.setPlaceholderText('搜索实例');self.query.setClearButtonEnabled(True);self.query.addAction(icon('search',paint_color(self,'icon')),QLineEdit.ActionPosition.LeadingPosition);body.addWidget(self.query)
+        from .choices import ChoiceComboBox
+        from ..game_libraries import GameLibraries
+        from ..storage import directory_key
+        self.library_choice=ChoiceComboBox()
+        for entry in launcher.game_libraries.entries():self.library_choice.addItem(GameLibraries.title(entry),entry['path'])
+        for index in range(self.library_choice.count()):
+            if directory_key(self.library_choice.itemData(index))==directory_key(launcher.repo.game_dir):self.library_choice.setCurrentIndex(index)
+        self.library_choice.setAccessibleName('游戏文件夹');self.library_choice.setToolTip(str(launcher.repo.game_dir));body.insertWidget(1,self.library_choice)
+        def switch_library(index):
+            path=self.library_choice.itemData(index)
+            if path:self.accept();launcher.switch_game_library(path)
+        self.library_choice.currentIndexChanged.connect(switch_library)
         self.tree=QTreeWidget();self.tree.setObjectName('instancePickerList');self.tree.setHeaderHidden(True);self.tree.setRootIsDecorated(False);self.tree.setColumnCount(1)
         self.tree.setUniformRowHeights(True);self.tree.setMouseTracking(True);self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.tree.setItemDelegate(InstanceChoiceDelegate(self));body.addWidget(self.tree,1)
@@ -84,8 +96,8 @@ class InstancePicker(QDialog):
     def open_list(self):self.accept();self.launcher.navigate('versions')
 
     def show_above(self,anchor):
-        screen=anchor.screen().availableGeometry();height=164+max(1,min(5,self.tree.topLevelItemCount()))*64
-        self.resize(min(400,screen.width()-16),min(height,460,screen.height()-32))
+        screen=anchor.screen().availableGeometry();height=210+max(1,min(5,self.tree.topLevelItemCount()))*64
+        self.resize(min(400,screen.width()-16),min(height,510,screen.height()-32))
         point=anchor.mapToGlobal(QPoint(anchor.width()-self.width(),-self.height()-10))
         self.move(max(screen.left()+8,min(point.x(),screen.right()-self.width()-8)),max(screen.top()+8,min(point.y(),screen.bottom()-self.height()-8)))
         self.show();self.query.setFocus()
@@ -103,12 +115,21 @@ class InstanceWorkspace(QWidget):
         w=self.launcher;w.instance_tab=key
         for name,item in self.buttons.items():item.setChecked(name==key)
         if key not in self.pages:
-            self.pages[key]=Page();self.stack.addWidget(self.pages[key])
+            if key=='screenshots':
+                self.pages[key]=QWidget();self.pages[key].body=column(self.pages[key],0,0)
+            else:self.pages[key]=Page()
+            self.stack.addWidget(self.pages[key])
         self.stack.setCurrentWidget(self.pages[key])
         if key=='game':self.editor.refresh_inherited();return
         w.instance_content=self.pages[key]
         if key in ('mods','resourcepacks','shaderpacks'):w.build_mods(key)
         elif key=='worlds':w.build_worlds()
+        elif key in ('schematics','screenshots'):
+            from .file_library import InstanceFiles
+            page=self.pages[key]
+            if not hasattr(page,'file_browser'):
+                page.file_browser=InstanceFiles(w,self.vid,key=='screenshots');page.body.addWidget(page.file_browser)
+            else:page.file_browser.reload()
         elif key=='logs':w.build_logs()
         elif key=='info':self.build_info()
         elif key=='auto':self.build_auto()

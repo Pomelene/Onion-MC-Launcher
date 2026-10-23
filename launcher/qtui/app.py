@@ -14,6 +14,7 @@ from .chrome import ChromeMainWindow,TitleBar,window_controls,install_window_chr
 from .tasks import TaskManager
 from .actions import Actions
 from .pages import Pages
+from .library_actions import LibraryActions
 from ..paths import app_root,default_settings_path,default_accounts_path,LAUNCHER_VERSION,LAUNCHER_NAME
 from ..config import Config
 from ..accounts import AccountStore
@@ -22,7 +23,7 @@ from ..instance import InstanceStore
 from ..version_settings import VersionSettingsStore
 
 
-class MainWindow(ChromeMainWindow,Actions,Pages):
+class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
     game_log=Signal(str,bool)
     game_exit=Signal(int)
 
@@ -31,7 +32,8 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
         from ..storage import is_portable
         portable=self.config_obj.path if is_portable(self.config_obj.path) else None
         self.repo=GameRepository(self.config_obj);self.accounts=AccountStore(portable or self.root/'config/accounts.json')
-        self.instances=InstanceStore(portable or self.root/'config/instances.json');self.version_settings=VersionSettingsStore(portable or self.root/'config/version_settings.json')
+        from ..game_libraries import GameLibraries
+        self.game_libraries=GameLibraries(self.config_obj);self.game_libraries.ensure_current();self.bind_game_library()
         self.tasks=TaskManager(self);self.versions=[];self.kinds={};self.selected_version=self.config_obj.get('selected_version') or ''
         self.page_seq={};self.process=None;self.launch_pending=False;self.started_at=0;self.mutating=False;self.dialogs=[]
         self.setWindowTitle(f'{LAUNCHER_NAME} {LAUNCHER_VERSION}');self.resize(1440,900);self.setMinimumSize(1100,740)
@@ -60,8 +62,8 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
         lower.addWidget(side)
         main=QWidget();main.setObjectName('workspace');body=column(main,0,0);lower.addWidget(main,1)
         self.stack=QStackedWidget();self.page_map={};body.addWidget(self.stack,1)
-        for key in ('home','instance','versions','download','settings','about'):
-            page=Page() if key not in ('home','instance','download') else QWidget()
+        for key in ('home','instance','versions','download','settings','about','tools'):
+            page=Page() if key not in ('home','instance','download','tools') else QWidget()
             if isinstance(page,Page):page.body.setContentsMargins(24,20,24,20)
             else:page.body=column(page,0,0)
             self.page_map[key]=page;self.stack.addWidget(page)
@@ -115,9 +117,9 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
 
 
     def build_sidebar(self,key):
-        scheme=key if key in ('settings','download') or (key=='instance' and self.selected_version) else 'main'
+        scheme=key if key in ('settings','download','tools','versions') or (key=='instance' and self.selected_version) else 'main'
         same_scheme=scheme==self.sidebar_scheme
-        if same_scheme:
+        if same_scheme and scheme!='versions':
             self.refresh_account();self.update_selection();self.update_sidebar_selection(key);return
         self.nav_motion.select(None,False)
         self.sidebar_scheme=scheme
@@ -126,14 +128,21 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
             item=label(text,'eyebrow');item.setContentsMargins(16,18,16,8);nav.addWidget(item);item.show()
         def entry(name,title,glyph,callback,subtitle=''):
             item=NavigationItem(title,glyph,callback,subtitle);nav.addWidget(item);item.show();self.nav[name]=item;return item
-        if key=='instance' and self.selected_version:
-            for name,title,glyph in [('game','游戏设置','settings'),('auto','自动安装','package'),('mods','模组管理','package'),('resourcepacks','资源包管理','grid'),('shaderpacks','光影管理','world'),('worlds','世界管理','world'),('logs','运行日志','history')]:
+        if key=='versions':
+            from .game_libraries import LibraryRail
+            self.library_rail=LibraryRail(self);nav.addWidget(self.library_rail,1)
+        elif key=='instance' and self.selected_version:
+            for name,title,glyph in [('game','游戏设置','settings'),('auto','自动安装','package'),('mods','模组管理','package'),('resourcepacks','资源包管理','grid'),('shaderpacks','光影管理','world'),('worlds','世界管理','world'),('schematics','原理图管理','schematic'),('screenshots','截图管理','image'),('logs','运行日志','history')]:
                 item=entry(name,title,glyph,lambda k=name:self.open_instance_tab(k));item.setChecked(name==self.instance_tab)
             nav.addStretch();entry('launch','启动游戏','play',self.launch_selected);entry('folder','浏览实例目录','folder',lambda:self.open_folder(self.repo.run_dir(self.selected_version)));entry('info','管理','settings',lambda:self.open_instance_tab('info'))
+        elif key=='tools':
+            for name,title,glyph in [('skins','皮肤管理','skin'),('seedmap','种子地图','world')]:
+                item=entry(name,title,glyph,lambda k=name:self.open_tools_tab(k));item.setChecked(name==getattr(self,'tools_tab','skins'))
+            nav.addStretch()
         elif key=='settings' and self.settings_editor:
             for title,index in self.settings_editor.tab_names.items():
-                item=entry(title,title,'settings',lambda i=index:self.open_settings_tab(i));item.setChecked(index==self.settings_editor.stack.currentIndex())
-            entry('java','Java 管理','java',self.manage_java);nav.addStretch();entry('about','关于','package',lambda:self.navigate('about'))
+                item=entry(title,title,'java' if title=='Java 管理' else 'settings',lambda i=index:self.open_settings_tab(i));item.setChecked(index==self.settings_editor.stack.currentIndex())
+            nav.addStretch();entry('about','关于','package',lambda:self.navigate('about'))
         elif key=='download':
             heading('新游戏');entry('install','安装游戏','grid',self.install_dialog)
             item=entry('modpack','整合包','package',lambda:self.choose_download_kind('modpack'));item.setChecked(getattr(self,'download_kind','mod')=='modpack')
@@ -147,7 +156,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
             self.account_button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);self.account_button.customContextMenuRequested.connect(self.show_account_menu)
             heading('游戏');entry('instance','实例管理','settings',lambda:self.navigate('instance'),self.instances.display_name(self.selected_version) if self.selected_version else '尚未选择游戏实例')
             entry('versions','实例列表','grid',lambda:self.navigate('versions'));entry('download','下载','download',lambda:self.navigate('download'))
-            heading('通用');entry('settings','设置','settings',lambda:self.navigate('settings'));entry('about','关于','package',lambda:self.navigate('about'));nav.addStretch()
+            heading('通用');entry('tools','工具坊','tools',lambda:self.navigate('tools'));entry('settings','设置','settings',lambda:self.navigate('settings'));entry('about','关于','package',lambda:self.navigate('about'));nav.addStretch()
             for name,item in self.nav.items():item.setChecked(name==key)
         self.update_selection()
         self.sync_navigation_motion(False)
@@ -157,6 +166,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
             if self.sidebar_scheme=='instance':selected=name==self.instance_tab
             elif self.sidebar_scheme=='settings':selected=name in self.settings_editor.tab_names and self.settings_editor.tab_names[name]==self.settings_editor.stack.currentIndex()
             elif self.sidebar_scheme=='download':selected=name==getattr(self,'download_kind','mod')
+            elif self.sidebar_scheme=='tools':selected=name==getattr(self,'tools_tab','skins')
             else:selected=name==key
             item.setChecked(selected)
         self.sync_navigation_motion()
@@ -182,12 +192,21 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
     def choose_download_kind(self,kind):
         self.download_kind=kind;self.navigate('download')
 
+    def open_tools_tab(self,key):
+        self.tools_tab=key;self.workshop.open_tab(key);self.update_sidebar_selection('tools')
+
+    def build_tools(self):
+        if not hasattr(self,'workshop'):
+            from .workshop import Workshop
+            self.workshop=Workshop(self);self.page_map['tools'].body.addWidget(self.workshop)
+        self.workshop.open_tab(getattr(self,'tools_tab','skins'))
+
     def navigate(self,key,record_history=True,force=False):
         self.flush_settings()
         for view in list(reversed(self.subpages)):
             if not isinstance(view,TaskDialog):view.reject()
             self.finish_subpage(view)
-        if key in ('mods','worlds','logs','resourcepacks','shaderpacks'):
+        if key in ('mods','worlds','logs','resourcepacks','shaderpacks','schematics','screenshots'):
             self.instance_tab=key;key='instance'
         route=(key,self.instance_tab if key=='instance' else None,getattr(self,'download_kind','mod') if key=='download' else None)
         if route==self.current_route and not force:
@@ -197,7 +216,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
         self.current_route=route
         self.current_page=key;self.back_button.setVisible(key!='home');self.stack.setCurrentWidget(self.page_map[key])
         self.sync_header_layout()
-        titles={'home':'','instance':'实例管理 · '+self.instances.display_name(self.selected_version),'versions':'实例列表','download':'下载','settings':'设置','about':'关于 Onion'}
+        titles={'home':'','instance':'实例管理 · '+self.instances.display_name(self.selected_version),'versions':'实例列表','download':'下载','settings':'设置','about':'关于 Onion','tools':'工具坊'}
         self.page_title=titles[key];self.title.setText(titles[key])
         if key=='instance':self.build_instance()
         elif key!='settings' or self.settings_editor is None:getattr(self,'build_'+key)()
@@ -251,7 +270,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
             if not self.versions:self.selector.addItem('尚未安装游戏','')
             self.selector.setCurrentIndex(max(0,self.selector.findData(self.selected_version)));self.selector.blockSignals(False)
             self.update_selection()
-            if self.selected_version:self.config_obj.set('selected_version',self.selected_version)
+            self.game_libraries.remember(self.selected_version)
             if refresh_page and self.current_page!='settings':self.navigate(self.current_page,force=True)
         self.tasks.submit(scan,done,self.error)
 
@@ -262,7 +281,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
     def set_selected(self,vid,refresh_page=True):
         if vid not in self.versions:return False
         if vid!=self.selected_version and not self.flush_settings():return False
-        self.selected_version=vid;self.config_obj.set('selected_version',vid)
+        self.selected_version=vid;self.game_libraries.remember(vid)
         self.selector.blockSignals(True);self.selector.setCurrentIndex(self.selector.findData(vid));self.selector.blockSignals(False)
         self.update_selection()
         if self.current_page=='instance':self.build_instance()
@@ -349,8 +368,12 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
 
     @Slot(int)
     def exited(self,code):
+        self.stop_offline_skin()
         self.launch_pending=False
-        if self.selected_version and self.started_at:self.instances.add_play_time(self.running_version,time.time()-self.started_at)
+        if self.started_at:
+            store=getattr(self,'running_instance_store',self.instances);store.load()
+            store.add_play_time(self.running_version,time.time()-self.started_at)
+            if store is not self.instances:self.instances.load()
         self.started_at=0;self.status.setText(f'游戏已退出 · 代码 {code}')
         if self.config_obj.get('keep_launcher_open'):self.show();self.raise_()
         else:self.close()
@@ -367,7 +390,14 @@ class MainWindow(ChromeMainWindow,Actions,Pages):
             if QMessageBox.question(self,'尚未保存','关闭并放弃未保存的设置？')!=QMessageBox.StandardButton.Yes:event.ignore();return
             for editor in editors:
                 if editor:editor.dirty=False
-        event.accept()
+        self.stop_offline_skin();event.accept()
+
+    def stop_offline_skin(self):
+        server=getattr(self,'offline_skin_server',None)
+        if server:
+            self.offline_skin_server=None
+            import threading
+            threading.Thread(target=server.close,name='OnionSkinShutdown',daemon=True).start()
 
 
 def main():
@@ -376,7 +406,7 @@ def main():
     configure_fonts(application)
     application.setApplicationName(LAUNCHER_NAME);application.setStyle('Fusion')
     from ..log import setup_logging
-    setup_logging(app_root()/'logs',to_console=False)
+    setup_logging(to_console=False)
     from ..storage import StorageError
     from ..secrets import SecretStorageError
     try:window=MainWindow()

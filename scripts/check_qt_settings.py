@@ -75,7 +75,7 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-settings-') as direct
     window.navigate('settings');global_editor=window.settings_editor
     assert not any(b.text()=='保存设置' for b in window.findChildren(QPushButton))
     assert not any(l.text()=='Java 管理' for l in global_editor.findChildren(QLabel))
-    assert 'java' in window.nav and 'java_path' in global_editor.fields
+    assert 'Java 管理' in window.nav and 'java_path' in global_editor.fields
     # Debounce saves without a navigation event or explicit save call.
     global_editor.fields['max_memory'].setValue(6144)
     wait_for(lambda:not global_editor.dirty)
@@ -124,7 +124,8 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-settings-') as direct
     window.navigate('settings')
     with patch('launcher.java.find_all_java',return_value=[]):
         window.manage_java();idle(window)
-    java_dialog=window.dialogs[-1]
+    java_dialog=window.settings_editor.java_manager
+    assert not java_dialog.isWindow() and java_dialog.isVisible()
     from PySide6.QtWidgets import QTreeWidget,QTreeWidgetItem
     tree=java_dialog.findChild(QTreeWidget);item=QTreeWidgetItem(['Java fixture','fixture-java.exe'])
     item.setData(0,Qt.ItemDataRole.UserRole,'fixture-java.exe');tree.addTopLevelItem(item);tree.setCurrentItem(item)

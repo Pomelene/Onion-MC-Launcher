@@ -20,9 +20,10 @@ ROOT = Path(SPECPATH).resolve().parent  # SPECPATH 是 spec 所在目录（packa
 a = Analysis(
     [str(ROOT / "main.py")],
     pathex=[str(ROOT), str(ROOT / ".deps" / "qt")],
-    binaries=[],
+    binaries=[(str(ROOT / 'assets/native/onion_seedmap.dll'), 'assets/native')],
     datas=[(str(ROOT / "assets" / "craftbridge.ico"), "assets"),
-           (str(ROOT / "assets" / "microsoft-app.json"), "assets")],
+           (str(ROOT / "assets" / "microsoft-app.json"), "assets"),
+           (str(ROOT / "launcher/native/cubiomes/LICENSE"), "assets/licenses/cubiomes")],
     hiddenimports=["PySide6.QtWidgets"],
     hookspath=[],
     hooksconfig={},

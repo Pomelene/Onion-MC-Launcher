@@ -38,7 +38,7 @@ class App(tk.Tk):
         super().__init__()
         self.config_obj = Config(default_settings_path())
         from ..log import setup_logging
-        setup_logging(app_root() / "logs", self.config_obj.get("log_level"), to_console=False)
+        setup_logging(level=self.config_obj.get("log_level"), to_console=False)
         self.accounts = AccountStore(default_accounts_path())
         self.repo = GameRepository(self.config_obj)
         self.instances = InstanceStore(default_settings_path())

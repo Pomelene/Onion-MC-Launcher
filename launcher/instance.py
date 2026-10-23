@@ -63,12 +63,13 @@ class InstanceMeta:
 class InstanceStore:
     """instances.json 的读写（原子落盘、线程安全）。"""
 
-    def __init__(self, path: Optional[Path] = None) -> None:
+    def __init__(self, path: Optional[Path] = None, game_root=None, legacy_root=None) -> None:
         if path is None:
             from .paths import app_root
 
             path = app_root() / "onionmcl.json"
         self.path = Path(path)
+        self.game_root=game_root;self.legacy_root=legacy_root
         self._lock = threading.Lock()
         self._data: dict[str, InstanceMeta] = {}
         self.load()
@@ -80,12 +81,16 @@ class InstanceStore:
             return
         try:
             raw = read_section(self.path,"instances")
+            if self.game_root is not None:
+                from .storage import read_directory_section
+                raw=read_directory_section(self.path,'instances',self.game_root,self.legacy_root)
         except (OSError, json.JSONDecodeError):
             return
         if not isinstance(raw, dict):
             return
         data: dict[str, InstanceMeta] = {}
         for version_id, entry in raw.items():
+            if version_id=='__directories__':continue
             if not isinstance(entry, dict):
                 continue
             data[str(version_id)] = InstanceMeta(
@@ -113,13 +118,18 @@ class InstanceStore:
             }
             for meta in self._data.values()
         }
+        if self.game_root is not None:
+            from .storage import write_directory_section
+            write_directory_section(self.path,'instances',self.game_root,payload)
+            return
         if is_portable(self.path):
             write_section(self.path,"instances",payload)
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp.replace(self.path)
+        from .storage import _replace
+        _replace(tmp,self.path)
 
     # ------------------------------------------------------------ 查询
 

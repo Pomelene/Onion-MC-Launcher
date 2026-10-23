@@ -1,0 +1,4 @@
+https://github.com/xpple/cubiomes
+Commit: d3290a8f421863b737ae7c31ad3d800b4fc584c7
+MIT License; source unchanged. Selected biome, terrain and structure modules; no loot implementation vendored.
+Derived from https://github.com/Cubitect/cubiomes

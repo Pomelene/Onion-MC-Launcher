@@ -16,7 +16,7 @@ from .paths import default_game_dir,LAUNCHER_NAME,LAUNCHER_VERSION
 from .secrets import protect,unprotect,SecretStorageError
 
 #: 需要按类型强制的键（避免 settings.json 手工编辑引入错类型）
-_INT_KEYS = {"min_memory", "max_memory", "window_width", "window_height",
+_INT_KEYS = {"min_memory", "max_memory", "window_width", "window_height", "schematic_page_size",
              "proxy_port", "max_download_threads", "download_speed_limit",
              "sandbox_budget_mb", "text_transparency", "ui_transparency", "background_transparency"}
 _BOOL_KEYS = {"fullscreen", "demo", "version_isolation",
@@ -31,9 +31,13 @@ def _coerce(key: str, value: Any) -> Any:
     if key=='color_mode':return value if value in ('dark','light') else 'dark'
     if key=='background_mode':return value if value in ('fill','fit','stretch','center','tile') else 'fill'
     if key=='background_scope':return value if value in ('content','window') else 'content'
+    if key=='game_libraries':
+        if not isinstance(value,list):return []
+        return [{k:str(item.get(k) or '') for k in ('path','name','selected_version')} for item in value[:128] if isinstance(item,dict) and isinstance(item.get('path'),str) and item['path'].strip()]
     if key in _INT_KEYS:
         try:
             number=int(value)
+            if key=='schematic_page_size':return number if number in (12,24,48,96) else 24
             if key in ('text_transparency','ui_transparency','background_transparency'):
                 return max(0,min(70 if key=='text_transparency' else 90 if key=='ui_transparency' else 100,number))
             return number
@@ -62,8 +66,11 @@ def _coerce(key: str, value: Any) -> Any:
 
 
 DEFAULTS: dict[str, Any] = {
+    "schematic_page_size": 24,
     "game_dir": "",                # 游戏目录；空表示使用默认目录
     "selected_version": "",
+    "game_libraries": [],          # Saved game folders and each folder's last instance.
+    "library_legacy_root": "",     # Flat metadata belongs to this folder only.
     "download_source": "mojang",   # mojang | bmclapi | mcbbbs
     "java_path": "",               # 手动指定的 java 可执行文件；空为自动发现
     "min_memory": 2048,            # 最小堆内存 (MB)
@@ -140,6 +147,7 @@ class Config:
                     try:loaded['curseforge_api_key']=unprotect(envelope).get('curseforge_api_key','')
                     except SecretStorageError:self._locked_secret_settings=envelope
                 for key, value in loaded.items():
+                    if key=='launcher_version':continue  # Product version always comes from this executable.
                     if key not in DEFAULTS:
                         continue
                     coerced = _coerce(key, value)

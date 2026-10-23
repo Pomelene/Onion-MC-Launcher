@@ -33,6 +33,9 @@ settings.json
 /assets/*
 !/assets/craftbridge.ico
 !/assets/microsoft-app.example.json
+!/assets/native/
+/assets/native/*
+!/assets/native/onion_seedmap.dll
 /docs/*
 !/docs/development.md
 !/docs/microsoft-auth.md
@@ -42,3 +45,4 @@ settings.json
 # Portable user data and build output must never be published.
 onionmcl.json
 /release/
+.onion/

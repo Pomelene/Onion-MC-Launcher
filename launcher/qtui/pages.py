@@ -50,11 +50,16 @@ class Pages:
         self.instance_workspace.open_tab(self.instance_tab)
 
     def build_versions(self):
-        body=self.page('versions');toolbar=row();query=QLineEdit();self.library_search=query;query.setPlaceholderText('搜索实例名称、版本或分组');query.setText(getattr(self,'library_query',''));toolbar.addWidget(query,1)
+        body=self.page('versions')
+        toolbar=row();query=QLineEdit();self.library_search=query;query.setPlaceholderText('搜索实例');query.setText(getattr(self,'library_query',''));toolbar.addWidget(query,1)
         kinds=ChoiceComboBox();kinds.addItems(['全部类型','原版','Fabric','Forge','NeoForge','Quilt','OptiFine']);kinds.setCurrentIndex(getattr(self,'library_kind',0));toolbar.addWidget(kinds)
         sort=ChoiceComboBox();sort.addItems(['名称排序','最近游玩','游玩时长']);sort.setCurrentIndex(getattr(self,'library_sort',0));toolbar.addWidget(sort)
-        toolbar.addWidget(button('安装游戏',self.install_dialog,'primary','plus'));toolbar.addWidget(button('导入整合包',self.import_modpack,glyph='package'));body.addLayout(toolbar)
-        library=row();library.addWidget(label(str(self.repo.game_dir),'muted',True),1);library.addWidget(button('切换游戏目录',lambda:self.navigate('settings'),glyph='folder'));library.addWidget(button('刷新',self.reload_versions));body.addLayout(library)
+        kinds.setMaximumWidth(110);sort.setMaximumWidth(125)
+        toolbar.addWidget(button('安装',self.install_dialog,'primary','plus'));body.addLayout(toolbar)
+        library=row();path=label(str(self.repo.game_dir),'muted');path.setMinimumWidth(0)
+        from PySide6.QtWidgets import QSizePolicy
+        path.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Preferred);path.setToolTip(str(self.repo.game_dir))
+        library.addWidget(path,1);library.addWidget(button('刷新',self.reload_versions,glyph='refresh'));body.addLayout(library)
         tree=QTreeWidget();self.version_tree=tree;tree.setRootIsDecorated(False);tree.setHeaderLabels(['实例名称','游戏版本 / 加载器','分组','上次游玩']);tree.setColumnWidth(0,240);tree.setColumnWidth(1,240);tree.setColumnWidth(2,100);tree.setMinimumHeight(380);body.addWidget(tree,1)
         summary=label('','muted');body.addWidget(summary)
         def render():
@@ -82,7 +87,7 @@ class Pages:
             menu.exec(tree.viewport().mapToGlobal(point))
         tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);tree.customContextMenuRequested.connect(context)
         query.textChanged.connect(render);kinds.currentIndexChanged.connect(render);sort.currentIndexChanged.connect(render);render()
-        actions=row();actions.addWidget(button('管理选中实例',manage,'soft','settings'));actions.addWidget(button('重命名实例',lambda:self.rename_instance(chosen()) if chosen() else None));actions.addWidget(button('新建独立实例',self.create_instance,glyph='plus'));actions.addWidget(button('恢复中心',self.recovery,glyph='history'));actions.addStretch();actions.addWidget(button('使用此实例',select_home,'primary'));body.addLayout(actions)
+        actions=row(spacing=4);actions.addWidget(button('管理',manage,glyph='settings'));actions.addWidget(button('新建',self.create_instance,glyph='plus'));actions.addWidget(button('导入',self.import_modpack,glyph='package'));actions.addWidget(button('恢复',self.recovery,glyph='history'));actions.addStretch();actions.addWidget(button('使用此实例',select_home,'primary'));body.addLayout(actions)
 
     def build_about(self):
         body=self.page('about');card=Card('Onion Minecraft Launcher','免费、开源、公益的 Minecraft Java 版启动器。')
@@ -263,28 +268,6 @@ class Pages:
         self.settings_editor.setMinimumHeight(570);body.addWidget(self.settings_editor,1)
 
     def manage_java(self,on_selected=None):
-        dialog=QDialog(self);dialog.setWindowTitle('Java 运行时');dialog.resize(760,460);body=column(dialog,24);body.addWidget(label('Java 运行时','title'))
-        tree=QTreeWidget();tree.setHeaderLabels(['Java','路径']);tree.setColumnWidth(0,120);body.addWidget(tree,1);status=label('正在检测可用 Java…','muted',True);body.addWidget(status)
-        def done(infos):
-            tree.clear()
-            for info in infos:
-                item=QTreeWidgetItem([f'Java {info.major}',str(info.path)]);item.setData(0,Qt.ItemDataRole.UserRole,str(info.path));tree.addTopLevelItem(item)
-            status.setText(f'发现 {len(infos)} 个运行时；游戏启动时也会按需自动下载匹配版本。')
-        from ..java import find_all_java,download_java
-        self.tasks.submit(lambda job:find_all_java(),done,lambda e:status.setText(str(e)))
-        actions=row();major=ChoiceComboBox();major.addItems(['8','17','21','25']);actions.addWidget(major)
-        def selected(path):
-            if on_selected:on_selected(path)
-            elif self.settings_editor:
-                self.settings_editor.java_chosen(path);self.settings_editor.flush()
-            else:self.config_obj.set('java_path',str(path))
-            dialog.accept();self.status.setText('Java 运行时已选择' if on_selected else 'Java 运行时已保存')
-        def download():
-            def installed(info):
-                if info:selected(info.path)
-                else:self.error('没有可用的官方 Java 运行时')
-            self.task('下载 Java',lambda job:download_java(int(major.currentText()),self.repo.downloader,job.emit,lambda a,b:job.emit((a,b))),installed)
-        actions.addWidget(button('下载官方运行时',download,'soft','download'));actions.addStretch()
-        def choose():
-            if tree.currentItem():selected(tree.currentItem().data(0,Qt.ItemDataRole.UserRole))
-        actions.addWidget(button('使用所选',choose,'primary'));body.addLayout(actions);self.dialogs.append(dialog);dialog.open()
+        self.navigate('settings')
+        self.settings_editor.java_manager.on_selected=on_selected
+        self.open_settings_tab(self.settings_editor.tab_names['Java 管理'])

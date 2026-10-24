@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from launcher.config import Config
 from launcher.repository import GameRepository
-from launcher.safety import child, recycle, restore_recycled, write_text
+from launcher.safety import child, contained, recycle, restore_recycled, write_text
 from launcher.saves import backup, restore
 
 
@@ -26,6 +26,24 @@ def test_paths_reject_traversal_and_sibling_prefix():
                 pass
             else:
                 raise AssertionError(relative)
+
+
+def test_pending_unicode_paths_and_directory_links():
+    import os
+    with tempfile.TemporaryDirectory() as directory:
+        base=Path(directory);root=base/'游戏 [测试] 🔍';root.mkdir()
+        pending=root/'versions/实例/mods/[玉 🔍] Jade.jar.part'
+        assert contained(pending,root)==pending and not pending.exists()
+        outside=base/'outside';outside.mkdir();link=root/'linked'
+        if os.name=='nt':
+            from _winapi import CreateJunction
+            CreateJunction(str(outside),str(link))
+        else:link.symlink_to(outside,target_is_directory=True)
+        for target,boundary in ((link/'file.part',root),(link/'file.part',link)):
+            try:contained(target,boundary)
+            except PermissionError:pass
+            else:raise AssertionError('Directory link accepted as writable managed path')
+        assert not list(outside.iterdir())
 
 
 def test_instance_create_recycle_restore_and_dependency_guard():

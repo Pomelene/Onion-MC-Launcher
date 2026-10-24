@@ -61,7 +61,7 @@ class ChoicePopup(QFrame):
         self.search=QLineEdit(self);self.search.setObjectName('choiceSearch');self.search.setPlaceholderText('搜索选项');self.search.setClearButtonEnabled(True);body.addWidget(self.search)
         self.proxy=QSortFilterProxyModel(self);self.proxy.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self.list=QListView(self);self.list.setObjectName('choiceList');self.list.setMouseTracking(True)
-        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff);self.list.setUniformItemSizes(False)
+        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff);self.list.setUniformItemSizes(False);self.list.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel)
         self.list.setModel(self.proxy);self.list.setItemDelegate(ChoiceDelegate(self));body.addWidget(self.list,1)
         self.search.textChanged.connect(self.proxy.setFilterFixedString)
         self.list.clicked.connect(self.choose);self.list.installEventFilter(self);self.search.installEventFilter(self)
@@ -94,7 +94,12 @@ class ChoicePopup(QFrame):
         self.search.clear();searchable=owner.count()>12;self.search.setVisible(searchable)
         font=QFontMetrics(owner.font());longest=max((font.horizontalAdvance(owner.itemText(i)) for i in range(owner.count())),default=0)
         screen=owner.screen().availableGeometry();width=min(max(owner.width(),longest+72,240),560,screen.width()-16)
-        wanted=min(8,max(1,owner.count()))*42+16+(44 if searchable else 0)
+        self.ensurePolished();self.list.doItemsLayout()
+        rows=min(8,self.proxy.rowCount())
+        content_height=sum(max(1,self.list.sizeHintForRow(i)) for i in range(rows))
+        margins=self.layout().contentsMargins()
+        search_height=self.search.sizeHint().height()+self.layout().spacing() if searchable else 0
+        wanted=content_height+margins.top()+margins.bottom()+2*self.list.frameWidth()+search_height
         below=owner.mapToGlobal(QPoint(0,owner.height()+6));above=owner.mapToGlobal(QPoint(0,-6))
         room_below=screen.bottom()-below.y()-8;room_above=above.y()-screen.top()-8
         use_below=room_below>=wanted or room_below>=room_above
@@ -104,7 +109,9 @@ class ChoicePopup(QFrame):
         y=below.y() if use_below else above.y()-height;y=max(screen.top()+8,min(y,screen.bottom()-height-8))
         self.resize(width,height);self.move(x,y)
         selected=self.proxy.mapFromSource(owner.model().index(owner.currentIndex(),owner.modelColumn(),owner.rootModelIndex()))
-        self.list.setCurrentIndex(selected);self.show();self.list.scrollTo(selected)
+        self.list.setCurrentIndex(selected);self.show();self.layout().activate();self.list.doItemsLayout()
+        if height>=wanted and self.proxy.rowCount()<=rows:self.list.scrollToTop()
+        else:self.list.scrollTo(selected)
         (self.search if searchable else self.list).setFocus(Qt.FocusReason.PopupFocusReason);owner.update()
 
 

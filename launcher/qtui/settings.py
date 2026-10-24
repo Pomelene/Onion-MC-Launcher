@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (QWidget,QStackedWidget,QLineEdit,QComboBox,QSpinB
     QCheckBox,QFileDialog,QMessageBox,QDialog,QSlider)
 from PySide6.QtGui import QColor,QFontDatabase
 from .widgets import Page,SettingsSection as Card,ToggleSwitch,InlineSpinBox,SettingsComboBox,column,row,label,button,setting_row,icon
-from .theme import paint_color,APPEARANCE_KEYS
+from .theme import paint_color,APPEARANCE_KEYS,effective_accent
 
 
 class SettingsEditor(QWidget):
@@ -124,15 +124,22 @@ class SettingsEditor(QWidget):
             body.addWidget(card)
             card=Card('配色','以感知色彩空间生成界面底色、选中态与文字颜色。')
             self.combo(card,'accent_source','颜色来源','壁纸取色失败时使用默认紫色',[('自定义颜色','custom'),('跟随背景壁纸','wallpaper')])
-            self.combo(card,'color_style','色彩模式','独立 Oklab 实现，非 Material/HMCL 的逐像素复刻',[
+            self.combo(card,'color_style','色彩模式','改变配色的饱和度与色相；保真尽量保留原色',[
                 ('保真','fidelity'),('柔和点缀','tonal_spot'),('鲜艳','vibrant'),('中性','neutral'),('水果沙拉','fruit_salad'),('彩虹','rainbow')])
-            self.edit(card,'accent_color','高亮颜色','输入六位十六进制颜色，例如 #cebafa','#cebafa')
+            self.edit(card,'accent_color','自定义颜色','输入六位十六进制颜色，例如 #cebafa','#cebafa')
             if not self.fields['accent_color'].text():self.fields['accent_color'].setText('#cebafa')
             def choose_accent():
                 from .color_picker import ColorPicker
                 picker=ColorPicker(QColor(self.fields['accent_color'].text()),self)
-                if picker.exec()==QDialog.DialogCode.Accepted:self.fields['accent_color'].setText(picker.color.name())
-            setting_row(card.body,'颜色选择器','选择后自动保存',button('选择颜色',choose_accent,'soft'));body.addWidget(card)
+                if picker.exec()==QDialog.DialogCode.Accepted:
+                    self.fields['accent_color'].setText(picker.color.name())
+                    self.fields['accent_source'].setCurrentIndex(self.fields['accent_source'].findData('custom'))
+            self.choose_accent_button=button('选择颜色',choose_accent,'soft')
+            setting_row(card.body,'颜色选择器','选择颜色后改用自定义颜色',self.choose_accent_button)
+            self.palette_feedback=label('','',True);self.palette_feedback.setAlignment(Qt.AlignmentFlag.AlignRight|Qt.AlignmentFlag.AlignVCenter)
+            setting_row(card.body,'当前主题色','壁纸取色只改变界面配色，不会改变背景图片',self.palette_feedback)
+            self.fields['accent_source'].currentIndexChanged.connect(self.refresh_color_feedback)
+            body.addWidget(card)
             card=Card('布局与动效')
             self.check(card,'titlebar_transparent','标题栏透明','关闭后标题栏保持不透明；背景与正文控件仍独立控制')
             self.number_slider(card,'corner_radius','圆角大小','控件和弹出选择框的圆角；滑块、开关保留圆形结构',0,24,'px',preview=True)
@@ -210,6 +217,7 @@ class SettingsEditor(QWidget):
                 elif isinstance(field,QComboBox):field.currentIndexChanged.connect(self.queue_preview)
                 elif isinstance(field,QLineEdit):field.textChanged.connect(self.queue_preview)
         self.ready=True;self.dirty=False
+        if not version_id:self.refresh_color_feedback()
 
     def _autosave(self):
         if not self.dirty:return
@@ -319,6 +327,20 @@ class SettingsEditor(QWidget):
                  else field.currentData() if isinstance(field,QComboBox) else field.text().strip())
             for key,field in self.fields.items() if key in APPEARANCE_KEYS}
         self.launcher.apply_appearance()
+        self.refresh_color_feedback()
+
+    def refresh_color_feedback(self,*args):
+        if self.vid or not hasattr(self,'palette_feedback'):return
+        automatic=self.fields['accent_source'].currentData()=='wallpaper'
+        self.fields['accent_color'].setEnabled(not automatic)
+        self.choose_accent_button.setText('改用自定义颜色' if automatic else '选择颜色')
+        config=self.launcher.config_obj;accent=effective_accent(config)
+        if automatic:
+            if getattr(config,'_qt_wallpaper_seed_found',False):
+                text='壁纸取色 '+config._qt_wallpaper_seed+' → '+accent
+            else:text='壁纸无可用取色，使用默认紫色 → '+accent
+        else:text='自定义 → '+accent
+        self.palette_feedback.setText(text)
 
     def reset_appearance(self):
         from ..config import DEFAULTS
@@ -395,7 +417,7 @@ class SettingsEditor(QWidget):
                 w.config_obj.update(values)
                 w.config_obj._qt_appearance_preview={}
                 if changed & APPEARANCE_KEYS:
-                    w.apply_appearance()
+                    w.apply_appearance();self.refresh_color_feedback()
                 from .motion import apply_motion_preferences
                 apply_motion_preferences(w)
                 if 'game_dir' in changed:w.activate_game_library()

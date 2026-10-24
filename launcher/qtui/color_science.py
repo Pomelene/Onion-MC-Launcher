@@ -111,13 +111,17 @@ def _wallpaper_seed(path,stamp):
     from PySide6.QtGui import QImageReader
     from PySide6.QtCore import QSize,Qt
     reader=QImageReader(path);size=reader.size()
-    if not size.isValid() or size.width()*size.height()>64_000_000:return '#cebafa'
+    if not size.isValid() or size.width()*size.height()>64_000_000:return ''
     reader.setScaledSize(size.scaled(QSize(64,64),Qt.AspectRatioMode.KeepAspectRatio))
     image=reader.read()
-    return image_seed(image) if not image.isNull() else '#cebafa'
+    return image_seed(image,fallback='') if not image.isNull() else ''
 
 
-def wallpaper_seed(path):
+def wallpaper_seed_info(path):
     from pathlib import Path
-    try:return _wallpaper_seed(str(path),Path(path).stat().st_mtime_ns)
-    except (OSError,ValueError):return '#cebafa'
+    try:seed=_wallpaper_seed(str(path),Path(path).stat().st_mtime_ns)
+    except (OSError,ValueError):seed=''
+    return seed or '#cebafa',bool(seed)
+
+
+def wallpaper_seed(path):return wallpaper_seed_info(path)[0]

@@ -60,11 +60,14 @@ class SkinPreview(QWidget):
             yy=(y-16)*math.cos(pitch)-zz*math.sin(pitch);depth=(y-16)*math.sin(pitch)+zz*math.cos(pitch)
             return QPointF(cx+xx*unit,cy+(yy+16)*unit),depth
         faces=[]
-        def cube(x,y,z,w,h,d,uv,inflate=0):
+        def cube(x,y,z,w,h,d,uv,inflate=0,rotate_bottom=False):
             x-=inflate;y-=inflate;z-=inflate;w+=2*inflate;h+=2*inflate;d+=2*inflate
             points=[(x,y,z+d),(x+w,y,z+d),(x+w,y+h,z+d),(x,y+h,z+d),
                     (x,y,z),(x+w,y,z),(x+w,y+h,z),(x,y+h,z)]
             indices=[(0,1,2,3),(5,4,7,6),(4,0,3,7),(1,5,6,2),(4,5,1,0),(3,2,6,7)]
+            if rotate_bottom:
+                # Rotate the head underside UVs 180 degrees, including its overlay.
+                indices[5]=(6,7,3,2)
             for corners,rect,shade in zip(indices,uv,(1.0,.80,.72,.86,1.0,.60)):
                 projected=[project(points[i]) for i in corners];poly=[item[0] for item in projected]
                 # All faces sorted by camera depth; rear surfaces paint first.
@@ -73,13 +76,13 @@ class SkinPreview(QWidget):
         def uv(u,v,w,h,d):
             return [(u+d,v+d,w,h),(u+2*d+w,v+d,w,h),(u,v+d,d,h),(u+d+w,v+d,d,h),(u+d,v,w,d),(u+d+w,v,w,d)]
         arm=3 if self.slim else 4;modern=self.image.height()==64
-        cube(-4,0,-4,8,8,8,uv(0,0,8,8,8))
+        cube(-4,0,-4,8,8,8,uv(0,0,8,8,8),rotate_bottom=True)
         cube(-4,8,-2,8,12,4,uv(16,16,8,12,4))
         cube(-4-arm,8,-2,arm,12,4,uv(40,16,arm,12,4))
         cube(4,8,-2,arm,12,4,uv(32,48,arm,12,4) if modern else uv(40,16,arm,12,4))
         cube(-4,20,-2,4,12,4,uv(0,16,4,12,4))
         cube(0,20,-2,4,12,4,uv(16,48,4,12,4) if modern else uv(0,16,4,12,4))
-        cube(-4,0,-4,8,8,8,uv(32,0,8,8,8),.35)
+        cube(-4,0,-4,8,8,8,uv(32,0,8,8,8),.35,rotate_bottom=True)
         if modern:
             cube(-4,8,-2,8,12,4,uv(16,32,8,12,4),.18)
             cube(-4-arm,8,-2,arm,12,4,uv(40,32,arm,12,4),.18)

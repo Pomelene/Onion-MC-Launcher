@@ -4,7 +4,7 @@
 
 **A free, open-source, community-oriented launcher for Minecraft: Java Edition.**
 
-Current source version: **v0.3.0 (local review, not published)**. Windows packages are available under [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases). Extract the ZIP and run `OnionMinecraftLauncher.exe`.
+Current source version: [v0.3.0](https://github.com/Pomelene/Onion-MC-Launcher/tree/v0.3.0). Windows packages are available under [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases). Extract the ZIP and run `OnionMinecraftLauncher.exe`.
 
 **v0.3.0 improves download and modpack installation**: compact task windows show real stages and network transfer speed. Modpacks are staged privately and published as one standalone instance. Pending paths with Unicode names and the skin head underside orientation have been corrected.
 

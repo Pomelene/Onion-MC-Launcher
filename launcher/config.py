@@ -16,10 +16,10 @@ from .paths import default_game_dir,LAUNCHER_NAME,LAUNCHER_VERSION
 from .secrets import protect,unprotect,SecretStorageError
 
 #: 需要按类型强制的键（避免 settings.json 手工编辑引入错类型）
-_INT_KEYS = {"min_memory", "max_memory", "window_width", "window_height", "schematic_page_size",
+_INT_KEYS = {"launcher_window_width", "launcher_window_height", "min_memory", "max_memory", "window_width", "window_height", "schematic_page_size",
              "proxy_port", "max_download_threads", "download_speed_limit",
              "sandbox_budget_mb", "text_transparency", "ui_transparency", "background_transparency"}
-_BOOL_KEYS = {"fullscreen", "demo", "version_isolation",
+_BOOL_KEYS = {"launcher_window_maximized", "fullscreen", "demo", "version_isolation",
               "close_after_launch", "keep_launcher_open",
               "allow_newer_java", "foreign_mode", "auto_memory", "show_launch_logs",
               "custom_home_welcome", "bold_text"}
@@ -66,6 +66,9 @@ def _coerce(key: str, value: Any) -> Any:
 
 
 DEFAULTS: dict[str, Any] = {
+    "launcher_window_width": 0,  # Launcher size, separate from the game window.
+    "launcher_window_height": 0,
+    "launcher_window_maximized": False,
     "schematic_page_size": 24,
     "game_dir": "",                # 游戏目录；空表示使用默认目录
     "selected_version": "",

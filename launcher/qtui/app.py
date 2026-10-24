@@ -36,10 +36,12 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         self.game_libraries=GameLibraries(self.config_obj);self.game_libraries.ensure_current();self.bind_game_library()
         self.tasks=TaskManager(self);self.versions=[];self.kinds={};self.selected_version=self.config_obj.get('selected_version') or ''
         self.page_seq={};self.process=None;self.launch_pending=False;self.started_at=0;self.mutating=False;self.dialogs=[]
-        self.setWindowTitle(f'{LAUNCHER_NAME} {LAUNCHER_VERSION}');self.resize(1440,900);self.setMinimumSize(1100,740)
+        self.setWindowTitle(f'{LAUNCHER_NAME} {LAUNCHER_VERSION}')
         resource=Path(getattr(sys,'_MEIPASS',self.root))/'assets/craftbridge.ico'
         if resource.exists():self.setWindowIcon(QIcon(str(resource)))
         self.setStyleSheet(themed_style(self.config_obj.get('accent_color'),self.config_obj));self._build();self.apply_appearance();self.game_log.connect(self.append_log);self.game_exit.connect(self.exited)
+        from .window_size import restore_window_size
+        restore_window_size(self,self.config_obj)
         self.refresh_account();self.navigate('home');QTimer.singleShot(0,self.reload_versions)
 
     def _build(self):
@@ -136,7 +138,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
                 item=entry(name,title,glyph,lambda k=name:self.open_instance_tab(k));item.setChecked(name==self.instance_tab)
             nav.addStretch();entry('launch','启动游戏','play',self.launch_selected);entry('folder','浏览实例目录','folder',lambda:self.open_folder(self.repo.run_dir(self.selected_version)));entry('info','管理','settings',lambda:self.open_instance_tab('info'))
         elif key=='tools':
-            for name,title,glyph in [('skins','皮肤管理','skin'),('seedmap','种子地图','world')]:
+            for name,title,glyph in [('skins','皮肤管理','skin'),('seedmap','种子地图','world'),('services','社团服务','tools')]:
                 item=entry(name,title,glyph,lambda k=name:self.open_tools_tab(k));item.setChecked(name==getattr(self,'tools_tab','skins'))
             nav.addStretch()
         elif key=='settings' and self.settings_editor:
@@ -193,13 +195,15 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         self.download_kind=kind;self.navigate('download')
 
     def open_tools_tab(self,key):
-        self.tools_tab=key;self.workshop.open_tab(key);self.update_sidebar_selection('tools')
+        if self.workshop.open_tab(key) is False:return
+        self.tools_tab=key;self.update_sidebar_selection('tools')
 
     def build_tools(self):
         if not hasattr(self,'workshop'):
             from .workshop import Workshop
             self.workshop=Workshop(self);self.page_map['tools'].body.addWidget(self.workshop)
-        self.workshop.open_tab(getattr(self,'tools_tab','skins'))
+        if self.workshop.open_tab(getattr(self,'tools_tab','skins')) is False:
+            self.tools_tab='skins';self.workshop.open_tab('skins')
 
     def navigate(self,key,record_history=True,force=False):
         self.flush_settings()
@@ -390,6 +394,8 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
             if QMessageBox.question(self,'尚未保存','关闭并放弃未保存的设置？')!=QMessageBox.StandardButton.Yes:event.ignore();return
             for editor in editors:
                 if editor:editor.dirty=False
+        from .window_size import remember_window_size
+        remember_window_size(self,self.config_obj)
         self.stop_offline_skin();event.accept()
 
     def stop_offline_skin(self):
@@ -401,6 +407,8 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
 
 
 def main():
+    from .web_tools import initialize_webview
+    initialize_webview()
     application=QApplication.instance() or QApplication(sys.argv)
     install_window_chrome(application)
     configure_fonts(application)

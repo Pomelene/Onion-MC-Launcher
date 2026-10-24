@@ -8,7 +8,7 @@
 
 当前源码版本：[v0.3.0-T · THUnion 特供版](https://github.com/Pomelene/Onion-MC-Launcher/tree/for_thunion)。Windows 发布包见 [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases)，下载 ZIP 后解压运行 `OnionMinecraftLauncher.exe`。
 
-**v0.3.0-T 本地验收版**：整合包单实例导入、路径兼容修复、阶段式下载进度小窗，以及由 JSON 配置的社团服务目录、部员分享和基础包下载。此版本尚未发布。
+**v0.3.0-T**：整合包单实例导入、路径兼容修复、阶段式下载进度小窗，以及由 JSON 配置的社团服务目录、部员分享和基础包下载。
 
 **v0.2.4 新增多游戏文件夹、工具坊与内容管理功能**：实例列表和首页快捷选择支持切换已保存的游戏目录，同名实例的设置与游玩记录隔离；Java 管理内嵌设置页面；新增原理图管理、连续截图列表、三维皮肤预览及上传、本地种子地图。启动器日志移至隐藏的 `.onion/logs`，配置格式升级前自动备份。
 

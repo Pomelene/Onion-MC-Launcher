@@ -8,7 +8,7 @@ This is the `for_thunion` branch; its versions append `-T` to the public edition
 
 Current source version: [v0.3.0-T · THUnion edition](https://github.com/Pomelene/Onion-MC-Launcher/tree/for_thunion). Windows packages are available under [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases). Extract the ZIP and run `OnionMinecraftLauncher.exe`.
 
-**v0.3.0-T local review build**: standalone modpack imports, path compatibility fixes, compact task progress windows, and JSON-configured club services with member sharing and verified modpack downloads. Not published yet.
+**v0.3.0-T**: standalone modpack imports, path compatibility fixes, compact task progress windows, and JSON-configured club services with member sharing and verified modpack downloads. 
 
 **v0.2.4 adds multiple game folders, Workshop tools and content management**: switch saved libraries from the instance list or Home picker, with isolated settings and play history for identically named instances. Java management is embedded in Settings. New tools include schematic management, a continuous screenshot gallery, interactive 3D skin previews and uploads, and a local seed map. Launcher logs now live in hidden `.onion/logs`; existing configuration is backed up before its format upgrade.
 

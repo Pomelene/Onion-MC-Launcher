@@ -229,7 +229,7 @@ python -X utf8 scripts/check_bundle.py release/OnionMinecraftLauncher-v0.2.1-sli
 
 ## THUnion 特供版：社团服务
 
-独立分支 `for_thunion`，当前版本 `0.2.4-T`，Windows 数字版本仍为 0.2.4.0，文件和产品版本字符串包含 `-T`。公众版 main 不含社团服务入口。
+独立分支 `for_thunion`，当前版本 `0.3.0-T`，Windows 数字版本为 0.3.0.0，文件和产品版本字符串包含 `-T`。公众版 main 不含社团服务入口。
 
 工具坊新增“社团服务”。首次进入显示与主题一致的无边框确认面板；取消不请求目录。每次启动仅在首次确认后通过 GitHub Contents API 同步一次 main/webapp.json，校验后原子写入 `.onion/services/thunion/webapp.json`。会话状态归主窗口持有，重建页面、切换工具或离开时正在同步均不重复确认/下载；后续进入读取本地 JSON。同步失败保留并使用上次有效缓存，无缓存则显示失败；下次启动重新确认并同步。请求不带微软令牌、Cookie 或 GitHub 凭据，使用唯一 freshness 参数及 no-cache。
 
@@ -243,3 +243,6 @@ tests/test_club_services.py 检查目录格式、网址、请求刷新与无令�
 
 
 社团网页统一使用紧凑单行工具栏；成功加载时隐藏状态行和进度条。打开网页默认收起主侧栏，移除工具坊外边距、社团目录标题和说明栏，将空间留给网页。可通过“显示导航 / 展开网页”切换；返回目录或切到其他工具恢复侧栏和边距。在线地图目录增加 THUnion Atlas（https://atlas.thunion.net/），入口说明其站内提供离线导航模组下载。
+
+
+社团服务接口 v2：兼容 v1，目录和条目的数量、顺序由 categories/tools 数组决定；支持默认栏目、visible、icon、show_urls、cards/list 布局及 button_text/badge。web/external/copy/download 操作由严格枚举分派，未知字段不执行；仅允许 HTTPS、256 MiB 以内、固定文件名与 SHA-256 的 mrpack 下载，存放 .onion/downloads，显式导入前再次校验。独立仓库 API.md 和 webapp.schema.json 定义完整协议。部员分享置顶，包含基础包、Atlas 指引和作者项目链接。

@@ -174,6 +174,22 @@ def run(output):
         generated=generate('-3829811542736183482','26.3',x=68148,z=80990,y=77,scale=4,size=32,structures=False)
         assert 188 in generated.ids
         window.workshop.views['seedmap'].canvas.set_data(generated);render_hidden(window)
+        if LAUNCHER_VERSION.endswith('-T'):
+            from .club_services import ServiceConfirmation
+            from .widgets import ContentRow
+            from PySide6.QtWidgets import QDialog
+            preview=base/'.onion/services/thunion/preview.json';preview.parent.mkdir(parents=True,exist_ok=True)
+            preview.write_text(json.dumps({'schema_version':2,'title':'服务配置自检','categories':[
+                {'id':'sharing','title':'部员分享','description':'本地测试','layout':'list','icon':'tools','show_urls':False,
+                 'tools':[{'id':'guide','title':'下载指引','description':'只验证配置渲染','url':'https://example.com/guide','action':'copy','button_text':'复制网址'}]}]}),encoding='utf-8')
+            original_confirm=ServiceConfirmation.exec;ServiceConfirmation.exec=lambda self:QDialog.DialogCode.Accepted
+            try:window.open_tools_tab('services')
+            finally:ServiceConfirmation.exec=original_confirm
+            deadline=time.monotonic()+10
+            while window.tasks.jobs and time.monotonic()<deadline:application.processEvents();time.sleep(.01)
+            service=window.workshop.views['services']
+            assert service.session.preview and service.buttons[0][1]=='sharing' and len(service.findChildren(ContentRow))==1
+            render_hidden(window)
         window.navigate('home')
         assert window.accounts.path==window.instances.path==window.version_settings.path==config.path
         assert config.path.exists()

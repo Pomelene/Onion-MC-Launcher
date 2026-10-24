@@ -1,9 +1,9 @@
 """THUnion service categories describe each tool before opening its web page."""
-from PySide6.QtCore import Qt,QObject,Signal,QRectF
-from PySide6.QtGui import QPainter
-from PySide6.QtWidgets import QWidget,QStackedWidget,QDialog
+from PySide6.QtCore import Qt,QObject,Signal,QRectF,QUrl
+from PySide6.QtGui import QPainter,QDesktopServices
+from PySide6.QtWidgets import QWidget,QStackedWidget,QDialog,QApplication
 from shiboken6 import isValid
-from .widgets import Page,Card,Empty,column,row,label,button,clear,NavigationItem
+from .widgets import Page,Card,ContentRow,Empty,column,row,label,button,clear,NavigationItem
 from .theme import paint_color
 from ..club_services import CONFIRMATION,read_catalog,sync_catalog
 
@@ -33,22 +33,23 @@ class ServiceSession(QObject):
     def __init__(self,owner):
         super().__init__(owner);self.owner=owner;self.confirmed=False;self.started=False;self.loading=False
         self.catalog=None;self.error='';self.path=owner.root/'.onion/services/thunion/webapp.json'
+        self.preview_path=self.path.with_name('preview.json');self.preview=False
 
     def start(self):
         if self.started:return
-        self.started=True;self.loading=True
+        self.started=True;self.loading=True;self.preview=self.preview_path.is_file()
         def done(catalog):
             self.catalog=catalog;self.loading=False;self.error='';self.changed.emit()
         def failed(error):
             self.loading=False;self.error=str(error)
-            try:self.catalog=read_catalog(self.path)
+            try:self.catalog=read_catalog(self.preview_path if self.preview else self.path)
             except (OSError,ValueError):self.catalog=None
             self.changed.emit()
-        self.owner.tasks.submit(lambda job:sync_catalog(self.path),done,failed)
+        self.owner.tasks.submit(lambda job:read_catalog(self.preview_path) if self.preview else sync_catalog(self.path),done,failed)
 
     def read_local(self):
         if self.loading:return
-        try:self.catalog=read_catalog(self.path)
+        try:self.catalog=read_catalog(self.preview_path if self.preview else self.path)
         except (OSError,ValueError):
             if self.catalog is None:self.error='没有可用的本地服务目录，请下次启动后重新同步。'
 
@@ -58,7 +59,7 @@ class ClubServices(QWidget):
         super().__init__();self.owner=owner;self.catalog=None;self.browser=None;self.web_factory=None;self.expanded=False;self.web_layout=False
         if not hasattr(owner,'club_service_session'):owner.club_service_session=ServiceSession(owner)
         self.session=owner.club_service_session;self.session.changed.connect(self.show_catalog)
-        body=column(self,0,12);self.heading=QWidget();heading=row(self.heading);heading.addWidget(label('社团服务','heading'),1)
+        body=column(self,0,12);self.heading=QWidget();heading=row(self.heading);self.heading_title=label('社团服务','heading');heading.addWidget(self.heading_title,1)
         body.addWidget(self.heading)
         self.status=label('','muted',True);body.addWidget(self.status)
         self.stack=QStackedWidget();body.addWidget(self.stack,1)
@@ -80,7 +81,7 @@ class ClubServices(QWidget):
         if self.session.loading:
             self.status.setText('正在同步社团服务目录…');self.tools.body.addWidget(Empty('正在读取目录','','world'))
         elif self.catalog:
-            self.status.setText('同步失败，正在使用本地目录。'+self.session.error if self.session.error else '')
+            self.status.setText('本地预览 · 未请求远端服务配置' if self.session.preview else '同步失败，正在使用本地目录。'+self.session.error if self.session.error else '')
             self.render_categories()
         else:
             self.status.setText(self.session.error)
@@ -88,19 +89,74 @@ class ClubServices(QWidget):
 
     def render_categories(self):
         clear(self.category_list);self.buttons=[]
-        for category in self.catalog['categories']:
-            item=NavigationItem(category['title'],'folder',lambda c=category:self.select_category(c))
+        self.heading_title.setText(self.catalog['title'])
+        categories=[category for category in self.catalog['categories'] if category.get('visible',True)]
+        for category in categories:
+            item=NavigationItem(category['title'],category.get('icon','folder'),lambda c=category:self.select_category(c))
             self.category_list.addWidget(item);self.buttons.append((item,category['id']))
-        self.category_list.addStretch();self.select_category(self.catalog['categories'][0])
+        self.category_list.addStretch()
+        if categories:self.select_category(next((c for c in categories if c['id']==self.catalog.get('default_category')),categories[0]))
+        else:self.tools.body.addWidget(Empty('暂无服务目录','','tools'))
     def select_category(self,category):
+        self.close_browser();self.selected_category=category
         self.stack.setCurrentWidget(self.directory);clear(self.tools.body)
         for item,ident in self.buttons:item.setChecked(ident==category['id'])
         self.tools.body.addWidget(label(category['title'],'heading'))
         self.tools.body.addWidget(label(category['description'],'muted',True))
         for tool in category['tools']:
-            card=Card(tool['title'],tool['description']);line=row()
-            url=label(tool['url'],'muted',True);url.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse);line.addWidget(url,1)
-            line.addWidget(button('打开',lambda t=tool:self.open_tool(t),'primary','world'));card.body.addLayout(line);self.tools.body.addWidget(card)
+            if not tool.get('visible',True):continue
+            title=tool['title']+(' · '+tool['badge'] if tool.get('badge') else '')
+            show_url=tool.get('show_urls',category.get('show_urls',True))
+            if category.get('layout','cards')=='list':
+                detail=tool['description']+(' · '+tool['url'] if show_url else '')
+                card=ContentRow(title,detail,tool.get('icon','world'));line=card.line
+            else:
+                card=Card(title,tool['description']);line=row();card.body.addLayout(line)
+                if show_url:
+                    url=label(tool['url'],'muted',True);url.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse);line.addWidget(url,1)
+                else:line.addStretch()
+            action=tool.get('action','web');defaults={'web':'打开','external':'浏览器打开','download':'下载整合包','copy':'复制链接'}
+            line.addWidget(button(tool.get('button_text',defaults[action]),lambda t=tool:self.activate_tool(t),'primary',tool.get('icon','download' if action=='download' else 'world')))
+            if action=='download':
+                control=button('导入整合包',lambda t=tool:self.import_tool(t))
+                try:control.setEnabled(self.download_path(tool).is_file())
+                except (OSError,ValueError):control.setEnabled(False)
+                line.addWidget(control)
+            self.tools.body.addWidget(card)
+
+    def activate_tool(self,tool):
+        action=tool.get('action','web')
+        if action=='download':return self.download_tool(tool)
+        if action=='copy':QApplication.clipboard().setText(tool['url']);self.status.setText('链接已复制');self.status.show();return
+        if action=='external':
+            if not QDesktopServices.openUrl(QUrl(tool['url'])):self.status.setText('无法打开系统浏览器');self.status.show()
+            return
+        self.open_tool(tool)
+
+    def download_path(self,tool):
+        from ..safety import child
+        return child(self.owner.root,'.onion/downloads/'+tool['filename'])
+
+    def download_tool(self,tool):
+        from ..download import DownloadJob
+        from ..club_services import verify_download
+        path=self.download_path(tool)
+        def work(job):
+            job.emit('下载 '+tool['filename'])
+            self.owner.repo.downloader.download_one(DownloadJob(tool['url'],path,size=tool['size'],sha256=tool['sha256']),lambda a,b:job.emit((a,b)))
+            verify_download(path,tool);return path
+        def done(path):
+            if isValid(self):self.select_category(self.selected_category);self.status.setText('已下载，可点击“导入整合包”');self.status.show()
+        return self.owner.task('下载 '+tool['title'],work,done)
+
+    def import_tool(self,tool):
+        from ..club_services import verify_download
+        from ..modpack import import_modpack
+        path=self.download_path(tool);repo=self.owner.repo
+        def work(job):
+            verify_download(path,tool)
+            return import_modpack(repo,path,job.emit,lambda a,b:job.emit((a,b)))
+        return self.owner.task('导入 '+tool['title'],work,self.owner.installed)
     def open_tool(self,tool):
         from .web_tools import WebTool
         self.close_browser()

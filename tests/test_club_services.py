@@ -46,7 +46,7 @@ def test_each_catalog_fetch_requests_fresh_public_document_without_tokens():
         assert not any(key.lower() in ('authorization','cookie') for key in request.headers)
 
 def test_bad_service_payload_is_bounded_and_has_no_command_execution():
-    for raw in (b'{' , b'x'*(MAX_BYTES+1),json.dumps({'schema_version':2}).encode()):
+    for raw in (b'{' , b'x'*(MAX_BYTES+1),json.dumps({'schema_version':99}).encode()):
         with patch('launcher.club_services.secure_open',return_value=BytesIO(raw)):
             try:fetch_catalog()
             except ValueError:pass
@@ -76,3 +76,28 @@ def test_catalog_cache_preserves_previous_file_when_sync_fails():
         try:read_catalog(path)
         except ValueError:pass
         else:raise AssertionError('Oversized cache accepted')
+
+
+def test_v2_catalog_order_layout_actions_and_download_integrity():
+    import hashlib
+    from launcher.club_services import verify_download
+    data=catalog();data['schema_version']=2;data['default_category']='map'
+    data['categories'].reverse();category=data['categories'][0]
+    category.update(layout='list',icon='world',show_urls=False,visible=True)
+    tool=category['tools'][0];body=b'fixture'
+    tool.update(action='download',filename='263THUnionBasic.mrpack',size=len(body),sha256=hashlib.sha256(body).hexdigest(),button_text='获取基础包',badge='26.3')
+    result=parse_catalog(data)
+    assert result['categories'][0]['id']=='map' and result['categories'][0]['layout']=='list'
+    assert result['default_category']=='map' and result['categories'][0]['tools'][0]['button_text']=='获取基础包'
+    with tempfile.TemporaryDirectory() as directory:
+        path=Path(directory)/tool['filename'];path.write_bytes(body);verify_download(path,tool)
+        path.write_bytes(b'changed')
+        try:verify_download(path,tool)
+        except ValueError:pass
+        else:raise AssertionError('Tampered member download accepted')
+    for field,value in (('filename','../unsafe.mrpack'),('filename','test.exe'),('size',True),('sha256','bad'),('url','http://example.com/file'),('action','execute')):
+        bad=deepcopy(data);bad['categories'][0]['tools'][0][field]=value
+        try:parse_catalog(bad)
+        except ValueError:pass
+        else:raise AssertionError('Unsafe download field accepted: '+field)
+    assert parse_catalog({'schema_version':2,'title':'空目录','categories':[]})['categories']==[]

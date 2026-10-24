@@ -6,8 +6,11 @@
 """
 
 import hashlib
+import copy
 import json
 import re
+import shutil
+import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -100,7 +103,88 @@ def _slug(text: str) -> str:
     return cleaned.strip("-")[:40] or "modpack"
 
 
+def _standalone_profile(repo, version_id, game_version):
+    """Flatten raw inheritance while retaining conditional arguments and libraries."""
+    chain=[];seen=set();current=version_id
+    while current:
+        if current in seen:raise DownloadError('整合包版本继承存在循环')
+        seen.add(current);data=repo.resolver.load_raw(current);chain.append(data);current=data.get('inheritsFrom')
+    merged={}
+    for data in reversed(chain):merged.update(copy.deepcopy(data))
+    merged['libraries']=[copy.deepcopy(lib) for data in chain for lib in data.get('libraries',[])]
+    arguments={}
+    for data in reversed(chain):
+        for kind,values in (data.get('arguments') or {}).items():arguments.setdefault(kind,[]).extend(copy.deepcopy(values))
+    if arguments:merged['arguments']=arguments
+    merged.pop('inheritsFrom',None);merged.pop('jar',None)
+    merged['id']=version_id;merged['onionGameVersion']=game_version
+    resolved=repo.resolver.resolve(version_id);source=repo.client_jar_path(resolved)
+    merged['mainClass']=resolved.main_class
+    if resolved.asset_index:merged['assetIndex']=copy.deepcopy(resolved.asset_index)
+    if resolved.java_major is not None:
+        merged['javaVersion']={**(merged.get('javaVersion') or {}),'majorVersion':resolved.java_major}
+    if resolved.logging:merged['logging']={'client':copy.deepcopy(resolved.logging)}
+    downloads=merged.get('downloads') or {}
+    if resolved.client:downloads['client']=copy.deepcopy(resolved.client)
+    merged['downloads']=downloads
+    if not source.is_file():raise DownloadError('整合包客户端文件尚未准备完成')
+    destination=repo.version_dir(version_id)/f'{version_id}.jar'
+    if source!=destination:shutil.copy2(source,destination)
+    if resolved.jar_id and resolved.jar_id!=resolved.client_version_id:
+        # A patched loader jar is not interchangeable with Mojang's vanilla jar.
+        merged.setdefault('downloads',{}).pop('client',None)
+    return merged
+
+
 def import_modpack(repo, archive: Path, on_stage=None, on_progress=None) -> str:
+    """Publish exactly one self-contained instance after the whole import succeeds."""
+    from .repository import GameRepository
+    from .version import VersionResolver
+    from .safety import child
+    info=read_modpack_info(archive)
+    base=f'{_slug(info.name)}-{info.game_version}';pack_id=base;suffix=2
+    while repo.version_dir(pack_id).exists():pack_id=f'{base}-{suffix}';suffix+=1
+    target=repo.assert_writable(repo.version_dir(pack_id))
+    cache=child(repo.game_dir,'.onion/install');cache.mkdir(parents=True,exist_ok=True)
+    from .storage import _hide
+    _hide(cache.parent)
+    with tempfile.TemporaryDirectory(dir=cache,prefix='pack-',ignore_cleanup_errors=True) as temporary:
+        config=copy.copy(repo.config);config.data=dict(repo.config.data);config.data['game_dir']=str(repo.game_dir)
+        staged=GameRepository(config);staged.versions_dir=Path(temporary)/'versions';staged.resolver=VersionResolver(staged.versions_dir)
+        # Reuse only runtime metadata/client jars, never copy another instance's
+        # mods, saves or configuration into the new pack.
+        seeds=[info.game_version]
+        if info.loader in ('fabric','quilt') and info.loader_version:
+            seeds.append(f'{info.loader}-loader-{info.loader_version}-{info.game_version}')
+        seen=set()
+        while seeds:
+            ident=seeds.pop()
+            if ident in seen:continue
+            seen.add(ident);original=repo.resolver.json_path(ident)
+            if not original.is_file():continue
+            data=repo.resolver.load_raw(ident);folder=staged.version_dir(ident);folder.mkdir(parents=True,exist_ok=True)
+            (folder/f'{ident}.json').write_text(json.dumps(data,ensure_ascii=False),encoding='utf-8')
+            jar=original.with_suffix('.jar')
+            if jar.is_file():shutil.copy2(jar,folder/jar.name)
+            if data.get('inheritsFrom'):seeds.append(data['inheritsFrom'])
+        cancel=repo.downloader._cancel_event()
+        telemetry=getattr(repo.downloader._local,'on_bytes',None)
+        with staged.downloader.cancellable(cancel,telemetry):
+            _import_modpack(staged,archive,on_stage,on_progress,pack_id)
+        if cancel is not None and cancel.is_set():raise DownloadError('整合包导入已取消')
+        profile=_standalone_profile(staged,pack_id,info.game_version)
+        source=staged.version_dir(pack_id)
+        (source/f'{pack_id}.json').write_text(json.dumps(profile,ensure_ascii=False,indent=2),encoding='utf-8')
+        if cancel is not None and cancel.is_set():raise DownloadError('整合包导入已取消')
+        repo.versions_dir.mkdir(parents=True,exist_ok=True)
+        if target.exists():raise FileExistsError('整合包目标目录已存在，请重试')
+        source.rename(target)
+    repo.invalidate_library_cache()
+    if on_stage:on_stage(f'整合包导入完成：{pack_id}')
+    return pack_id
+
+
+def _import_modpack(repo, archive: Path, on_stage=None, on_progress=None, target_id=None) -> str:
     """导入整合包，返回新版本 id。"""
     def stage(text: str) -> None:
         if on_stage:
@@ -132,7 +216,7 @@ def import_modpack(repo, archive: Path, on_stage=None, on_progress=None) -> str:
         repo.install(loader_version_id, on_stage, on_progress)
 
     base_pack = f"{_slug(info.name)}-{info.game_version}"
-    pack_id = base_pack
+    pack_id = target_id or base_pack
     suffix = 2
     while repo.version_dir(pack_id).exists():
         pack_id = f"{base_pack}-{suffix}"
@@ -166,7 +250,8 @@ def import_modpack(repo, archive: Path, on_stage=None, on_progress=None) -> str:
                 hashes = entry.get("hashes") or {}
                 jobs.append(DownloadJob(downloads[0], target,
                                         sha1=hashes.get("sha1"),
-                                        size=entry.get("fileSize"), name=Path(rel).name))
+                                        size=entry.get("fileSize"), name=Path(rel).name,
+                                        fallback_urls=tuple(downloads[1:])))
             if jobs:
                 repo.download_jobs(jobs, on_progress)
             files_installed += len(jobs)
@@ -183,7 +268,7 @@ def import_modpack(repo, archive: Path, on_stage=None, on_progress=None) -> str:
                 files_installed += _install_curseforge_files(
                     repo, instance, entries, on_stage, on_progress)
 
-    stage(f"整合包导入完成：{pack_id}")
+    stage(f"整合包文件已就绪：{pack_id}")
     return pack_id
 
 
@@ -245,6 +330,7 @@ def _base_version(repo, version_id: str) -> str:
     vid = version_id
     try:
         data = repo.resolver.load_raw(vid)
+        if data.get('onionGameVersion'):return str(data['onionGameVersion'])
         seen = {vid}
         while data.get("inheritsFrom"):
             vid = data["inheritsFrom"]

@@ -1,7 +1,9 @@
 """Managed-directory boundaries and recoverable file operations."""
 
 import json
+import os
 import shutil
+import stat
 import time
 import uuid
 from pathlib import Path
@@ -20,17 +22,22 @@ def component(name: str) -> str:
 
 def contained(path: Path, root: Path) -> Path:
     path, root = Path(path), Path(root)
-    resolved, base = path.resolve(), root.resolve()
-    if root.is_symlink() or (hasattr(root, "is_junction") and root.is_junction()):
-        raise PermissionError(f"管理根目录不能是目录链接：{root}")
-    if resolved == base or not resolved.is_relative_to(base):
-        raise PermissionError(f"路径超出管理范围：{path}")
-    # Reparse points inside a managed tree must never redirect writes elsewhere.
-    current = path.absolute()
-    while current != root.absolute() and current != current.parent:
-        if current.is_symlink() or (hasattr(current, "is_junction") and current.is_junction()):
+    # A pending download does not exist yet. Do not resolve its leaf with the
+    # Windows non-strict realpath fallback; validate literal components instead.
+    if '..' in path.parts:
+        raise PermissionError(f"拒绝含上级跳转的写入路径：{path}")
+    absolute=Path(os.path.abspath(path));base=Path(os.path.abspath(root))
+    if absolute == base or not absolute.is_relative_to(base):
+        raise PermissionError(f"路径超出管理范围：{path}（管理目录：{root}）")
+    # Inspect from the root downward, before following a directory link. Missing
+    # descendants are fine, but existing reparse points must never redirect IO.
+    current=base
+    for part in (None,*absolute.relative_to(base).parts):
+        if part is not None:current=current/part
+        try:metadata=current.lstat()
+        except FileNotFoundError:continue
+        if stat.S_ISLNK(metadata.st_mode) or getattr(metadata,'st_file_attributes',0) & getattr(stat,'FILE_ATTRIBUTE_REPARSE_POINT',0x400):
             raise PermissionError(f"拒绝通过目录链接修改文件：{current}")
-        current = current.parent
     return path
 
 

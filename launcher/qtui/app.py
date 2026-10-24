@@ -350,15 +350,15 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
             if self.active_task is dialog:self.active_task=None;self.task_strip.hide()
         def success(value):
             if mutates:self.mutating=False
-            dialog.accept();finish();self.status.setText('任务已取消' if dialog.job.cancel.is_set() else title+' · 完成')
+            dialog.complete();dialog.accept();finish();self.status.setText('任务已取消' if dialog.job.cancel.is_set() else title+' · 完成')
             if done:done(value)
         def failure(error):
             if mutates:self.mutating=False
-            dialog.accept();finish()
+            dialog.complete(failed=True);dialog.accept();finish()
             if dialog.job and dialog.job.cancel.is_set():self.status.setText('任务已取消')
             else:self.error(error)
         dialog.job=self.tasks.submit(work,success,failure,progress,self.repo.downloader)
-        self.show_subpage(dialog);return dialog.job
+        dialog.open();return dialog.job
 
     def cancel_active_task(self):
         if self.active_task:

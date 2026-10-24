@@ -9,6 +9,10 @@ if '--web-tool-check-output' in sys.argv:
     os.environ['QT_QPA_PLATFORM']='windows'
     from launcher.qtui.web_tools import run_native_check
     sys.exit(run_native_check(sys.argv[sys.argv.index('--web-tool-check-output')+1]))
+if '--startup-check-output' in sys.argv:
+    os.environ['QT_QPA_PLATFORM']='offscreen'
+    from launcher.qtui.startup_check import run
+    sys.exit(run(sys.argv[sys.argv.index('--startup-check-output')+1]))
 if '--self-check-output' in sys.argv or '--raster-check-output' in sys.argv:
     native='--raster-check-output' in sys.argv
     option='--raster-check-output' if native else '--self-check-output'

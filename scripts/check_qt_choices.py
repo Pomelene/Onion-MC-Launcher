@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='ui-choices-') as directo
         QTest.mouseClick(combo,Qt.MouseButton.LeftButton);app.processEvents();popup=combo.choice_popup
         assert popup is not None and popup.isVisible() and not hasattr(popup,'_chrome_header')
         image=capture(popup,f'qt-combo-{mode}.png');assert image.pixelColor(0,0).alpha()==0 and image.pixelColor(image.width()-1,image.height()-1).alpha()==0
-        index=popup.proxy.index(1-combo.currentIndex(),0);row=popup.proxy.mapToSource(index).row()
+        index=popup.proxy.index(combo.findData('light' if mode=='dark' else 'dark'),0);row=popup.proxy.mapToSource(index).row()
         QTest.mouseClick(popup.list.viewport(),Qt.MouseButton.LeftButton,pos=popup.list.visualRect(index).center())
         assert combo.currentIndex()==row and activated[-1]==row and not popup.isVisible();assert editor.flush()
         editor.fields['color_mode'].setCurrentIndex(editor.fields['color_mode'].findData(mode));assert editor.flush()

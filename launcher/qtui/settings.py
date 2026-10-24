@@ -2,9 +2,9 @@
 from PySide6.QtCore import Qt,QTimer
 from PySide6.QtWidgets import (QWidget,QStackedWidget,QLineEdit,QComboBox,QSpinBox,
     QCheckBox,QFileDialog,QMessageBox,QDialog,QSlider)
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor,QFontDatabase
 from .widgets import Page,SettingsSection as Card,ToggleSwitch,InlineSpinBox,SettingsComboBox,column,row,label,button,setting_row,icon
-from .theme import paint_color
+from .theme import paint_color,APPEARANCE_KEYS
 
 
 class SettingsEditor(QWidget):
@@ -105,14 +105,27 @@ class SettingsEditor(QWidget):
             card=Card('账号管理','正版、离线与外置账号在统一的账号窗口中管理。')
             card.body.addWidget(button('管理游戏账号',window.open_accounts,'soft','account'));body.addWidget(card)
             body=tab('外观','grid');card=Card('界面外观','透明度越高，显示越淡；修改后自动保存。')
-            self.combo(card,'color_mode','显示模式','切换启动器的深色或浅色外观',[('深色','dark'),('浅色','light')])
+            self.combo(card,'color_mode','显示模式','切换启动器的深色或浅色外观',[('跟随系统','auto'),('深色','dark'),('浅色','light')])
             self.check(card,'bold_text','粗体文字','加粗启动器界面文字');self.fields['bold_text'].toggled.connect(self.queue_preview)
             for key,title,description,high in [
                 ('text_transparency','文字透明度','0% 为不透明，最高 70%，保留基本可读性',70),
-                ('ui_transparency','UI 透明度','窗口背景与控件底色透出后方窗口；文字透明度独立控制',90)]:
+                ('ui_transparency','UI 透明度','仅调整界面底色和控件，不影响背景图片；文字透明度独立控制',90)]:
                 self.percentage(card,key,title,description,high)
             body.addWidget(card)
-            card=Card('特征色','用于高亮设置行中可点击或编辑的文字。')
+            card=Card('字体与可读性')
+            families=QFontDatabase.families()
+            self.combo(card,'font_family','界面字体','使用系统已有字体，不随程序打包字体',[('默认（Microsoft YaHei UI）','')]+[(name,name) for name in families])
+            self.number_slider(card,'font_size','界面字号','同时调整标题、列表和辅助文字，12–18 逻辑像素',12,18,'px',preview=True)
+            self.combo(card,'font_antialiasing','字体抗锯齿','自动通常最适合当前显示器',[('自动','auto'),('灰度','gray'),('子像素（由系统支持情况决定）','subpixel')])
+            self.combo(card,'log_font_family','日志字体','仅影响运行日志',[('默认（Consolas）','Consolas'),('跟随界面字体','')]+[(name,name) for name in families if name!='Consolas'])
+            self.number_slider(card,'log_font_size','日志字号','独立于界面字号',9,28,'px',preview=True)
+            sample=label('字体预览 · 清华联盟工坊 · Onion 0123456789','muted',True)
+            sample.setContentsMargins(16,10,16,10);card.body.addWidget(sample)
+            body.addWidget(card)
+            card=Card('配色','以感知色彩空间生成界面底色、选中态与文字颜色。')
+            self.combo(card,'accent_source','颜色来源','壁纸取色失败时使用默认紫色',[('自定义颜色','custom'),('跟随背景壁纸','wallpaper')])
+            self.combo(card,'color_style','色彩模式','独立 Oklab 实现，非 Material/HMCL 的逐像素复刻',[
+                ('保真','fidelity'),('柔和点缀','tonal_spot'),('鲜艳','vibrant'),('中性','neutral'),('水果沙拉','fruit_salad'),('彩虹','rainbow')])
             self.edit(card,'accent_color','高亮颜色','输入六位十六进制颜色，例如 #cebafa','#cebafa')
             if not self.fields['accent_color'].text():self.fields['accent_color'].setText('#cebafa')
             def choose_accent():
@@ -120,7 +133,12 @@ class SettingsEditor(QWidget):
                 picker=ColorPicker(QColor(self.fields['accent_color'].text()),self)
                 if picker.exec()==QDialog.DialogCode.Accepted:self.fields['accent_color'].setText(picker.color.name())
             setting_row(card.body,'颜色选择器','选择后自动保存',button('选择颜色',choose_accent,'soft'));body.addWidget(card)
-            card=Card('动态效果','关闭后，页面与控件立即切换。')
+            card=Card('布局与动效')
+            self.check(card,'titlebar_transparent','标题栏透明','关闭后标题栏保持不透明；背景与正文控件仍独立控制')
+            self.number_slider(card,'corner_radius','圆角大小','控件和弹出选择框的圆角；滑块、开关保留圆形结构',0,24,'px',preview=True)
+            self.combo(card,'list_density','列表密度','模组、资源包、实例选择等列表的行间距',[
+                ('紧凑','compact'),('标准','standard'),('宽松','comfortable')])
+            self.number_slider(card,'animation_duration','动画时长','控制悬停、按压与开关动效；0 表示关闭，导航尾随按比例变化',0,600,'ms',preview=True)
             self.check(card,'ui_animations','界面动效','导航胶囊滑动、按钮按压和开关滑动；关闭可减少动态效果');body.addWidget(card)
             card=Card('首页背景','独立设置背景显示方式与透明度，不改变首页按钮和文字。')
             self.combo(card,'background_scope','背景范围','整个窗口会将背景延伸至导航栏和标题栏',[
@@ -128,6 +146,7 @@ class SettingsEditor(QWidget):
             self.combo(card,'background_mode','图片显示方式','填充会裁切，适应会保留完整图片',[
                 ('填充（保持比例，裁切）','fill'),('自适应（完整显示）','fit'),
                 ('拉伸（铺满）','stretch'),('居中（原始大小）','center'),('平铺','tile')])
+            self.number_slider(card,'background_blur','背景图片模糊','只处理背景图片，文字和控件保持清晰；0 为关闭',0,40,'px',preview=True)
             self.percentage(card,'background_transparency','背景透明度','0% 为完整显示；100% 为隐藏图片及装饰',100)
             field=QLineEdit(str(self.initial('background_image') or ''));field.setPlaceholderText('使用默认背景');field.setProperty('wideEditor',True);self.add(card,'background_image','自定义图片','支持 PNG、JPG 和 WebP',field)
             def choose_background():
@@ -152,6 +171,8 @@ class SettingsEditor(QWidget):
             self.fields['custom_home_welcome'].toggled.connect(preview_welcome)
             for key in ('home_welcome_large','home_welcome_small'):self.fields[key].textChanged.connect(preview_welcome)
             preview_welcome();body.addWidget(card)
+            reset=button('恢复外观默认值',self.reset_appearance,'soft')
+            body.addWidget(reset,0,Qt.AlignmentFlag.AlignRight)
         body=tab('高级参数','settings');card=Card('启动参数','通常保持默认即可。额外参数会传递给 Java 或游戏。')
         self.edit(card,'jvm_args','JVM 参数','支持用引号包裹含空格的参数','留空使用默认参数')
         self.edit(card,'game_args','游戏参数','附加到游戏启动命令','留空使用默认参数')
@@ -181,6 +202,13 @@ class SettingsEditor(QWidget):
             self.specific.toggled.connect(specific_changed)
             enable_controls(self.specific.isChecked())
 
+        if not version_id:
+            for key in APPEARANCE_KEYS:
+                field=self.fields.get(key)
+                if isinstance(field,QCheckBox):field.toggled.connect(self.queue_preview)
+                elif isinstance(field,QSpinBox):field.valueChanged.connect(self.queue_preview)
+                elif isinstance(field,QComboBox):field.currentIndexChanged.connect(self.queue_preview)
+                elif isinstance(field,QLineEdit):field.textChanged.connect(self.queue_preview)
         self.ready=True;self.dirty=False
 
     def _autosave(self):
@@ -286,9 +314,23 @@ class SettingsEditor(QWidget):
 
     def preview_transparency(self):
         if self.vid:return
-        self.launcher.config_obj._qt_appearance_preview={key:self.fields[key].value() for key in ('ui_transparency','text_transparency','background_transparency') if key in self.fields}
-        self.launcher.config_obj._qt_appearance_preview['bold_text']=self.fields['bold_text'].isChecked()
+        self.launcher.config_obj._qt_appearance_preview={
+            key:(field.isChecked() if isinstance(field,QCheckBox) else field.value() if isinstance(field,QSpinBox)
+                 else field.currentData() if isinstance(field,QComboBox) else field.text().strip())
+            for key,field in self.fields.items() if key in APPEARANCE_KEYS}
         self.launcher.apply_appearance()
+
+    def reset_appearance(self):
+        from ..config import DEFAULTS
+        for key in APPEARANCE_KEYS:
+            field=self.fields.get(key)
+            if field is None:continue
+            value=DEFAULTS[key]
+            if isinstance(field,QCheckBox):field.setChecked(value)
+            elif isinstance(field,QSpinBox):field.setValue(value)
+            elif isinstance(field,QComboBox):field.setCurrentIndex(max(0,field.findData(value)))
+            else:field.setText(value)
+        self.mark_dirty();self.queue_preview()
 
     def check(self,card,key,title,description):
         field=ToggleSwitch();field.setChecked(bool(self.initial(key)));self.add(card,key,title,description,field)
@@ -352,7 +394,7 @@ class SettingsEditor(QWidget):
                     values['selected_version']=w.game_libraries.selection(values['game_dir'])
                 w.config_obj.update(values)
                 w.config_obj._qt_appearance_preview={}
-                if changed & {'accent_color','color_mode','bold_text','text_transparency','ui_transparency','background_image','background_mode','background_transparency','background_scope'}:
+                if changed & APPEARANCE_KEYS:
                     w.apply_appearance()
                 from .motion import apply_motion_preferences
                 apply_motion_preferences(w)

@@ -3,11 +3,11 @@ from PySide6.QtCore import Qt,QPoint,QRectF,QSize,QEvent,QSortFilterProxyModel
 from PySide6.QtGui import QColor,QPainter,QPen,QFont,QFontMetrics,QPainterPath
 from PySide6.QtWidgets import (QFrame,QComboBox,QListView,QLineEdit,QVBoxLayout,
     QStyledItemDelegate,QStyle,QStyleOptionComboBox,QMenu)
-from .theme import config_for,paint_color,surface_opacity,appearance_values,contrasting_accent
+from .theme import config_for,paint_color,surface_opacity,appearance_values,contrasting_accent,effective_accent,corner,text_size,row_height,preference
 
 
 def accent_for(widget):
-    color=QColor(config_for(widget).get('accent_color') or '#cebafa')
+    color=QColor(effective_accent(config_for(widget)))
     return color if color.isValid() else QColor('#cebafa')
 
 
@@ -16,14 +16,14 @@ def paint_popup(widget,painter,radius=12):
     fill=paint_color(widget,'surface');factor=surface_opacity(config_for(widget));fill.setAlpha(round(252*factor))
     border=paint_color(widget,'icon');border.setAlpha(round(50*factor))
     painter.setPen(QPen(border,1));painter.setBrush(fill)
-    painter.drawRoundedRect(QRectF(widget.rect()).adjusted(.5,.5,-.5,-.5),radius,radius)
+    painter.drawRoundedRect(QRectF(widget.rect()).adjusted(.5,.5,-.5,-.5),corner(widget,radius),corner(widget,radius))
 
 
 class ChoiceDelegate(QStyledItemDelegate):
     def __init__(self,popup):super().__init__(popup);self.popup=popup
 
     def sizeHint(self,option,index):
-        return QSize(240,14 if index.data(Qt.ItemDataRole.AccessibleDescriptionRole)=='separator' else 42)
+        return QSize(240,14 if index.data(Qt.ItemDataRole.AccessibleDescriptionRole)=='separator' else row_height(self.popup.owner,42))
 
     def paint(self,painter,option,index):
         owner=self.popup.owner;painter.save();painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -36,7 +36,7 @@ class ChoiceDelegate(QStyledItemDelegate):
         enabled=bool(index.flags() & Qt.ItemFlag.ItemIsEnabled)
         if chosen or option.state & (QStyle.StateFlag.State_Selected|QStyle.StateFlag.State_MouseOver):
             color=accent_for(owner);color.setAlpha(round((42 if chosen else 22)*surface_opacity(config_for(owner))))
-            painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(color);painter.drawRoundedRect(rect,8,8)
+            painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(color);painter.drawRoundedRect(rect,corner(owner,8),corner(owner,8))
         font=QFont(owner.font())
         if chosen or appearance_values(config_for(owner))['bold_text']:font.setWeight(QFont.Weight.DemiBold)
         painter.setFont(font);painter.setPen(paint_color(owner,'text' if enabled else 'disabled',text=True))

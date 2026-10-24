@@ -226,3 +226,14 @@ python -X utf8 scripts/check_bundle.py release/OnionMinecraftLauncher-v0.2.1-sli
 `launcher/qtui/java_manager.py` 是设置中的普通 QWidget 页，不再使用 Java 管理 QDialog。首次进入后台检测，支持重新检测、系统文件选择器添加、全局 Java 选择/恢复自动选择。Java 下载在本页显示进度、失败和取消状态，不切入任务子页；扫描和下载互斥，下载成功刷新列表并保存所选运行时。实例级 Java 设置仍在各实例独立设置内管理。
 
 `tests/test_game_libraries.py` 验证旧格式保留、同名实例隔离、目录去重与选择恢复、移除不删除文件、并发目录写入及实际运行路径。`scripts/check_qt_libraries_java.py` 使用临时双目录、模拟 Java 和模拟游戏进程，验证真实页面按钮、重启恢复、任务切换保护、运行中切目录后的统计归属、全局设置目录入口、Java 内嵌状态与下载成功/失败/取消；生成深浅主题多尺寸截图。不会运行真实游戏、Java 或进行真实下载。
+
+## Local appearance preview (2026-10-25)
+
+- Color generation uses a small, independent Oklab/Oklch implementation in `launcher/qtui/color_science.py`. References: [Oklab](https://bottosson.github.io/posts/oklab/), [Material extraction pipeline](https://github.com/material-foundation/material-color-utilities/blob/main/concepts/color_extraction.md). The six styles express similar visual directions, not exact HCT/Material replicas.
+- Wallpaper extraction decodes at most a 64×64 sample, bins into at most 512 RGB cells, scores population and perceptual chroma, ignores transparent/near-black/near-white candidates, and falls back to purple. Cache: 4 path/mtime entries; palette cache: 96 entries. No new runtime package, bundled font or remote service.
+- Base text, secondary text and actionable foreground target >=4.5:1 against their generated surface. User-selected text/background transparency can reduce the final contrast; a translucent surface over an arbitrary wallpaper cannot promise a fixed final contrast.
+- Blur uses existing Qt Widgets' native blur filter on a bounded working image, then caches the result. It applies only to wallpaper, never to text/controls, and is not desktop/acrylic blur. Original image is retained for color extraction and zero-blur restoration. UI, text and wallpaper opacity remain independent.
+- Font family, interface size (12–18 logical px), log family/size, antialiasing preference, system light/dark following, titlebar transparency, relative control corner scale (0–24), background blur (0–40), animation duration (0–600 ms), and compact/standard/comfortable list density share automatic saving, live previews and default reset.
+- System appearance uses Qt `QStyleHints.colorSchemeChanged`; antialiasing remains subject to Qt, font and display/platform capabilities. Reduced motion or duration 0 settles animations immediately.
+- Main and for_thunion are built separately. Preserve the THUnion-only WebView entry initialization and service navigation; never replace app.py wholesale across editions.
+- Checks: tests/test_color_science.py, scripts/check_qt_appearance_next.py, scripts/check_qt_wallpaper_opacity.py, scripts/check_qt_choices.py, scripts/check_qt_motion.py, existing background/transparency checks, and each frozen build's real-entry startup/raster/edition-specific checks.

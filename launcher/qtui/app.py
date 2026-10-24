@@ -42,6 +42,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         self.setStyleSheet(themed_style(self.config_obj.get('accent_color'),self.config_obj));self._build();self.apply_appearance();self.game_log.connect(self.append_log);self.game_exit.connect(self.exited)
         from .window_size import restore_window_size
         restore_window_size(self,self.config_obj)
+        QApplication.instance().styleHints().colorSchemeChanged.connect(self._system_mode_changed)
         self.refresh_account();self.navigate('home');QTimer.singleShot(0,self.reload_versions)
 
     def _build(self):
@@ -294,18 +295,38 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         results=[editor.flush() for editor in (self.settings_editor,self.instance_editor) if editor]
         return all(results)
 
+    def _system_mode_changed(self,*args):
+        from .theme import preference
+        if preference(self.config_obj,'color_mode','dark')=='auto':self.apply_appearance()
+
     def apply_appearance(self):
-        from .theme import paint_color
-        from .widgets import HomeCanvas
+        from .theme import paint_color,preference
+        from .color_science import wallpaper_seed
+        from .widgets import HomeCanvas,ContentRow
+        from PySide6.QtGui import QFont,QFontDatabase
+        self.config_obj._qt_wallpaper_seed=wallpaper_seed(preference(self.config_obj,'background_image','')) if preference(self.config_obj,'accent_source','custom')=='wallpaper' else '#cebafa'
+        family=preference(self.config_obj,'font_family','') or 'Microsoft YaHei UI'
+        if family not in QFontDatabase.families():family='Microsoft YaHei UI'
+        font=QFont(family);font.setPixelSize(int(preference(self.config_obj,'font_size',14)))
+        strategy=QFont.StyleStrategy.PreferAntialias
+        if preference(self.config_obj,'font_antialiasing','auto')=='gray':strategy|=QFont.StyleStrategy.NoSubpixelAntialias
+        font.setStyleStrategy(strategy);self.setFont(font)
+        log_family=preference(self.config_obj,'log_font_family','Consolas') or family
+        if log_family not in QFontDatabase.families():log_family='Consolas'
+        self.logs.setStyleSheet("font-family:'"+log_family.replace("'",'')+"';font-size:"+str(preference(self.config_obj,'log_font_size',12))+"px;")
+        for item in self.findChildren(ContentRow):item.apply_appearance()
+        for item in self.findChildren(NavigationItem):item.setSubtitle(item.subtitle)
+        from .motion import apply_motion_preferences
+        apply_motion_preferences(self)
         style=themed_style(self.config_obj.get('accent_color'),self.config_obj)
         if self.styleSheet()!=style:self.setStyleSheet(style)
-        shared=self.config_obj.get('background_scope')=='window'
+        shared=preference(self.config_obj,'background_scope')=='window'
         for surface in (self.sidebar,self.title_bar):
             if surface.property('wallpaperUnderlay')!=shared:
                 surface.setProperty('wallpaperUnderlay',shared)
                 surface.style().unpolish(surface);surface.style().polish(surface);surface.update()
         for canvas in self.findChildren(HomeCanvas):
-            canvas.set_background(self.config_obj.get('background_image'));canvas.update()
+            canvas.set_background(preference(self.config_obj,'background_image'));canvas.update()
         for field in self.findChildren(QLineEdit):
             for action in field.actions():
                 if action.property('onionGlyph'):action.setIcon(icon(action.property('onionGlyph'),paint_color(field,'icon')))

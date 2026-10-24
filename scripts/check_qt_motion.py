@@ -205,8 +205,9 @@ with tempfile.TemporaryDirectory(dir=ROOT / 'tmp', prefix='qt-motion-') as folde
     switch.motion.setCurrentTime(65)
     assert 0 < switch.position < 1
     switch.hide()
-    window.navigate('versions')
-    window.navigate('about')
+    window.navigate('settings')
+    settled(window)
+    window.open_settings_tab(editor.tab_names['外观'])
     assert rail.running
     window.hide()
     assert not rail.running

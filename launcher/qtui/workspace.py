@@ -3,13 +3,13 @@ from PySide6.QtCore import Qt,QPoint,QRectF,QSize,QEvent
 from PySide6.QtGui import QColor,QPainter,QPen,QFont,QFontMetrics
 from PySide6.QtWidgets import QWidget,QDialog,QLineEdit,QTreeWidget,QTreeWidgetItem,QStackedWidget,QFormLayout,QMessageBox,QStyledItemDelegate,QStyle
 from .widgets import Page,Card,column,row,label,button,clear,icon,control_accent
-from .theme import paint_color,surface_opacity,config_for,contrasting_accent,appearance_values
+from .theme import paint_color,surface_opacity,config_for,contrasting_accent,appearance_values,effective_accent,corner,text_size,row_height,preference
 
 
 class InstanceChoiceDelegate(QStyledItemDelegate):
     def __init__(self,picker):super().__init__(picker.tree);self.picker=picker
 
-    def sizeHint(self,option,index):return QSize(320,64)
+    def sizeHint(self,option,index):return QSize(320,row_height(self.picker,64))
 
     def paint(self,painter,option,index):
         picker=self.picker;vid=index.data(Qt.ItemDataRole.UserRole)
@@ -18,17 +18,19 @@ class InstanceChoiceDelegate(QStyledItemDelegate):
         rect=QRectF(option.rect).adjusted(2,2,-2,-2);accent=QColor(control_accent(picker));factor=surface_opacity(config_for(picker))
         if current or option.state & (QStyle.StateFlag.State_Selected|QStyle.StateFlag.State_MouseOver):
             fill=QColor(accent);fill.setAlpha(round((42 if current else 22)*factor))
-            painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(fill);painter.drawRoundedRect(rect,10,10)
-        badge=QRectF(rect.left()+12,rect.top()+12,36,36)
+            painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(fill);painter.drawRoundedRect(rect,corner(picker,10),corner(picker,10))
+        badge=QRectF(rect.left()+12,rect.center().y()-18,36,36)
         tint=QColor(accent);tint.setAlpha(round(25*factor));painter.setBrush(tint);painter.setPen(Qt.PenStyle.NoPen);painter.drawRoundedRect(badge,9,9)
         icon('package',paint_color(picker,'icon')).paint(painter,int(badge.x()+8),int(badge.y()+8),20,20)
         x=rect.left()+60;width=max(0,int(rect.width()-x+rect.left()-36))
         bold=appearance_values(config_for(picker))['bold_text']
-        font=QFont(picker.font());font.setPixelSize(14);font.setWeight(QFont.Weight.DemiBold if current or bold else QFont.Weight.Normal)
+        font=QFont(picker.font());font.setPixelSize(text_size(picker,14));font.setWeight(QFont.Weight.DemiBold if current or bold else QFont.Weight.Normal)
+        height=QFontMetrics(font).height()+2;detail_height=text_size(picker,12)+6
+        text_top=rect.top()+(rect.height()-height-detail_height-2)/2
         painter.setFont(font);painter.setPen(paint_color(picker,'text',text=True))
-        painter.drawText(QRectF(x,rect.top()+10,width,22),Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(index.data() or '',Qt.TextElideMode.ElideRight,width))
-        font.setPixelSize(12);font.setWeight(QFont.Weight.DemiBold if bold else QFont.Weight.Normal);painter.setFont(font);painter.setPen(paint_color(picker,'muted',text=True))
-        painter.drawText(QRectF(x,rect.top()+33,width,18),Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(index.data(Qt.ItemDataRole.UserRole+1) or '',Qt.TextElideMode.ElideRight,width))
+        painter.drawText(QRectF(x,text_top,width,height),Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(index.data() or '',Qt.TextElideMode.ElideRight,width))
+        font.setPixelSize(text_size(picker,12));font.setWeight(QFont.Weight.DemiBold if bold else QFont.Weight.Normal);painter.setFont(font);painter.setPen(paint_color(picker,'muted',text=True))
+        painter.drawText(QRectF(x,text_top+height+2,width,detail_height),Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(index.data(Qt.ItemDataRole.UserRole+1) or '',Qt.TextElideMode.ElideRight,width))
         if current:
             marker=QColor(contrasting_accent(accent.name(),appearance_values(config_for(picker))['color_mode']))
             painter.setPen(QPen(marker,1.8,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
@@ -68,7 +70,7 @@ class InstancePicker(QDialog):
         p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
         fill=paint_color(self,'surface');factor=surface_opacity(config_for(self));fill.setAlpha(round(250*factor))
         border=paint_color(self,'icon');border.setAlpha(round(55*factor));p.setPen(QPen(border,1));p.setBrush(fill)
-        p.drawRoundedRect(QRectF(self.rect()).adjusted(.5,.5,-.5,-.5),16,16)
+        p.drawRoundedRect(QRectF(self.rect()).adjusted(.5,.5,-.5,-.5),corner(self,16),corner(self,16))
 
     def eventFilter(self,watched,event):
         if event.type()==QEvent.Type.KeyPress:

@@ -110,6 +110,18 @@ def run(output):
         assert not window.tasks.jobs,'startup task timeout'
         for page in ('home','versions','download','instance','settings','about'):
             window.navigate(page);application.processEvents()
+        from .theme import APPEARANCE_KEYS,effective_accent
+        assert APPEARANCE_KEYS<=window.settings_editor.fields.keys()
+        wallpaper=QImage(64,64,QImage.Format.Format_RGB32);wallpaper.fill(0xff2277bb)
+        from PySide6.QtGui import QPainter,QColor
+        painter=QPainter(wallpaper);painter.fillRect(0,0,32,64,QColor('#bb5522'));painter.end()
+        wallpaper_path=base/'blur-check.png';assert wallpaper.save(str(wallpaper_path))
+        previous={key:window.config_obj.get(key) for key in ('background_image','background_blur','accent_source')}
+        window.config_obj.update({'background_image':str(wallpaper_path),'background_blur':12,'accent_source':'wallpaper'})
+        window.apply_appearance()
+        assert window.home_canvas.original_image!=window.home_canvas.image
+        assert effective_accent(window.config_obj)!='#cebafa'
+        window.config_obj.update(previous);window.apply_appearance()
         assert window.settings_editor.fields['auto_memory'] is not None
         assert {'ui_transparency','text_transparency','background_transparency','max_download_threads'}<=window.settings_editor.sliders.keys()
         assert window.settings_editor.fields['download_speed_limit'].specialValueText()==''

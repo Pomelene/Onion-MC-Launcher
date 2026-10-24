@@ -6,7 +6,7 @@ from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPainterPath, 
 from PySide6.QtWidgets import (QWidget,QFrame,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,
     QScrollArea,QSizePolicy,QDialog,QProgressBar,QMessageBox,QLayout,QAbstractButton,QCheckBox,QSpinBox,QComboBox,QLineEdit,QAbstractSpinBox,QStyle,QStyleOptionComboBox)
 
-from .theme import STYLE,appearance_style,appearance_values,config_for,paint_color,surface_opacity
+from .theme import STYLE,appearance_style,appearance_values,config_for,paint_color,surface_opacity,effective_accent,corner,text_size,row_height,preference
 from .motion import MotionButton,motion_enabled
 from .choices import ChoiceComboBox
 
@@ -18,23 +18,24 @@ def paint_glass_background(p,viewport,widget):
     light=appearance_values(config_for(widget))['color_mode']=='light'
     for x,y,r,color in ((.8,.05,.6,'#cab5e8' if light else '#493459'),(.98,.94,.5,'#e3d7f2' if light else '#302c43')):
         g=QRadialGradient(QPointF(viewport.width()*x,viewport.height()*y),max(viewport.width(),viewport.height())*r)
-        c=QColor(color);c.setAlpha(55);g.setColorAt(0,c);c.setAlpha(0);g.setColorAt(1,c)
+        c=paint_color(widget,'container');c.setAlpha(55);g.setColorAt(0,c);c.setAlpha(0);g.setColorAt(1,c)
         p.fillRect(rect,g)
 
 
-def paint_cached_surface(widget,p,viewport,key,draw):
-    """Composite the background once, then apply per-pixel alpha without text."""
+def paint_cached_surface(widget,p,viewport,key,draw,*,layer="background",opacity=None):
+    """Cache each painted layer and apply its own opacity exactly once."""
     ratio=widget.devicePixelRatioF();key=(viewport.width(),viewport.height(),ratio,*key)
-    if getattr(widget,'_background_key',None)!=key:
+    key_attribute=f'_{layer}_key';image_attribute=f'_{layer}_image'
+    if getattr(widget,key_attribute,None)!=key:
         required=QSize(max(1,round(viewport.width()*ratio)),max(1,round(viewport.height()*ratio)))
-        image=getattr(widget,'_background_image',None)
+        image=getattr(widget,image_attribute,None)
         if image is None or image.devicePixelRatio()!=ratio or image.width()<required.width() or image.height()<required.height():
             image=QImage(required,QImage.Format.Format_ARGB32_Premultiplied);image.setDevicePixelRatio(ratio)
         image.fill(0)
         buffer=QPainter(image);draw(buffer,viewport);buffer.end()
-        widget._background_key=key;widget._background_image=image
-    p.save();p.setOpacity(surface_opacity(config_for(widget)))
-    p.drawImage(QPointF(0,0),widget._background_image);p.restore()
+        setattr(widget,key_attribute,key);setattr(widget,image_attribute,image)
+    p.save();p.setOpacity(surface_opacity(config_for(widget)) if opacity is None else opacity)
+    p.drawImage(QPointF(0,0),getattr(widget,image_attribute));p.restore()
 
 
 class GlassBackdrop(QWidget):
@@ -42,19 +43,27 @@ class GlassBackdrop(QWidget):
     def paintEvent(self,event):
         p=QPainter(self);owner=self.window();canvas=getattr(owner,'home_canvas',None)
         config=config_for(self);values=appearance_values(config)
-        shared=config.get('background_scope')=='window'
+        shared=preference(config,'background_scope')=='window'
         home=not shared and canvas is not None and owner.stack.currentWidget() is owner.page_map['home']
         area=QRect(canvas.mapTo(self,QPoint(0,0)),canvas.size()) if home else QRect()
-        key=(values['color_mode'],shared,home,area.x(),area.y(),area.width(),area.height(),
-             values['background_transparency'],config.get('background_mode'),canvas.image.cacheKey() if canvas is not None and canvas.image is not None else 0)
+        key=(values['color_mode'],effective_accent(config),shared,home,area.x(),area.y(),area.width(),area.height(),
+             values['background_transparency'],preference(config,'background_mode'),canvas.image.cacheKey() if canvas is not None and canvas.image is not None else 0)
         def draw(painter,viewport):
-            if shared and canvas is not None:canvas._paint_background(painter,viewport)
+            if shared and canvas is not None:canvas._paint_ui_background(painter,viewport)
             else:
                 paint_glass_background(painter,viewport,self)
                 if home:
                     painter.save();painter.setClipRect(area);painter.translate(area.topLeft())
-                    canvas._paint_background(painter,area.size());painter.restore()
+                    canvas._paint_ui_background(painter,area.size());painter.restore()
         paint_cached_surface(self,p,self.size(),key,draw)
+        if canvas is not None and canvas.image is not None and (shared or home):
+            def draw_wallpaper(painter,viewport):
+                if shared:canvas._paint_wallpaper(painter,viewport)
+                else:
+                    painter.save();painter.setClipRect(area);painter.translate(area.topLeft())
+                    canvas._paint_wallpaper(painter,area.size());painter.restore()
+            paint_cached_surface(self,p,self.size(),key,draw_wallpaper,layer='wallpaper',
+                                 opacity=1-values['background_transparency']/100)
         p.end()
 
 
@@ -68,7 +77,7 @@ def control_accent(widget):
     """Use the saved accent for painted controls as well as stylesheet controls."""
     import re
     config=config_for(widget)
-    value=config.get('accent_color') if config else None
+    value=effective_accent(config or {})
     return value if isinstance(value,str) and re.fullmatch(r'#[0-9a-fA-F]{6}',value) else '#cebafa'
 
 
@@ -100,39 +109,40 @@ class NavigationItem(QAbstractButton):
 
     def enterEvent(self,event):
         if not motion_enabled(self):self.settle_motion();return super().enterEvent(event)
-        self.hover_animation.stop();self.hover_animation.setStartValue(self.hover_amount);self.hover_animation.setEndValue(1.0);self.hover_animation.start();super().enterEvent(event)
+        self.hover_animation.stop();self.hover_animation.setDuration(max(1,int(preference(config_for(self),'animation_duration',200))));self.hover_animation.setStartValue(self.hover_amount);self.hover_animation.setEndValue(1.0);self.hover_animation.start();super().enterEvent(event)
 
     def leaveEvent(self,event):
         if not motion_enabled(self):self.hover_animation.stop();self._hover_changed(0.0);return super().leaveEvent(event)
-        self.hover_animation.stop();self.hover_animation.setStartValue(self.hover_amount);self.hover_animation.setEndValue(0.0);self.hover_animation.start();super().leaveEvent(event)
+        self.hover_animation.stop();self.hover_animation.setDuration(max(1,int(preference(config_for(self),'animation_duration',200))));self.hover_animation.setStartValue(self.hover_amount);self.hover_animation.setEndValue(0.0);self.hover_animation.start();super().leaveEvent(event)
 
     def setSubtitle(self,text):
         subtitle=str(text or '')
-        if self.subtitle==subtitle and self.height()==(68 if subtitle else 48):return
-        self.subtitle=subtitle;self.setFixedHeight(68 if self.subtitle else 48)
+        if self.subtitle==subtitle and self.height()==row_height(self,68 if subtitle else 48):return
+        self.subtitle=subtitle;self.setFixedHeight(row_height(self,68 if self.subtitle else 48))
         self.setToolTip(self.text()+(' · '+self.subtitle if self.subtitle else ''));self.update()
 
     def text_left(self):return 54
 
-    def sizeHint(self):return QSize(220,68 if self.subtitle else 48)
+    def sizeHint(self):return QSize(220,row_height(self,68 if self.subtitle else 48))
 
     def paintEvent(self,event):
         painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         bounds=QRectF(self.rect()).adjusted(10,3,-10,-3)
         if not self.isChecked() and (self.hover_amount or self.hasFocus()):
-            painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor(194,220,225,int(20*max(self.hover_amount,float(self.hasFocus()))*surface_opacity(config_for(self)))));painter.drawRoundedRect(bounds,7,7)
+            painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(QColor(194,220,225,int(20*max(self.hover_amount,float(self.hasFocus()))*surface_opacity(config_for(self)))));painter.drawRoundedRect(bounds,corner(self,7),corner(self,7))
         role='disabled' if not self.isEnabled() else 'selected_text' if self.isChecked() else 'icon'
         color=paint_color(self,role,text=True)
         icon(self.glyph,paint_color(self,role)).paint(painter,22,(self.height()-20)//2,20,20)
         bold=appearance_values(config_for(self))['bold_text']
-        font=self.font();font.setPixelSize(14);font.setBold(self.isChecked() or bold);painter.setFont(font);painter.setPen(QColor(color))
+        font=self.font();font.setPixelSize(text_size(self,14));font.setBold(self.isChecked() or bold);painter.setFont(font);painter.setPen(QColor(color))
         metrics=QFontMetrics(font);width=max(0,self.width()-self.text_left()-16)
         title=metrics.elidedText(self.text(),Qt.TextElideMode.ElideRight,width)
-        painter.drawText(QRectF(self.text_left(),14 if self.subtitle else 0,width,22 if self.subtitle else self.height()),Qt.AlignmentFlag.AlignVCenter,title)
+        line_height=max(22,metrics.height()+2);top=(self.height()-line_height-text_size(self,12)-8)/2
+        painter.drawText(QRectF(self.text_left(),top if self.subtitle else 0,width,line_height if self.subtitle else self.height()),Qt.AlignmentFlag.AlignVCenter,title)
         if self.subtitle:
-            font.setPixelSize(12);font.setBold(bold);painter.setFont(font);painter.setPen(paint_color(self,'muted',text=True))
+            font.setPixelSize(text_size(self,12));font.setBold(bold);painter.setFont(font);painter.setPen(paint_color(self,'muted',text=True))
             subtitle=QFontMetrics(font).elidedText(self.subtitle,Qt.TextElideMode.ElideRight,width)
-            painter.drawText(QRectF(self.text_left(),37,width,18),Qt.AlignmentFlag.AlignVCenter,subtitle)
+            painter.drawText(QRectF(self.text_left(),top+line_height+2,width,text_size(self,12)+6),Qt.AlignmentFlag.AlignVCenter,subtitle)
         painter.end()
 
 
@@ -318,12 +328,14 @@ class ToggleSwitch(QCheckBox):
     def _animate(self,checked):
         self.motion.stop()
         if not self.isVisible() or not motion_enabled(self):self._move(float(checked));return
+        self.motion.setDuration(max(1,int(preference(config_for(self),'animation_duration',200))))
         self.motion.setStartValue(self.position);self.motion.setEndValue(float(checked));self.motion.start()
 
     def _emphasize(self,target):
         self.thumb_motion.stop()
         if not self.isEnabled():target=0.0
         if not self.isVisible() or not motion_enabled(self):self._resize_thumb(target);return
+        self.thumb_motion.setDuration(max(1,int(preference(config_for(self),'animation_duration',200))))
         self.thumb_motion.setStartValue(self.emphasis);self.thumb_motion.setEndValue(target);self.thumb_motion.start()
 
     def enterEvent(self,event):self._emphasize(1.0);super().enterEvent(event)
@@ -365,10 +377,13 @@ class ContentText(QWidget):
         self.setToolTip(self.title+'\n'+self.detail);self.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Preferred)
 
     def paintEvent(self,event):
-        p=QPainter(self);font=self.font();font.setPixelSize(14);p.setFont(font);p.setPen(paint_color(self,'text',text=True))
-        p.drawText(QRectF(0,4,self.width(),23),Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(self.title,Qt.TextElideMode.ElideRight,self.width()))
-        font.setPixelSize(12);p.setFont(font);p.setPen(paint_color(self,'muted',text=True))
-        p.drawText(QRectF(0,28,self.width(),18),Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(self.detail,Qt.TextElideMode.ElideRight,self.width()));p.end()
+        p=QPainter(self);font=self.font();font.setPixelSize(text_size(self,14))
+        large=QFontMetrics(font).height()+2;small=text_size(self,12)+6
+        top=max(0,(self.height()-large-small-2)/2)
+        p.setFont(font);p.setPen(paint_color(self,'text',text=True))
+        p.drawText(QRectF(0,top,self.width(),large),Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(self.title,Qt.TextElideMode.ElideRight,self.width()))
+        font.setPixelSize(text_size(self,12));p.setFont(font);p.setPen(paint_color(self,'muted',text=True))
+        p.drawText(QRectF(0,top+large+2,self.width(),small),Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(self.detail,Qt.TextElideMode.ElideRight,self.width()));p.end()
 
 
 class ContentCheck(QCheckBox):
@@ -399,6 +414,14 @@ class ContentRow(QWidget):
             self.line.addWidget(self.check)
         self.image=QLabel();self.image.setPixmap(icon(glyph).pixmap(32,32));self.image.setFixedSize(36,36);self.image.setAlignment(Qt.AlignmentFlag.AlignCenter);self.line.addWidget(self.image)
         self.text=ContentText(title,detail);self.line.addWidget(self.text,1)
+
+    def apply_appearance(self):
+        self.setFixedHeight(row_height(self))
+        spacing=6 if preference(config_for(self),'list_density','standard')=='compact' else 10
+        self.line.setContentsMargins(10,spacing,10,spacing)
+
+    def showEvent(self,event):
+        self.apply_appearance();super().showEvent(event)
 
     def paintEvent(self,event):
         if not self.has_artwork:
@@ -476,20 +499,52 @@ def background_rect(image_size,viewport,mode):
 class HomeCanvas(Landscape):
     """Local wallpaper rendered at window resolution, with a scalable fallback."""
     def __init__(self,path='',parent=None,config=None):
-        super().__init__(parent);self.image=None;self.path=None;self.tile=None;self.config_obj=config
+        super().__init__(parent);self.image=None;self.path=None;self.tile=None;self.config_obj=config;self._source_key=None;self._blur_key=None;self.original_image=None
         self.set_background(path)
 
     def set_background(self,path):
         path=str(path or '')
-        if self.path==path:return
-        self.path=path;self.image=None;self.tile=None
+        from pathlib import Path
+        try:stamp=Path(path).stat().st_mtime_ns if path else 0
+        except OSError:stamp=0
+        source_key=(path,stamp)
+        strength=int(preference(config_for(self),'background_blur',0))
+        if self._blur_key==(source_key,strength):return
+        if self._source_key==source_key:
+            self.image=self.original_image
+            self._apply_blur(strength);self._blur_key=(source_key,strength);self.update();return
+        self.path=path;self.image=None;self.tile=None;self._source_key=source_key
         if path:
             reader=QImageReader(str(path));size=reader.size()
             if size.isValid() and size.width()*size.height()<=64_000_000:
                 if size.width()>3840 or size.height()>2160:reader.setScaledSize(size.scaled(3840,2160,Qt.AspectRatioMode.KeepAspectRatio))
                 value=reader.read()
                 if not value.isNull():self.image=value;self.tile=QPixmap.fromImage(value)
+        self.original_image=self.image
+        self._apply_blur(strength);self._blur_key=(source_key,strength)
         self.update()
+
+    def _apply_blur(self,strength):
+        if self.image is not None and strength:
+            from PySide6.QtWidgets import QGraphicsScene,QGraphicsPixmapItem,QGraphicsBlurEffect
+            # Bound native filter work; retain full original for display modes and color extraction.
+            source=self.image.scaled(1280,720,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation) if self.image.width()>1280 or self.image.height()>720 else self.image
+            pad=strength*2
+            padded=QImage(source.width()+2*pad,source.height()+2*pad,QImage.Format.Format_ARGB32_Premultiplied)
+            padded.fill(0);paint=QPainter(padded)
+            paint.drawImage(QRect(pad,pad,source.width(),source.height()),source)
+            # Replicate edge pixels so the blur cannot introduce a transparent frame.
+            for target,region in ((QRect(0,pad,pad,source.height()),QRect(0,0,1,source.height())),
+                (QRect(pad+source.width(),pad,pad,source.height()),QRect(source.width()-1,0,1,source.height())),
+                (QRect(0,0,padded.width(),pad),QRect(0,0,source.width(),1)),
+                (QRect(0,pad+source.height(),padded.width(),pad),QRect(0,source.height()-1,source.width(),1))):paint.drawImage(target,source,region)
+            paint.end()
+            scene=QGraphicsScene();item=QGraphicsPixmapItem(QPixmap.fromImage(padded));scene.addItem(item)
+            effect=QGraphicsBlurEffect();effect.setBlurRadius(strength);effect.setBlurHints(QGraphicsBlurEffect.BlurHint.QualityHint);item.setGraphicsEffect(effect)
+            result=QImage(source.size(),QImage.Format.Format_ARGB32_Premultiplied);result.fill(0)
+            paint=QPainter(result);scene.render(paint,QRectF(result.rect()),QRectF(pad,pad,source.width(),source.height()));paint.end()
+            self.image=result.scaled(self.original_image.size(),Qt.AspectRatioMode.IgnoreAspectRatio,Qt.TransformationMode.SmoothTransformation)
+        self.tile=QPixmap.fromImage(self.image) if self.image is not None else None
 
     def paintEvent(self,event):
         # The shared backdrop owns all wallpaper pixels, including content-only mode.
@@ -502,16 +557,21 @@ class HomeCanvas(Landscape):
         if hasattr(owner,'centralWidget') and owner.centralWidget() is not None:owner.centralWidget().update()
 
     def paint_background(self,p,viewport):
-        """Use one coordinate space and one cached image for either scope."""
+        """Composite independent UI and wallpaper layers in one coordinate space."""
         values=appearance_values(config_for(self))
-        key=(values['color_mode'],values['background_transparency'],config_for(self).get('background_mode'),self.image.cacheKey() if self.image is not None else 0)
-        paint_cached_surface(self,p,viewport,key,self._paint_background)
+        key=(values['color_mode'],effective_accent(config_for(self)),values['background_transparency'],preference(config_for(self),'background_mode'),self.image.cacheKey() if self.image is not None else 0)
+        paint_cached_surface(self,p,viewport,key,self._paint_ui_background)
+        if self.image is not None:
+            paint_cached_surface(self,p,viewport,key,self._paint_wallpaper,layer='wallpaper',
+                                 opacity=1-values['background_transparency']/100)
 
-    def _paint_background(self,p,viewport):
+    def _paint_ui_background(self,p,viewport):
         p.save()
         rect=QRectF(0,0,viewport.width(),viewport.height())
         values=appearance_values(config_for(self));opacity=1-values['background_transparency']/100
         paint_glass_background(p,viewport,self)
+        if self.image is not None:
+            p.restore();return
         p.setOpacity(opacity)
         if self.image is None:
             p.save();p.scale(viewport.width()/1000,viewport.height()/700)
@@ -521,15 +581,24 @@ class HomeCanvas(Landscape):
                 gradient.setColorAt(0,QColor(168,139,228,alpha));gradient.setColorAt(.52,QColor(203,184,255,alpha));gradient.setColorAt(1,QColor(207,163,224,alpha))
                 p.setPen(QPen(gradient,80 if offset==0 else 1.2));p.drawPath(path)
             p.restore()
-        else:
-            p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-            mode=config_for(self).get('background_mode','fill')
-            if mode=='tile':p.fillRect(rect,QBrush(self.tile))
-            else:p.drawImage(background_rect(self.image.size(),viewport,mode),self.image)
+        self._paint_shade(p,viewport);p.restore()
+
+    def _paint_wallpaper(self,p,viewport):
+        # Wallpaper pixels never inherit UI surface opacity, including their shade.
+        p.save();p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        rect=QRectF(0,0,viewport.width(),viewport.height())
+        mode=preference(config_for(self),'background_mode','fill')
+        if mode=='tile':p.fillRect(rect,QBrush(self.tile))
+        else:p.drawImage(background_rect(self.image.size(),viewport,mode),self.image)
+        self._paint_shade(p,viewport);p.restore()
+
+    def _paint_shade(self,p,viewport):
+        rect=QRectF(0,0,viewport.width(),viewport.height())
+        values=appearance_values(config_for(self))
         shade=QLinearGradient(0,0,0,viewport.height());light=values['color_mode']=='light'
         shade.setColorAt(0,QColor(250,250,255,90) if light else QColor(10,12,20,20))
         shade.setColorAt(1,QColor(246,246,253,190) if light else QColor(13,20,31,140))
-        p.fillRect(rect,shade);p.restore()
+        p.fillRect(rect,shade)
 
 
 def setting_row(layout,title,description,control):

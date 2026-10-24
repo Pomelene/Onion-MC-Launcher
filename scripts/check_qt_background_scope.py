@@ -13,6 +13,7 @@ from PySide6.QtTest import QTest
 from launcher.config import Config
 from launcher.qtui.app import MainWindow
 from launcher.qtui.widgets import configure_fonts
+from launcher.qtui.theme import paint_color
 
 app=QApplication([]);configure_fonts(app);errors=[]
 def report_exception(kind,value,tb):
@@ -52,8 +53,9 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='background-scope-') as d
         actual=window.centralWidget().grab().toImage()
         expected=QImage(window.centralWidget().size(),QImage.Format.Format_ARGB32_Premultiplied)
         expected.fill(0);painter=QPainter(expected);canvas.paint_background(painter,expected.size())
-        painter.fillRect(0,64,220,expected.height()-64,QColor(20,24,29,150));painter.end()
-        for x,y in ((218,500),(221,500),(100,820),(350,500)):
+        tint=paint_color(window,'base');tint.setAlpha(150)
+        painter.fillRect(0,64,220,expected.height()-64,tint);painter.end()
+        for x,y in ((218,500),(221,500),(100,min(820,actual.height()-50)),(350,500)):
             assert actual.pixelColor(x,y)==expected.pixelColor(x,y),(mode,x,y,actual.pixelColor(x,y).name(),expected.pixelColor(x,y).name())
     window.config_obj.set('ui_transparency',0);window.config_obj.set('background_mode','fill');window.apply_appearance()
     for color_mode in ('dark','light'):

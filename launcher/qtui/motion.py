@@ -2,7 +2,7 @@
 from PySide6.QtCore import QObject, QEvent, Qt, QPoint, QPointF, QRectF, QTimer, QVariantAnimation, QEasingCurve, QAbstractAnimation
 from PySide6.QtGui import QColor, QPainter, QFontMetrics,QPen
 from PySide6.QtWidgets import QWidget, QPushButton, QStyle, QStyleOption, QStyleOptionButton, QStylePainter
-from .theme import config_for,paint_color,surface_opacity
+from .theme import config_for,paint_color,surface_opacity,effective_accent,corner,text_size,row_height,preference
 
 
 HOVER_DURATION = 140
@@ -11,7 +11,7 @@ PRESS_DURATION = 150
 
 def motion_enabled(widget):
     config = config_for(widget)
-    return bool(config.get('ui_animations')) if config else True
+    return (bool(config.get('ui_animations',True)) and int(preference(config,'animation_duration',200))>0) if config else True
 
 
 class SelectionRail(QObject):
@@ -73,6 +73,10 @@ class SelectionRail(QObject):
         self.initial = QRectF(self.rect)
         self.destination = target
         if animate and self.visible and self.sidebar.isVisible() and motion_enabled(self.sidebar):
+            duration=int(preference(config_for(self.sidebar),'animation_duration',200))
+            self.EDGE_DURATION=max(1,round(duration*.75));self.TRAILING_DELAY=round(duration*.6)
+            self.animation.setDuration(self.EDGE_DURATION+self.TRAILING_DELAY)
+            self.animation.setEndValue(float(self.animation.duration()))
             self.trailing_top = target.top() > self.rect.top()
             self.animation.start()
         else:
@@ -136,12 +140,12 @@ class NavigationSurface(QWidget):
         self.style().drawPrimitive(QStyle.PrimitiveElement.PE_Widget, option, painter, self)
         if self.selection.visible:
             config = config_for(self)
-            color = QColor(config.get('accent_color') if config else '#cebafa')
+            color = QColor(effective_accent(config or {}))
             color.setAlpha(round(44*surface_opacity(config)))
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(color)
-            painter.drawRoundedRect(self.selection.rect, 8, 8)
+            painter.drawRoundedRect(self.selection.rect, corner(self,8), corner(self,8))
         painter.end()
 
 
@@ -180,6 +184,7 @@ class MotionButton(QPushButton):
             else:
                 self._press(target)
             return
+        animation.setDuration(max(1,round(int(preference(config_for(self),'animation_duration',200))*.75)))
         animation.setStartValue(current)
         animation.setEndValue(target)
         animation.start()
@@ -220,7 +225,7 @@ class MotionButton(QPushButton):
             p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
             if self.isEnabled() and self.hover_amount:
                 fill=paint_color(self,'hover');fill.setAlpha(round(20*self.hover_amount*surface_opacity(config_for(self))))
-                p.setPen(Qt.PenStyle.NoPen);p.setBrush(fill);p.drawRoundedRect(QRectF(self.rect()).adjusted(1,2,-1,-2),7,7)
+                p.setPen(Qt.PenStyle.NoPen);p.setBrush(fill);p.drawRoundedRect(QRectF(self.rect()).adjusted(1,2,-1,-2),corner(self,7),corner(self,7))
             color=option.palette.color(self.foregroundRole());p.setPen(color);p.setFont(self.font())
             reserve=26 if not self.icon().isNull() else 0;rect=QRectF(self.rect()).adjusted(8,0,-8,0)
             text=QFontMetrics(self.font()).elidedText(self.text(),Qt.TextElideMode.ElideRight,max(0,int(rect.width()-reserve)))
@@ -230,7 +235,7 @@ class MotionButton(QPushButton):
             p.drawText(rect,Qt.AlignmentFlag.AlignRight|Qt.AlignmentFlag.AlignVCenter,text)
             if self.hasFocus():
                 focus=QColor(color);focus.setAlpha(90);p.setPen(QPen(focus,1));p.setBrush(Qt.BrushStyle.NoBrush)
-                p.drawRoundedRect(QRectF(self.rect()).adjusted(2,2,-2,-2),7,7)
+                p.drawRoundedRect(QRectF(self.rect()).adjusted(2,2,-2,-2),corner(self,7),corner(self,7))
             p.end();return
         native = QStylePainter(self)
         native.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -246,7 +251,7 @@ class MotionButton(QPushButton):
         if self.isEnabled() and self.hover_amount > 0:
             native.setPen(Qt.PenStyle.NoPen)
             hover=paint_color(self,'hover');hover.setAlpha(round(255*.075*self.hover_amount*surface_opacity(config_for(self))));native.setBrush(hover)
-            native.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 6, 6)
+            native.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), corner(self,6), corner(self,6))
         native.end()
 
 

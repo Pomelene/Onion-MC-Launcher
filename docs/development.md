@@ -246,3 +246,15 @@ tests/test_club_services.py 检查目录格式、网址、请求刷新与无令�
 
 
 社团服务接口 v2：兼容 v1，目录和条目的数量、顺序由 categories/tools 数组决定；支持默认栏目、visible、icon、show_urls、cards/list 布局及 button_text/badge。web/external/copy/download 操作由严格枚举分派，未知字段不执行；仅允许 HTTPS、256 MiB 以内、固定文件名与 SHA-256 的 mrpack 下载，存放 .onion/downloads，显式导入前再次校验。独立仓库 API.md 和 webapp.schema.json 定义完整协议。部员分享置顶，包含基础包、Atlas 指引和作者项目链接。
+
+
+## Local appearance preview (2026-10-25)
+
+- Color generation uses a small, independent Oklab/Oklch implementation in `launcher/qtui/color_science.py`. References: [Oklab](https://bottosson.github.io/posts/oklab/), [Material extraction pipeline](https://github.com/material-foundation/material-color-utilities/blob/main/concepts/color_extraction.md). The six styles express similar visual directions, not exact HCT/Material replicas.
+- Wallpaper extraction decodes at most a 64×64 sample, bins into at most 512 RGB cells, scores population and perceptual chroma, ignores transparent/near-black/near-white candidates, and falls back to purple. Cache: 4 path/mtime entries; palette cache: 96 entries. No new runtime package, bundled font or remote service.
+- Base text, secondary text and actionable foreground target >=4.5:1 against their generated surface. User-selected text/background transparency can reduce the final contrast; a translucent surface over an arbitrary wallpaper cannot promise a fixed final contrast.
+- Blur uses existing Qt Widgets' native blur filter on a bounded working image, then caches the result. It applies only to wallpaper, never to text/controls, and is not desktop/acrylic blur. Original image is retained for color extraction and zero-blur restoration. UI, text and wallpaper opacity remain independent.
+- Font family, interface size (12–18 logical px), log family/size, antialiasing preference, system light/dark following, titlebar transparency, relative control corner scale (0–24), background blur (0–40), animation duration (0–600 ms), and compact/standard/comfortable list density share automatic saving, live previews and default reset.
+- System appearance uses Qt `QStyleHints.colorSchemeChanged`; antialiasing remains subject to Qt, font and display/platform capabilities. Reduced motion or duration 0 settles animations immediately.
+- Main and for_thunion are built separately. Preserve the THUnion-only WebView entry initialization and service navigation; never replace app.py wholesale across editions.
+- Checks: tests/test_color_science.py, scripts/check_qt_appearance_next.py, scripts/check_qt_wallpaper_opacity.py, scripts/check_qt_choices.py, scripts/check_qt_motion.py, existing background/transparency checks, and each frozen build's real-entry startup/raster/edition-specific checks.

@@ -16,10 +16,10 @@ from .paths import default_game_dir,LAUNCHER_NAME,LAUNCHER_VERSION
 from .secrets import protect,unprotect,SecretStorageError
 
 #: 需要按类型强制的键（避免 settings.json 手工编辑引入错类型）
-_INT_KEYS = {"launcher_window_width", "launcher_window_height", "min_memory", "max_memory", "window_width", "window_height", "schematic_page_size",
+_INT_KEYS = {"font_size", "log_font_size", "corner_radius", "background_blur", "animation_duration", "launcher_window_width", "launcher_window_height", "min_memory", "max_memory", "window_width", "window_height", "schematic_page_size",
              "proxy_port", "max_download_threads", "download_speed_limit",
              "sandbox_budget_mb", "text_transparency", "ui_transparency", "background_transparency"}
-_BOOL_KEYS = {"launcher_window_maximized", "fullscreen", "demo", "version_isolation",
+_BOOL_KEYS = {"titlebar_transparent", "launcher_window_maximized", "fullscreen", "demo", "version_isolation",
               "close_after_launch", "keep_launcher_open",
               "allow_newer_java", "foreign_mode", "auto_memory", "show_launch_logs",
               "custom_home_welcome", "bold_text"}
@@ -28,7 +28,12 @@ _FLOAT_KEYS = {"ui_scale"}
 
 def _coerce(key: str, value: Any) -> Any:
     """把从 settings.json 读到的值强制为期望类型；失败返回 None 表示丢弃。"""
-    if key=='color_mode':return value if value in ('dark','light') else 'dark'
+    if key=='color_mode':return value if value in ('dark','light','auto') else 'dark'
+    if key=='accent_source':return value if value in ('custom','wallpaper') else 'custom'
+    if key=='color_style':return value if value in ('fidelity','tonal_spot','vibrant','neutral','fruit_salad','rainbow') else 'fidelity'
+    if key=='list_density':return value if value in ('compact','standard','comfortable') else 'standard'
+    if key=='font_antialiasing':return value if value in ('auto','gray','subpixel') else 'auto'
+    if key in ('font_family','log_font_family'):return str(value or '')[:128]
     if key=='background_mode':return value if value in ('fill','fit','stretch','center','tile') else 'fill'
     if key=='background_scope':return value if value in ('content','window') else 'content'
     if key=='game_libraries':
@@ -37,6 +42,9 @@ def _coerce(key: str, value: Any) -> Any:
     if key in _INT_KEYS:
         try:
             number=int(value)
+            limits={'font_size':(12,18),'log_font_size':(9,28),'corner_radius':(0,24),'background_blur':(0,40),'animation_duration':(0,600)}
+            if key in limits:
+                low,high=limits[key];return max(low,min(high,number))
             if key=='schematic_page_size':return number if number in (12,24,48,96) else 24
             if key in ('text_transparency','ui_transparency','background_transparency'):
                 return max(0,min(70 if key=='text_transparency' else 90 if key=='ui_transparency' else 100,number))
@@ -101,6 +109,18 @@ DEFAULTS: dict[str, Any] = {
     "accent_color": "#cebafa",      # 可点击设置文字的高亮色
     "color_mode": "dark",          # Qt 深浅模式；保留旧 theme 字段用于历史界面
     "bold_text": False,
+    "font_family": "",
+    "font_size": 14,
+    "log_font_family": "Consolas",
+    "log_font_size": 12,
+    "font_antialiasing": "auto",
+    "accent_source": "custom",
+    "color_style": "fidelity",
+    "titlebar_transparent": True,
+    "corner_radius": 10,
+    "background_blur": 0,
+    "animation_duration": 200,
+    "list_density": "standard",
     "text_transparency": 0,         # 0 为不透明；最多 70，保留文字可读性
     "ui_transparency": 0,           # 窗口及控件背景透明度（透出桌面），文字独立；最多90
     "background_transparency": 0,   # 首页图片/装饰透明度

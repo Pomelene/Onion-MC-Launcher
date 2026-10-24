@@ -18,6 +18,17 @@ class Job(QRunnable):
         self.cancel = threading.Event()
         self._progress_lock = threading.Lock()
         self._last_progress = 0.0
+        self._transferred = 0
+        self._last_transfer = 0.0
+
+    def transferred(self, size):
+        # Parallel download workers share this job counter, never any widget.
+        with self._progress_lock:
+            self._transferred += size
+            now=time.monotonic()
+            if now-self._last_transfer<.1:return
+            self._last_transfer=now
+            self.bus.progress.emit(self.key,{'kind':'transfer','bytes':self._transferred,'at':now})
 
     def emit(self, value):
         if isinstance(value, tuple) and len(value) == 2 and all(isinstance(n, (int, float)) for n in value):
@@ -30,12 +41,15 @@ class Job(QRunnable):
 
     @Slot()
     def run(self):
+        result=error=None
         try:
-            with self.downloader.cancellable(self.cancel) if self.downloader else nullcontext():
+            with self.downloader.cancellable(self.cancel,self.transferred) if self.downloader else nullcontext():
                 result = self.function(self)
-            self.bus.completed.emit(self.key, result, None)
         except Exception as exc:
-            self.bus.completed.emit(self.key, None, exc)
+            error=exc
+        if self._transferred:
+            self.bus.progress.emit(self.key,{'kind':'transfer','bytes':self._transferred,'at':time.monotonic()})
+        self.bus.completed.emit(self.key,result,error)
 
 
 class TaskManager(QObject):

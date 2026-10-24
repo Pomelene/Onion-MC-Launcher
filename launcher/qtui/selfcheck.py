@@ -123,6 +123,14 @@ def run(output):
         picker.rgb[0].setValue(128);assert picker.color.name()=='#80bafa'
         sample=QImage(picker.size(),QImage.Format.Format_ARGB32_Premultiplied);sample.fill(0);picker.render(sample)
         assert not sample.isNull();picker.reject()
+        from .widgets import TaskDialog
+        task=TaskDialog(window,'下载进度自检');task.update_progress('检查文件');task.update_progress('下载必要文件')
+        task.update_progress((3,10));task.update_progress({'kind':'transfer','bytes':65536})
+        task.ensurePolished();application.processEvents()
+        sample=QImage(task.size(),QImage.Format.Format_ARGB32_Premultiplied);sample.fill(0);task.render(sample)
+        assert task.isWindow() and task.progress.value()==300 and task.rows[0][1].state=='done'
+        assert task.total_bytes==65536 and not sample.isNull()
+        task.complete();task.accept()
         assert window.windowFlags() & Qt.WindowType.FramelessWindowHint
         assert not any(b.text()=='保存设置' for b in window.settings_editor.findChildren(QPushButton))
         window.settings_editor.fields['window_width'].setValue(1280)

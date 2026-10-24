@@ -83,13 +83,20 @@ class Downloader:
         self.write_guard = None
 
     @contextmanager
-    def cancellable(self, event):
+    def cancellable(self, event, on_bytes=None):
         previous = getattr(self._local, "cancel_event", None)
+        previous_bytes = getattr(self._local, "on_bytes", None)
         self._local.cancel_event = event
+        self._local.on_bytes = on_bytes if on_bytes is not None else previous_bytes
         try:
             yield
         finally:
             self._local.cancel_event = previous
+            self._local.on_bytes = previous_bytes
+
+    def _transferred(self, size):
+        callback = getattr(self._local, 'on_bytes', None)
+        if callback:callback(size)
 
     def _cancel_event(self):
         return getattr(self._local, "cancel_event", None)
@@ -121,6 +128,7 @@ class Downloader:
                 req = urllib.request.Request(url, headers=request_headers)
                 with self._opener().open(req, timeout=self.timeout) as resp:
                     data = resp.read(32*1024**2+1)
+                    self._transferred(len(data))
                     if len(data)>32*1024**2:raise DownloadError('响应内容超过安全上限')
                 return data if binary else data.decode("utf-8")
             except Exception as e:  # noqa: BLE001
@@ -200,6 +208,7 @@ class Downloader:
                             if done+len(chunk)>(job.size if job.size is not None else 8*1024**3):
                                 raise DownloadError('下载内容超过声明大小或安全上限')
                             f.write(chunk)
+                            self._transferred(len(chunk))
                             done += len(chunk)
                             if progress and total:
                                 progress(done, total)
@@ -253,13 +262,15 @@ class Downloader:
         done = 0
         lock = threading.Lock()
         cancel_event = cancel_event if cancel_event is not None else self._cancel_event()
+        on_bytes = getattr(self._local, 'on_bytes', None)
 
         def worker(job) -> None:
             nonlocal done
             if cancel_event is not None and job.cancel_event is None:
                 job.cancel_event = cancel_event
             try:
-                self.download_one(job)
+                with self.cancellable(cancel_event,on_bytes):
+                    self.download_one(job)
                 with lock:
                     done += 1
                     ok.append(job)

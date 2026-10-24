@@ -7,6 +7,24 @@ from launcher.download import (DownloadCancelled, DownloadError, DownloadJob,
 from tests.harness import FakeServer, temp_workspace
 
 
+def test_transfer_bytes_propagate_to_parallel_workers_and_skip_cached_files():
+    payload=b'a'*140000;server=FakeServer({'/one':payload,'/two':payload}).start()
+    try:
+        with temp_workspace() as root:
+            downloader=Downloader(retries=1);received=[];event=threading.Event()
+            jobs=[DownloadJob(server.url('/'+name),root/name,size=len(payload)) for name in ('one','two')]
+            with downloader.cancellable(event,received.append):
+                ok,failed=downloader.download_many(jobs)
+            assert len(ok)==2 and not failed and sum(received)==len(payload)*2
+            received.clear()
+            with downloader.cancellable(event,received.append):
+                downloader.download_many(jobs)
+            assert received==[], 'Local cache checks must not count as network bytes'
+            # Context exit cannot leak telemetry into later unrelated operations.
+            downloader.fetch(server.url('/one'),binary=True);assert received==[]
+    finally:server.stop()
+
+
 def test_download_ok():
     data = b"hello world"
     srv = FakeServer({"/f": data}).start()

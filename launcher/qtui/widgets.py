@@ -1,5 +1,7 @@
 """Reusable Qt controls: native text rendering, scalable icons and glass surfaces."""
-from PySide6.QtCore import Qt, QSize, QRect, QRectF, QPoint, QPointF, QEvent, QVariantAnimation, QEasingCurve, QBuffer, QByteArray, QIODevice
+import time
+from collections import deque
+from PySide6.QtCore import QTimer, Qt, QSize, QRect, QRectF, QPoint, QPointF, QEvent, QVariantAnimation, QEasingCurve, QBuffer, QByteArray, QIODevice
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPainterPath, QFontDatabase, QFont, QLinearGradient, QRadialGradient, QImageReader, QFontMetrics, QBrush, QImage
 from PySide6.QtWidgets import (QWidget,QFrame,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,
     QScrollArea,QSizePolicy,QDialog,QProgressBar,QMessageBox,QLayout,QAbstractButton,QCheckBox,QSpinBox,QComboBox,QLineEdit,QAbstractSpinBox,QStyle,QStyleOptionComboBox)
@@ -559,22 +561,94 @@ def clear(layout):
         elif item.layout():clear(item.layout())
 
 
+class TaskStageMark(QWidget):
+    def __init__(self,parent=None):
+        super().__init__(parent);self.state='active';self.setFixedSize(20,22)
+    def paintEvent(self,event):
+        painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        color=QColor(config_for(self).get('accent_color') or '#cebafa') if self.state=='active' else paint_color(self,'muted')
+        painter.setPen(QPen(color,1.7,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
+        if self.state=='done':
+            path=QPainterPath(QPointF(4,11));path.lineTo(8,15);path.lineTo(16,6);painter.drawPath(path)
+        elif self.state=='active':
+            painter.drawLine(QPointF(4,11),QPointF(16,11));painter.drawLine(QPointF(11,6),QPointF(16,11));painter.drawLine(QPointF(11,16),QPointF(16,11))
+        else:
+            painter.drawLine(QPointF(6,7),QPointF(14,15));painter.drawLine(QPointF(14,7),QPointF(6,15))
+
+
 class TaskDialog(QDialog):
+    """Compact stage history; progress counts and measured network bytes stay distinct."""
     def __init__(self,parent,title):
-        super().__init__(parent);self.setWindowTitle(title);self.resize(470,190);self.setModal(True)
-        self.body=column(self,24,15);self.message=label('准备中…','heading',True);self.body.addWidget(self.message)
-        self.progress=QProgressBar();self.progress.setRange(0,0);self.progress.setTextVisible(False);self.body.addWidget(self.progress)
-        self.cancel_button=button('取消');self.body.addWidget(self.cancel_button,alignment=Qt.AlignmentFlag.AlignRight)
-        self.job=None;self.cancel_button.clicked.connect(self.cancel_job)
+        super().__init__(parent);self.setWindowTitle(title);self.resize(660,410);self.setMinimumSize(520,330);self.setModal(True)
+        self.body=column(self,22,14)
+        self.stages=QScrollArea();self.stages.setWidgetResizable(True);self.stages.setFrameShape(QFrame.Shape.NoFrame)
+        self.stage_content=QWidget();self.stage_body=column(self.stage_content,0,6);self.stage_body.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.stages.setWidget(self.stage_content);self.body.addWidget(self.stages,1)
+        self.rows=[];self.current=None;self.cancelled=False;self.job=None
+        self.detail=QWidget();detail=column(self.detail,30,6);detail.setContentsMargins(30,0,0,6)
+        self.message=label('准备中…','muted',True);detail.addWidget(self.message)
+        self.progress=QProgressBar();self.progress.setRange(0,0);self.progress.setTextVisible(False);self.progress.setFixedHeight(5);detail.addWidget(self.progress)
+        self.amount=label('','muted');detail.addWidget(self.amount)
+        self.stage_body.addWidget(self.detail)
+        footer=row();stats=column(spacing=3)
+        self.speed=label('0 B/s','muted');self.transferred=label('','muted');stats.addWidget(self.speed);stats.addWidget(self.transferred)
+        footer.addLayout(stats,1);self.cancel_button=button('取消',self.cancel_job);footer.addWidget(self.cancel_button,0,Qt.AlignmentFlag.AlignBottom);self.body.addLayout(footer)
+        self.samples=deque();self.total_bytes=0;self.timer=QTimer(self);self.timer.setInterval(250);self.timer.timeout.connect(self.update_speed);self.timer.start()
+
+    def paintEvent(self,event):
+        painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(paint_color(self,'base'));painter.drawRoundedRect(QRectF(self.rect()),12,12)
+
+    @staticmethod
+    def byte_text(value):
+        for unit in ('B','KiB','MiB','GiB'):
+            if value<1024 or unit=='GiB':return f'{value:.0f} {unit}' if unit=='B' else f'{value:.1f} {unit}'
+            value/=1024
+
+    def start_stage(self,text):
+        if self.current and self.current[2].text()==text:return
+        if self.current:self.current[1].state='done';self.current[1].update()
+        item=QWidget();line=row(item,0,8);mark=TaskStageMark();line.addWidget(mark,0,Qt.AlignmentFlag.AlignTop)
+        title=label(text,wrap=True);line.addWidget(title,1)
+        self.stage_body.removeWidget(self.detail)
+        self.stage_body.addWidget(item);self.stage_body.addWidget(self.detail)
+        self.current=(item,mark,title);self.rows.append(self.current)
+        # Keep a bounded history and never rebuild existing rows on a progress tick.
+        if len(self.rows)>80:
+            old=self.rows.pop(0)[0];self.stage_body.removeWidget(old);old.hide();old.deleteLater()
+        self.message.setText('正在处理…');self.amount.clear();self.progress.setRange(0,0)
+        QTimer.singleShot(0,lambda:self.stages.ensureWidgetVisible(self.detail))
 
     def update_progress(self,value):
-        if isinstance(value,str):self.message.setText(value);self.progress.setRange(0,0)
+        if isinstance(value,dict) and value.get('kind')=='transfer':
+            now=time.monotonic();previous=self.total_bytes;self.total_bytes=max(previous,int(value['bytes']))
+            if not self.samples:self.samples.append((now-.25,previous))
+            self.samples.append((now,self.total_bytes));self.transferred.setText('已接收 '+self.byte_text(self.total_bytes));self.update_speed();return
+        if self.cancelled:return
+        if isinstance(value,str):self.start_stage(value)
         elif isinstance(value,tuple) and len(value)==2:
-            done,total=value;self.progress.setRange(0,max(1,total));self.progress.setValue(done)
+            done,total=value
+            if total>0:
+                fraction=max(0,min(1,done/total));self.progress.setRange(0,1000);self.progress.setValue(round(fraction*1000))
+                self.amount.setText(f'{done:,} / {total:,}  ·  {fraction:.0%}')
+                self.message.setText('当前阶段已完成' if done>=total else '正在处理…')
+            else:self.progress.setRange(0,0);self.amount.setText('')
+
+    def update_speed(self):
+        now=time.monotonic()
+        while len(self.samples)>1 and now-self.samples[1][0]>1.5:self.samples.popleft()
+        speed=0
+        if len(self.samples)>1 and now-self.samples[-1][0]<1.5:
+            speed=(self.samples[-1][1]-self.samples[0][1])/max(.1,now-self.samples[0][0])
+        self.speed.setText(self.byte_text(max(0,speed))+'/s')
+
+    def complete(self,failed=False):
+        self.timer.stop()
+        if self.current:self.current[1].state='failed' if failed or self.cancelled else 'done';self.current[1].update()
 
     def cancel_job(self):
         if self.job:self.job.cancel.set()
-        self.cancel_button.setEnabled(False);self.message.setText('正在取消，请稍候…')
+        self.cancelled=True;self.cancel_button.setEnabled(False);self.message.setText('正在取消，请稍候…')
 
     def reject(self):
         self.cancel_job()

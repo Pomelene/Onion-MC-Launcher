@@ -37,6 +37,12 @@ try {
     & $taskPython -m PyInstaller --clean --noconfirm --distpath dist/qt --workpath $taskWorkPath packaging/craftbridge.spec
     if ($LASTEXITCODE -ne 0) { throw 'Qt build failed; existing launcher has been retained.' }
     $taskStage=Join-Path $taskRoot 'dist\qt\OnionMinecraftLauncher.exe'
+    # Exercise the actual app.main() path, not just direct MainWindow construction.
+    $taskStartupReport=Join-Path $taskRoot 'docs\qt-startup-check.json'
+    $taskStartup=Start-Process -FilePath $taskStage -ArgumentList @('--startup-check-output',('"'+$taskStartupReport+'"')) -WindowStyle Hidden -PassThru -Wait
+    if ($taskStartup.ExitCode -ne 0) { throw 'Packaged real-entry startup check failed; release executable has not been replaced.' }
+    $taskStartupResult=Get-Content -LiteralPath $taskStartupReport -Raw | ConvertFrom-Json
+    if ($taskStartupResult.result -ne 'pass' -or $taskStartupResult.real_entry_point -ne $true -or $taskStartupResult.visible_windows -ne $false) { throw 'Real-entry startup check did not report hidden-window success.' }
     $taskReport=Join-Path $taskRoot 'docs\qt-frozen-check.json'
     $taskProcess=Start-Process -FilePath $taskStage -ArgumentList @('--self-check-output',('"'+$taskReport+'"')) -WindowStyle Hidden -PassThru -Wait
     if ($taskProcess.ExitCode -ne 0) { throw 'Packaged Qt self-check failed; release executable has not been replaced.' }

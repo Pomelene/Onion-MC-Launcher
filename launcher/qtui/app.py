@@ -303,10 +303,10 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
 
     def apply_appearance(self):
         from .theme import paint_color,preference,APPEARANCE_KEYS,resolved_mode
-        from .color_science import wallpaper_seed
+        from .color_science import wallpaper_seed_info
         from .widgets import HomeCanvas,ContentRow
         from PySide6.QtGui import QFont,QFontDatabase
-        self.config_obj._qt_wallpaper_seed=wallpaper_seed(preference(self.config_obj,'background_image','')) if preference(self.config_obj,'accent_source','custom')=='wallpaper' else '#cebafa'
+        self.config_obj._qt_wallpaper_seed,self.config_obj._qt_wallpaper_seed_found=wallpaper_seed_info(preference(self.config_obj,'background_image','')) if preference(self.config_obj,'accent_source','custom')=='wallpaper' else ('#cebafa',False)
         current={key:preference(self.config_obj,key) for key in APPEARANCE_KEYS|{'ui_animations'}}
         current['_resolved_mode']=resolved_mode(self.config_obj)
         current['_wallpaper_seed']=self.config_obj._qt_wallpaper_seed

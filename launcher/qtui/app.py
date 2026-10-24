@@ -138,7 +138,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
                 item=entry(name,title,glyph,lambda k=name:self.open_instance_tab(k));item.setChecked(name==self.instance_tab)
             nav.addStretch();entry('launch','启动游戏','play',self.launch_selected);entry('folder','浏览实例目录','folder',lambda:self.open_folder(self.repo.run_dir(self.selected_version)));entry('info','管理','settings',lambda:self.open_instance_tab('info'))
         elif key=='tools':
-            for name,title,glyph in [('skins','皮肤管理','skin'),('seedmap','种子地图','world'),('services','社团服务','tools')]:
+            for name,title,glyph in [('skins','皮肤管理','skin'),('seedmap','种子地图','world')]:
                 item=entry(name,title,glyph,lambda k=name:self.open_tools_tab(k));item.setChecked(name==getattr(self,'tools_tab','skins'))
             nav.addStretch()
         elif key=='settings' and self.settings_editor:
@@ -195,15 +195,13 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         self.download_kind=kind;self.navigate('download')
 
     def open_tools_tab(self,key):
-        if self.workshop.open_tab(key) is False:return
-        self.tools_tab=key;self.update_sidebar_selection('tools')
+        self.tools_tab=key;self.workshop.open_tab(key);self.update_sidebar_selection('tools')
 
     def build_tools(self):
         if not hasattr(self,'workshop'):
             from .workshop import Workshop
             self.workshop=Workshop(self);self.page_map['tools'].body.addWidget(self.workshop)
-        if self.workshop.open_tab(getattr(self,'tools_tab','skins')) is False:
-            self.tools_tab='skins';self.workshop.open_tab('skins')
+        self.workshop.open_tab(getattr(self,'tools_tab','skins'))
 
     def navigate(self,key,record_history=True,force=False):
         self.flush_settings()
@@ -407,8 +405,6 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
 
 
 def main():
-    from .web_tools import initialize_webview
-    initialize_webview()
     application=QApplication.instance() or QApplication(sys.argv)
     install_window_chrome(application)
     configure_fonts(application)

@@ -116,6 +116,23 @@ def run(output):
         from PySide6.QtGui import QPainter,QColor
         painter=QPainter(wallpaper);painter.fillRect(0,0,32,64,QColor('#bb5522'));painter.end()
         wallpaper_path=base/'blur-check.png';assert wallpaper.save(str(wallpaper_path))
+        # Exercise actual picture button callbacks, not just programmatic path assignment.
+        from PySide6.QtWidgets import QFileDialog
+        choose=next(button for button in window.settings_editor.findChildren(QPushButton) if button.text()=='选择图片')
+        restore=next(button for button in window.settings_editor.findChildren(QPushButton) if button.text()=='恢复默认')
+        original_picker=QFileDialog.getOpenFileName
+        try:
+            QFileDialog.getOpenFileName=staticmethod(lambda *args,**kwargs:(str(wallpaper_path),'图片'))
+            choose.click()
+            assert window.settings_editor.fields['background_image'].text()==str(wallpaper_path)
+            assert window.settings_editor.flush() and window.home_canvas.image is not None
+            QFileDialog.getOpenFileName=staticmethod(lambda *args,**kwargs:('',''))
+            choose.click()
+            assert window.settings_editor.fields['background_image'].text()==str(wallpaper_path)
+            restore.click()
+            assert window.settings_editor.fields['background_image'].text()==''
+            assert window.settings_editor.flush() and window.home_canvas.image is None
+        finally:QFileDialog.getOpenFileName=original_picker
         previous={key:window.config_obj.get(key) for key in ('background_image','background_blur','accent_source')}
         window.config_obj.update({'background_image':str(wallpaper_path),'background_blur':12,'accent_source':'wallpaper'})
         window.apply_appearance()

@@ -156,11 +156,11 @@ class SettingsEditor(QWidget):
             self.number_slider(card,'background_blur','背景图片模糊','只处理背景图片，文字和控件保持清晰；0 为关闭',0,40,'px',preview=True)
             self.percentage(card,'background_transparency','背景透明度','0% 为完整显示；100% 为隐藏图片及装饰',100)
             field=QLineEdit(str(self.initial('background_image') or ''));field.setPlaceholderText('使用默认背景');field.setProperty('wideEditor',True);self.add(card,'background_image','自定义图片','支持 PNG、JPG 和 WebP',field)
-            def choose_background():
+            def choose_background(background_field=field):
                 path,_=QFileDialog.getOpenFileName(self,'选择首页背景','','图片 (*.png *.jpg *.jpeg *.webp)')
-                if path:field.setText(path)
+                if path:background_field.setText(path)
             picture_actions=QWidget();actions=row(picture_actions,0,12)
-            for title,callback,glyph in [('选择图片',choose_background,'folder'),('恢复默认',lambda:field.clear(),None)]:
+            for title,callback,glyph in [('选择图片',choose_background,'folder'),('恢复默认',lambda background_field=field:background_field.clear(),None)]:
                 action=button(title,callback,'soft',glyph);action.setProperty('settingAction',True);action.setMinimumWidth(112);actions.addWidget(action)
             setting_row(card.body,'图片操作','',picture_actions);body.addWidget(card)
             card=Card('首页欢迎语')
@@ -211,11 +211,11 @@ class SettingsEditor(QWidget):
 
         if not version_id:
             for key in APPEARANCE_KEYS:
-                field=self.fields.get(key)
-                if isinstance(field,QCheckBox):field.toggled.connect(self.queue_preview)
-                elif isinstance(field,QSpinBox):field.valueChanged.connect(self.queue_preview)
-                elif isinstance(field,QComboBox):field.currentIndexChanged.connect(self.queue_preview)
-                elif isinstance(field,QLineEdit):field.textChanged.connect(self.queue_preview)
+                preview_field=self.fields.get(key)
+                if isinstance(preview_field,QCheckBox):preview_field.toggled.connect(self.queue_preview)
+                elif isinstance(preview_field,QSpinBox):preview_field.valueChanged.connect(self.queue_preview)
+                elif isinstance(preview_field,QComboBox):preview_field.currentIndexChanged.connect(self.queue_preview)
+                elif isinstance(preview_field,QLineEdit):preview_field.textChanged.connect(self.queue_preview)
         self.ready=True;self.dirty=False
         if not version_id:self.refresh_color_feedback()
 

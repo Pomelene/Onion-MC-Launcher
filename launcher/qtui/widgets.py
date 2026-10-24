@@ -47,7 +47,7 @@ class GlassBackdrop(QWidget):
         home=not shared and canvas is not None and owner.stack.currentWidget() is owner.page_map['home']
         area=QRect(canvas.mapTo(self,QPoint(0,0)),canvas.size()) if home else QRect()
         key=(values['color_mode'],effective_accent(config),shared,home,area.x(),area.y(),area.width(),area.height(),
-             values['background_transparency'],preference(config,'background_mode'),canvas.image.cacheKey() if canvas is not None and canvas.image is not None else 0)
+             values['background_transparency'] if canvas is None or canvas.image is None else 0,preference(config,'background_mode'),canvas.image.cacheKey() if canvas is not None and canvas.image is not None else 0)
         def draw(painter,viewport):
             if shared and canvas is not None:canvas._paint_ui_background(painter,viewport)
             else:
@@ -559,7 +559,7 @@ class HomeCanvas(Landscape):
     def paint_background(self,p,viewport):
         """Composite independent UI and wallpaper layers in one coordinate space."""
         values=appearance_values(config_for(self))
-        key=(values['color_mode'],effective_accent(config_for(self)),values['background_transparency'],preference(config_for(self),'background_mode'),self.image.cacheKey() if self.image is not None else 0)
+        key=(values['color_mode'],effective_accent(config_for(self)),values['background_transparency'] if self.image is None else 0,preference(config_for(self),'background_mode'),self.image.cacheKey() if self.image is not None else 0)
         paint_cached_surface(self,p,viewport,key,self._paint_ui_background)
         if self.image is not None:
             paint_cached_surface(self,p,viewport,key,self._paint_wallpaper,layer='wallpaper',

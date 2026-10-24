@@ -302,24 +302,35 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         if preference(self.config_obj,'color_mode','dark')=='auto':self.apply_appearance()
 
     def apply_appearance(self):
-        from .theme import paint_color,preference
+        from .theme import paint_color,preference,APPEARANCE_KEYS,resolved_mode
         from .color_science import wallpaper_seed
         from .widgets import HomeCanvas,ContentRow
         from PySide6.QtGui import QFont,QFontDatabase
         self.config_obj._qt_wallpaper_seed=wallpaper_seed(preference(self.config_obj,'background_image','')) if preference(self.config_obj,'accent_source','custom')=='wallpaper' else '#cebafa'
-        family=preference(self.config_obj,'font_family','') or 'Microsoft YaHei UI'
-        if family not in QFontDatabase.families():family='Microsoft YaHei UI'
-        font=QFont(family);font.setPixelSize(int(preference(self.config_obj,'font_size',14)))
-        strategy=QFont.StyleStrategy.PreferAntialias
-        if preference(self.config_obj,'font_antialiasing','auto')=='gray':strategy|=QFont.StyleStrategy.NoSubpixelAntialias
-        font.setStyleStrategy(strategy);self.setFont(font)
-        log_family=preference(self.config_obj,'log_font_family','Consolas') or family
-        if log_family not in QFontDatabase.families():log_family='Consolas'
-        self.logs.setStyleSheet("font-family:'"+log_family.replace("'",'')+"';font-size:"+str(preference(self.config_obj,'log_font_size',12))+"px;")
-        for item in self.findChildren(ContentRow):item.apply_appearance()
-        for item in self.findChildren(NavigationItem):item.setSubtitle(item.subtitle)
-        from .motion import apply_motion_preferences
-        apply_motion_preferences(self)
+        current={key:preference(self.config_obj,key) for key in APPEARANCE_KEYS|{'ui_animations'}}
+        current['_resolved_mode']=resolved_mode(self.config_obj)
+        current['_wallpaper_seed']=self.config_obj._qt_wallpaper_seed
+        try:current['_wallpaper_stamp']=Path(current['background_image']).stat().st_mtime_ns if current.get('background_image') else 0
+        except OSError:current['_wallpaper_stamp']=0
+        previous=getattr(self,'_appearance_snapshot',{})
+        changed={key for key,value in current.items() if previous.get(key)!=value}
+        if previous and not changed:return
+        if not previous or changed & {'font_family','font_size','log_font_family','log_font_size','font_antialiasing'}:
+            family=preference(self.config_obj,'font_family','') or 'Microsoft YaHei UI'
+            if family not in QFontDatabase.families():family='Microsoft YaHei UI'
+            font=QFont(family);font.setPixelSize(int(preference(self.config_obj,'font_size',14)))
+            strategy=QFont.StyleStrategy.PreferAntialias
+            if preference(self.config_obj,'font_antialiasing','auto')=='gray':strategy|=QFont.StyleStrategy.NoSubpixelAntialias
+            font.setStyleStrategy(strategy);self.setFont(font)
+            log_family=preference(self.config_obj,'log_font_family','Consolas') or family
+            if log_family not in QFontDatabase.families():log_family='Consolas'
+            self.logs.setStyleSheet("font-family:'"+log_family.replace("'",'')+"';font-size:"+str(preference(self.config_obj,'log_font_size',12))+"px;")
+        if not previous or changed & {'list_density','font_size'}:
+            for item in self.findChildren(ContentRow):item.apply_appearance()
+            for item in self.findChildren(NavigationItem):item.setSubtitle(item.subtitle)
+        if not previous or changed & {'animation_duration','ui_animations'}:
+            from .motion import apply_motion_preferences
+            apply_motion_preferences(self)
         style=themed_style(self.config_obj.get('accent_color'),self.config_obj)
         if self.styleSheet()!=style:self.setStyleSheet(style)
         shared=preference(self.config_obj,'background_scope')=='window'
@@ -329,12 +340,14 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
                 surface.style().unpolish(surface);surface.style().polish(surface);surface.update()
         for canvas in self.findChildren(HomeCanvas):
             canvas.set_background(preference(self.config_obj,'background_image'));canvas.update()
-        for field in self.findChildren(QLineEdit):
-            for action in field.actions():
-                if action.property('onionGlyph'):action.setIcon(icon(action.property('onionGlyph'),paint_color(field,'icon')))
+        if not previous or changed & {'accent_color','accent_source','color_style','color_mode','_resolved_mode','_wallpaper_seed'}:
+            for field in self.findChildren(QLineEdit):
+                for action in field.actions():
+                    if action.property('onionGlyph'):action.setIcon(icon(action.property('onionGlyph'),paint_color(field,'icon')))
         for dialog in self.findChildren(QDialog):
             if getattr(dialog,'_chrome_header',None):
                 if dialog.styleSheet()!=style:dialog.setStyleSheet(style)
+        self._appearance_snapshot=current
         self.centralWidget().update()
 
     def refresh_account(self):

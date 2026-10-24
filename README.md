@@ -6,7 +6,9 @@
 
 本分支为 `for_thunion`，版本号在公众版后增加 `-T`。工具坊新增“社团服务”：每次启动仅首次进入时确认并同步 [OnionService4THUnion/webapp.json](https://github.com/Pomelene/OnionService4THUnion/blob/main/webapp.json)，后续读取本地缓存。子目录先说明 Wiki、在线地图等网址的用途，点击“打开”后在启动器内嵌网页中浏览。清华联盟工坊是非官方、非营利组织。
 
-当前源码版本：[v0.3.0-T · THUnion 特供版](https://github.com/Pomelene/Onion-MC-Launcher/tree/for_thunion)。Windows 发布包见 [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases)，下载 ZIP 后解压运行 `OnionMinecraftLauncher.exe`。
+当前源码版本：[v0.3.0.1-T · THUnion 特供版](https://github.com/Pomelene/Onion-MC-Launcher/tree/for_thunion)。Windows 发布包见 [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases)，下载 ZIP 后解压运行 `OnionMinecraftLauncher.exe`。
+
+**v0.3.0.1-T**：首次启动按屏幕可用区域自动设置窗口大小；记住关闭时的窗口尺寸和最大化状态，换用较小屏幕时自动限制尺寸。窗口尺寸使用随 DPI 缩放的逻辑像素，与游戏分辨率设置独立。
 
 **v0.3.0-T**：整合包单实例导入、路径兼容修复、阶段式下载进度小窗，以及由 JSON 配置的社团服务目录、部员分享和基础包下载。
 

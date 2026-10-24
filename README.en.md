@@ -6,7 +6,9 @@
 
 This is the `for_thunion` branch; its versions append `-T` to the public edition. Workshop adds Club Services: the first accepted confirmation per launcher session fetches and caches the latest [webapp.json](https://github.com/Pomelene/OnionService4THUnion/blob/main/webapp.json). Categories describe the Wiki and online map before an explicit click opens a page inside the launcher. THUnion is an unofficial, nonprofit organization.
 
-Current source version: [v0.3.0-T · THUnion edition](https://github.com/Pomelene/Onion-MC-Launcher/tree/for_thunion). Windows packages are available under [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases). Extract the ZIP and run `OnionMinecraftLauncher.exe`.
+Current source version: [v0.3.0.1-T · THUnion edition](https://github.com/Pomelene/Onion-MC-Launcher/tree/for_thunion). Windows packages are available under [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases). Extract the ZIP and run `OnionMinecraftLauncher.exe`.
+
+**v0.3.0.1-T**: First launch fits the available screen area. Closing saves the normal window size and maximized state; reopening on a smaller screen clamps the size. Uses DPI-aware logical pixels, independently of game resolution.
 
 **v0.3.0-T**: standalone modpack imports, path compatibility fixes, compact task progress windows, and JSON-configured club services with member sharing and verified modpack downloads. 
 

@@ -3,6 +3,9 @@
 Keep decoration quiet around dense game data. Accent is supplied by the user.
 """
 
+from functools import lru_cache
+from .opacity import opacity,alpha_byte,qss_color,parse_source_color
+
 BACKGROUND = '#14181d'
 SURFACE = '#1c2229'
 TEXT = '#edf2f4'
@@ -80,7 +83,7 @@ def row_height(widget,base=68):
 
 def surface_opacity(config=None):
     """Opacity of UI surfaces only; text and wallpaper have independent settings."""
-    return 1-appearance_values(config)['ui_transparency']/100
+    return opacity(preference(config or {},'ui_transparency',0),90)
 
 
 def palette_for(widget):return palette_for_config(config_for(widget))
@@ -89,7 +92,7 @@ def palette_for(widget):return palette_for_config(config_for(widget))
 def paint_color(widget,role='text',text=False):
     from PySide6.QtGui import QColor
     color=QColor(palette_for(widget)[role])
-    if text:color.setAlpha(round(255*(1-appearance_values(config_for(widget))['text_transparency']/100)))
+    if text:color.setAlpha(alpha_byte(opacity(preference(config_for(widget),'text_transparency',0),70)))
     return color
 
 
@@ -108,7 +111,7 @@ def contrasting_accent(accent,mode):
     return color.name()
 
 
-def appearance_style(accent,config=None):
+def _appearance_base(accent,config=None):
     import re
     values=appearance_values(config);mode=values['color_mode'];style=STYLE
     if mode=='light':
@@ -150,28 +153,10 @@ QLabel#authCode { color:ACCENT; }
     from PySide6.QtGui import QColor
     primary_text='#281f35' if QColor(accent).lightnessF()>.55 else '#ffffff'
     style+="\nQPushButton[role='primary'] { color:"+primary_text+"; }\n"
-    alpha=round(255*(1-values['text_transparency']/100))
-    if alpha<255:
-        def text_alpha(match):
-            color=match.group(1);rgb=tuple(int(color[i:i+2],16) for i in (1,3,5))
-            return 'color:rgba(%d,%d,%d,%d)'%(*rgb,alpha)
-        style=re.sub(r'(?<![-\w])color:\s*(#[0-9a-fA-F]{6})',text_alpha,style)
     from PySide6.QtGui import QColor
     tint=QColor(tokens['base'])
     backdrop='rgba(%d,%d,%d,150)'%tint.getRgb()[:3]
     style+='\nQWidget#sidebar[wallpaperUnderlay="true"],QWidget#toolbar[wallpaperUnderlay="true"] { background:'+backdrop+'; border:0; }\n'
-    factor=surface_opacity(config)
-    def fade_surface(match):
-        def fade_color(color_match):
-            color=QColor(color_match.group())
-            # QColor's CSS rgba parsing varies across Qt versions; parse explicitly.
-            if color_match.group().startswith('rgba'):
-                rgba=[int(part) for part in re.findall(r'\d+',color_match.group())]
-                color=QColor(*rgba)
-            return 'rgba(%d,%d,%d,%d)'%(*color.getRgb()[:3],round(color.alpha()*factor))
-        return match.group(1)+re.sub(r'#[0-9a-fA-F]{6}|rgba\([\d,]+\)',fade_color,match.group(2))
-    # Fade only fills and outlines. Foreground color declarations stay untouched.
-    style=re.sub(r'((?<![-\w])(?:background(?:-color)?|selection-background-color|border(?:-(?:top|right|bottom|left))?(?:-color)?)\s*:\s*)([^;}]+)',fade_surface,style)
     style+='\nQMainWindow { background:transparent; }\n'
     from PySide6.QtGui import QFontDatabase
     family=str(preference(config or {},'font_family','') or 'Microsoft YaHei UI')
@@ -182,12 +167,44 @@ QLabel#authCode { color:ACCENT; }
     style=re.sub(r'font-size:(\d+)px',lambda m:'font-size:'+str(round(int(m[1])*size/14))+'px',style)
     radius=int(preference(config or {},'corner_radius',10))
     style=re.sub(r'border-radius:(\d+)px',lambda m:'border-radius:'+str(round(int(m[1])*radius/10) if int(m[1])>=5 else int(m[1]))+'px',style)
-    if not preference(config or {},'titlebar_transparent',True):
-        rgb=tint.getRgb()[:3]
-        style+='\nQWidget#toolbar,QWidget#toolbar[wallpaperUnderlay="true"] { background:rgb(%d,%d,%d); border:0; }\n'%rgb
-
     if values['bold_text']:style+='\nQWidget,QLabel#eyebrow,QLabel#muted { font-weight:600; }\n'
     return style
+
+
+@lru_cache(maxsize=24)
+def _cached_appearance_base(preferences):
+    values=dict(preferences)
+    return _appearance_base(values['accent_color'],values)
+
+
+def appearance_style(accent,config=None):
+    import re
+    config=config if config is not None else {}
+    seed=preference(config,'accent_color',accent)
+    if preference(config,'accent_source','custom')=='wallpaper':seed=getattr(config,'_qt_wallpaper_seed',seed)
+    # Alpha values deliberately do not participate in the expensive template cache.
+    values={key:preference(config,key,default) for key,default in (
+        ('color_style','fidelity'),('font_family',''),('font_size',14),('corner_radius',10),('bold_text',False))}
+    values.update(color_mode=resolved_mode(config),accent_color=seed)
+    style=_cached_appearance_base(tuple(sorted(values.items())))
+    text_opacity=opacity(preference(config,'text_transparency',0),70)
+    if text_opacity<1:
+        def text_alpha(match):
+            rgb,_=parse_source_color(match[1]);return 'color:'+qss_color(rgb,text_opacity)
+        style=re.sub(r'(?<![-\w])color:\s*(#[0-9a-fA-F]{6})',text_alpha,style)
+    factor=surface_opacity(config)
+    def fade_surface(match):
+        def color_alpha(color_match):
+            rgb,base_opacity=parse_source_color(color_match.group())
+            return qss_color(rgb,base_opacity*factor)
+        return match[1]+re.sub(r'#[0-9a-fA-F]{6}|rgba\([\d,]+\)',color_alpha,match[2])
+    style=re.sub(r'((?<![-\w])(?:background(?:-color)?|selection-background-color|border(?:-(?:top|right|bottom|left))?(?:-color)?)\s*:\s*)([^;}]+)',fade_surface,style)
+    if not preference(config,'titlebar_transparent',True):
+        from PySide6.QtGui import QColor
+        rgb=QColor(palette_for_config(config)['base']).getRgb()[:3]
+        style+='\nQWidget#toolbar,QWidget#toolbar[wallpaperUnderlay="true"] { background:'+qss_color(rgb,1.)+'; border:0; }\n'
+    return style
+
 
 STYLE = '''
 QMainWindow,QDialog { background:#14181d; }

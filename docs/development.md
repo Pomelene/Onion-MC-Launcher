@@ -237,3 +237,10 @@ python -X utf8 scripts/check_bundle.py release/OnionMinecraftLauncher-v0.2.1-sli
 - System appearance uses Qt `QStyleHints.colorSchemeChanged`; antialiasing remains subject to Qt, font and display/platform capabilities. Reduced motion or duration 0 settles animations immediately.
 - Main and for_thunion are built separately. Preserve the THUnion-only WebView entry initialization and service navigation; never replace app.py wholesale across editions.
 - Checks: tests/test_color_science.py, scripts/check_qt_appearance_next.py, scripts/check_qt_wallpaper_opacity.py, scripts/check_qt_choices.py, scripts/check_qt_motion.py, existing background/transparency checks, and each frozen build's real-entry startup/raster/edition-specific checks.
+
+
+### Exact opacity encoding and incremental updates
+
+Qt QSS interprets `rgba(r,g,b,1)` as fully opaque, not 1/255. A 7/255 hover overlay scaled by 21% rounded to integer 1, reproducing the sudden white setting-row highlight at 79% UI transparency. All generated style colors now use Qt-native `#AARRGGBB` through `launcher/qtui/opacity.py`, avoiding both that ambiguity and fractional-alpha truncation. Ratios are clamped once and byte alpha is quantized only at the renderer boundary; authored byte-alpha tokens are parsed explicitly.
+
+Opaque style templates are cached separately from UI/text opacity (24 bounded entries). Alpha-only changes do not reload fonts, change density/layout, reset animations or recolor icons. Wallpaper alpha changes reuse the painted wallpaper layer without decoding or filtering it again. The system uses one snapshot to skip unchanged appearance applications. `scripts/check_qt_opacity_boundary.py` proves the old Qt behavior, checks 182 actual dark/light alpha renders including 78→79%, and checks image/cache/font/geometry stability. No EXE is rebuilt or uploaded as part of this source-only correction.

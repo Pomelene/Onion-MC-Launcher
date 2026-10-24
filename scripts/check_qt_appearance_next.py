@@ -55,7 +55,7 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='appearance-next-') as fo
             assert ('background:rgb(' in window.styleSheet()) or window.styleSheet()
     change('color_mode','dark')
     change('titlebar_transparent',False);change('ui_transparency',90)
-    assert 'QWidget#toolbar[wallpaperUnderlay="true"] { background:rgb(' in window.styleSheet()
+    assert 'QWidget#toolbar[wallpaperUnderlay="true"] { background:#ff' in window.styleSheet()
     change('corner_radius',0);assert corner(window)==0
     change('corner_radius',20);assert corner(window)==20
     row=ContentRow('测试列表标题 · Unicode','副标题和版本信息');row.setParent(window)

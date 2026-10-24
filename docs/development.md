@@ -226,3 +226,20 @@ python -X utf8 scripts/check_bundle.py release/OnionMinecraftLauncher-v0.2.1-sli
 `launcher/qtui/java_manager.py` 是设置中的普通 QWidget 页，不再使用 Java 管理 QDialog。首次进入后台检测，支持重新检测、系统文件选择器添加、全局 Java 选择/恢复自动选择。Java 下载在本页显示进度、失败和取消状态，不切入任务子页；扫描和下载互斥，下载成功刷新列表并保存所选运行时。实例级 Java 设置仍在各实例独立设置内管理。
 
 `tests/test_game_libraries.py` 验证旧格式保留、同名实例隔离、目录去重与选择恢复、移除不删除文件、并发目录写入及实际运行路径。`scripts/check_qt_libraries_java.py` 使用临时双目录、模拟 Java 和模拟游戏进程，验证真实页面按钮、重启恢复、任务切换保护、运行中切目录后的统计归属、全局设置目录入口、Java 内嵌状态与下载成功/失败/取消；生成深浅主题多尺寸截图。不会运行真实游戏、Java 或进行真实下载。
+
+## THUnion 特供版：社团服务
+
+独立分支 `for_thunion`，当前版本 `0.2.4-T`，Windows 数字版本仍为 0.2.4.0，文件和产品版本字符串包含 `-T`。公众版 main 不含社团服务入口。
+
+工具坊新增“社团服务”。首次进入显示与主题一致的无边框确认面板；取消不请求目录。每次启动仅在首次确认后通过 GitHub Contents API 同步一次 main/webapp.json，校验后原子写入 `.onion/services/thunion/webapp.json`。会话状态归主窗口持有，重建页面、切换工具或离开时正在同步均不重复确认/下载；后续进入读取本地 JSON。同步失败保留并使用上次有效缓存，无缓存则显示失败；下次启动重新确认并同步。请求不带微软令牌、Cookie 或 GitHub 凭据，使用唯一 freshness 参数及 no-cache。
+
+配置为 schema_version=1 的声明式目录，只读取 title/categories/id/description/tools/url；最多 256 KiB、24 个分类、128 个工具。目录和工具必须说明用途；页面先展示说明与网址，用户点击打开才导航。配置不能下发命令、脚本或本地路径。网页入口支持公共 HTTP(S)，拒绝 file/javascript/data、内嵌凭据、本机和显式内网地址。实验 Wiki 和在线地图实际提供 HTTP：Wiki 跳转到维护者站点，地图使用指向维护者地图的 frame。配置本身始终通过 GitHub HTTPS 获取。
+
+`launcher/qtui/web_tools.py` 用 Qt 6.12 QWebView（QWindow）及 QWidget.createWindowContainer 承载系统 WebView2；地址只读、提供后退/刷新/停止/回到目录和加载状态。无 Python/系统命令桥接，不将启动器账户令牌或客户端配置传给网页；禁用本地文件访问。网页浏览资料目录独立于启动器账户，位于 `.onion/webview/thunion`。原生窗口不能用 Qt raster 抓取网页，验证采用真实 DOM 与 WebGL 查询。
+
+源码运行可安装 requirements-thunion.txt。隔离打包运行 scripts/install_webview.py，只从固定 SHA-256 的官方 PySide6-Addons wheel 提取约 320 KiB 绑定和 WebView2 插件，不引入 WebEngine/完整 Chromium。构建增加隐藏原生窗口 WebView2 DOM 检查，失败时不覆盖 release EXE。
+
+tests/test_club_services.py 检查目录格式、网址、请求刷新与无令牌，以及拒绝可执行配置。scripts/check_qt_club_services.py 验证确认/取消、每次启动确认及同步一次、本地缓存与离线回退、说明先于跳转、两个网页的内嵌路由及失败状态；scripts/check_thunion_native_web.py 从已推送的真实 JSON 读取两个服务，在隐藏原生 WebView2 内检查导航、DOM 和 WebGL，不使用账户或桌面输入。
+
+
+社团网页统一使用紧凑单行工具栏；成功加载时隐藏状态行和进度条。打开网页默认收起主侧栏，移除工具坊外边距、社团目录标题和说明栏，将空间留给网页。可通过“显示导航 / 展开网页”切换；返回目录或切到其他工具恢复侧栏和边距。在线地图目录增加 THUnion Atlas（https://atlas.thunion.net/），入口说明其站内提供离线导航模组下载。

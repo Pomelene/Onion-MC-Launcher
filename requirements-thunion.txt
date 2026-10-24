@@ -1,0 +1,2 @@
+-r requirements.txt
+PySide6-Addons==6.12.0

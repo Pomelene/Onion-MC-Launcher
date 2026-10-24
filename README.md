@@ -4,7 +4,9 @@
 
 **免费、开源、公益开发的 Minecraft Java 版启动器。**
 
-当前源码版本：[v0.2.4](https://github.com/Pomelene/Onion-MC-Launcher/tree/v0.2.4)。Windows 发布包见 [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases)，下载 ZIP 后解压运行 `OnionMinecraftLauncher.exe`。
+本分支为 `for_thunion`，版本号在公众版后增加 `-T`。工具坊新增“社团服务”：每次启动仅首次进入时确认并同步 [OnionService4THUnion/webapp.json](https://github.com/Pomelene/OnionService4THUnion/blob/main/webapp.json)，后续读取本地缓存。子目录先说明 Wiki、在线地图等网址的用途，点击“打开”后在启动器内嵌网页中浏览。清华联盟工坊是非官方、非营利组织。
+
+当前源码版本：[v0.2.4-T · THUnion 特供版](https://github.com/Pomelene/Onion-MC-Launcher/tree/for_thunion)。Windows 发布包见 [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases)，下载 ZIP 后解压运行 `OnionMinecraftLauncher.exe`。
 
 **v0.2.4 新增多游戏文件夹、工具坊与内容管理功能**：实例列表和首页快捷选择支持切换已保存的游戏目录，同名实例的设置与游玩记录隔离；Java 管理内嵌设置页面；新增原理图管理、连续截图列表、三维皮肤预览及上传、本地种子地图。启动器日志移至隐藏的 `.onion/logs`，配置格式升级前自动备份。
 
@@ -30,14 +32,14 @@
 
 v0.2.4 新增：实例原理图子目录管理、按时间倒序连续滚动的截图网格，以及工具坊中的皮肤库、三维预览、正版皮肤上传和本地种子地图。皮肤保存在 `.onion/skins/`；离线应用仅改变本地显示，正版上传会修改微软账户的 Minecraft 皮肤。种子地图采用 cubiomes 的 xpple 维护分支，支持列表中的 Java 原版版本至 26.3，包含新版生物群系和末地生成变化；不支持自定义世界生成规则。
 
-当前主要开发环境：Windows、Python 3.13。
+当前主要开发环境：Windows、Python 3.13。THUnion 网页工具使用系统 Microsoft Edge WebView2 Runtime，通过 Qt 原生组件嵌入，不捆绑完整 Chromium。打包前运行 `python scripts/install_webview.py`，仅提取官方 Qt 扩展包中的小型 WebView2 组件。
 
 ```powershell
 git clone https://github.com/Pomelene/Onion-MC-Launcher.git
 cd Onion-MC-Launcher
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-thunion.txt
 python main.py
 ```
 

@@ -10,6 +10,7 @@
 !/THIRD_PARTY_NOTICES.md
 !/requirements.txt
 !/requirements-dev.txt
+!/requirements-thunion.txt
 !/main.py
 !/main_tk.py
 !/launcher/

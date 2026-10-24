@@ -21,6 +21,7 @@ Onion MC Launcher 是独立的 Python / Qt 启动器项目，与 Mojang、Micros
 运行与开发依赖由安装工具另行获取，不随源码仓库附带：
 
 - PySide6 / Qt：遵循对应版本的 LGPL/GPL/商业许可及分发要求。
+- THUnion 分支的 Qt WebView 使用 Qt 6.12 官方 Windows WebView2 插件（LGPL-3.0/GPL-2.0 等上游适用许可）。仅随包提供小型 Qt 绑定和原生插件，Microsoft Edge WebView2 Runtime 使用设备已有安装，不随 EXE 捆绑完整 Chromium。官方扩展 wheel 的 SHA-256 固定在 `scripts/install_webview.py`。
 - Pillow：开发截图和历史验收工具使用，遵循 HPND 等上游适用许可；当前 Qt 发行 EXE 不包含此依赖。
 - PyInstaller：遵循上游 GPL 及其引导程序分发例外。
 

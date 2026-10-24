@@ -3,6 +3,10 @@ param([string]$OutputName='OnionMinecraftLauncher.exe')
 $ErrorActionPreference='Stop'
 if ($OutputName -ne [IO.Path]::GetFileName($OutputName) -or $OutputName -notmatch '\.exe$') { throw 'OutputName must be an executable filename without a directory.' }
 $taskRoot=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+if (-not (Test-Path -LiteralPath (Join-Path $taskRoot '.deps\qt\PySide6\QtWebView.pyd'))) {
+    & python (Join-Path $taskRoot 'scripts\install_webview.py')
+    if ($LASTEXITCODE -ne 0) { throw 'Native web tools component setup failed.' }
+}
 if (-not (Test-Path -LiteralPath (Join-Path $taskRoot 'assets\native\onion_seedmap.dll'))) {
     & python (Join-Path $taskRoot 'scripts\build_seedmap.py')
     if ($LASTEXITCODE -ne 0) { throw 'Local seed-map component build failed.' }
@@ -48,6 +52,11 @@ try {
     if ($taskRaster.ExitCode -ne 0) { throw 'Packaged Windows raster check failed; release executable has not been replaced.' }
     $taskRasterResult=Get-Content -LiteralPath $taskRasterReport -Raw | ConvertFrom-Json
     if ($taskRasterResult.result -ne 'pass' -or $taskRasterResult.visible_windows -ne $false) { throw 'Windows raster check did not report hidden-window success.' }
+    $taskWebReport=Join-Path $taskRoot 'docs\thunion-frozen-web-check.json'
+    $taskWeb=Start-Process -FilePath $taskStage -ArgumentList @('--web-tool-check-output',('"'+$taskWebReport+'"')) -WindowStyle Hidden -PassThru -Wait
+    if ($taskWeb.ExitCode -ne 0) { throw 'Packaged native WebView2 check failed; release executable has not been replaced.' }
+    $taskWebResult=Get-Content -LiteralPath $taskWebReport -Raw | ConvertFrom-Json
+    if ($taskWebResult.result -ne 'pass' -or $taskWebResult.visible_windows -ne $false) { throw 'Native web tools did not report hidden-window success.' }
     & $taskPython -X utf8 scripts/check_bundle.py $taskStage --require-slim --max-bytes 38000000 --output docs/bundle-audit.json
     if ($LASTEXITCODE -ne 0) { throw 'Bundle size/dependency audit failed; release executable has not been replaced.' }
     $taskRelease=Join-Path $taskRoot 'release'

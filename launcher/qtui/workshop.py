@@ -137,6 +137,12 @@ class Workshop(QWidget):
         super().__init__();self.owner=owner;self.views={};body=column(self,24,0);self.stack=QStackedWidget();body.addWidget(self.stack)
     def open_tab(self,key):
         if key not in self.views:
-            self.views[key]=Wardrobe(self.owner) if key=='skins' else SeedMap(self.owner);self.stack.addWidget(self.views[key])
+            if key=='services':
+                from .club_services import ClubServices
+                self.views[key]=ClubServices(self.owner)
+            else:self.views[key]=Wardrobe(self.owner) if key=='skins' else SeedMap(self.owner)
+            self.stack.addWidget(self.views[key])
+        if key=='services' and not self.views[key].enter():return False
         self.stack.setCurrentWidget(self.views[key])
         if key=='skins':self.views[key].refresh()
+        return True

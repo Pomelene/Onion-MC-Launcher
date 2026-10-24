@@ -4,7 +4,9 @@
 
 **A free, open-source, community-oriented launcher for Minecraft: Java Edition.**
 
-Current source version: [v0.2.4](https://github.com/Pomelene/Onion-MC-Launcher/tree/v0.2.4). Windows packages are available under [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases). Extract the ZIP and run `OnionMinecraftLauncher.exe`.
+This is the `for_thunion` branch; its versions append `-T` to the public edition. Workshop adds Club Services: the first accepted confirmation per launcher session fetches and caches the latest [webapp.json](https://github.com/Pomelene/OnionService4THUnion/blob/main/webapp.json). Categories describe the Wiki and online map before an explicit click opens a page inside the launcher. THUnion is an unofficial, nonprofit organization.
+
+Current source version: [v0.2.4-T · THUnion edition](https://github.com/Pomelene/Onion-MC-Launcher/tree/for_thunion). Windows packages are available under [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases). Extract the ZIP and run `OnionMinecraftLauncher.exe`.
 
 **v0.2.4 adds multiple game folders, Workshop tools and content management**: switch saved libraries from the instance list or Home picker, with isolated settings and play history for identically named instances. Java management is embedded in Settings. New tools include schematic management, a continuous screenshot gallery, interactive 3D skin previews and uploads, and a local seed map. Launcher logs now live in hidden `.onion/logs`; existing configuration is backed up before its format upgrade.
 
@@ -29,14 +31,14 @@ For Microsoft account authorization and publisher application configuration, see
 
 New in v0.2.4: per-instance schematic subfolders, a continuous screenshot grid in reverse chronological order, and a Workshop with a skin library, a rotatable 3D preview, authenticated skin upload, and a local seed map. Skins live in `.onion/skins/`. Offline skins affect local display only; Microsoft uploads change the account's Minecraft skin. Maps use xpple's maintained cubiomes fork and support the listed vanilla Java versions through 26.3, including newer biomes and End generation changes. Custom world generators are not supported.
 
-The primary development environment is Windows with Python 3.13.
+The primary development environment is Windows with Python 3.13. Embedded tools use the installed Microsoft Edge WebView2 Runtime; no Chromium runtime is bundled. Before packaging, run `python scripts/install_webview.py` to extract the minimal official Qt WebView2 components.
 
 ```powershell
 git clone https://github.com/Pomelene/Onion-MC-Launcher.git
 cd Onion-MC-Launcher
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-thunion.txt
 python main.py
 ```
 

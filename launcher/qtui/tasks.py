@@ -21,6 +21,8 @@ class Job(QRunnable):
         self._transferred = 0
         self._last_transfer = 0.0
 
+    def cancel_job(self):self.cancel.set()
+
     def transferred(self, size):
         # Parallel download workers share this job counter, never any widget.
         with self._progress_lock:
@@ -59,18 +61,24 @@ class TaskManager(QObject):
         self.pool.setMaxThreadCount(4)
         self.bus = Bus(self)
         self.jobs = {}
+        self.tracked = {}
         self.bus.completed.connect(self._completed, Qt.ConnectionType.QueuedConnection)
         self.bus.progress.connect(self._progress, Qt.ConnectionType.QueuedConnection)
 
-    def submit(self, function, done=None, failed=None, progress=None, downloader=None):
+    def submit(self, function, done=None, failed=None, progress=None, downloader=None,*,title=None,library='',instance=''):
         key = uuid.uuid4().hex
         job = Job(key, self.bus, function, downloader)
         self.jobs[key] = (job, done, failed, progress)
+        history=getattr(self.parent(),'task_history',None)
+        if title and history:
+            record=history.begin(title,library,instance);self.tracked[key]=(history,record);history.live[record['id']]=job
         self.pool.start(job)
         return job
 
     @Slot(str, object)
     def _progress(self, key, value):
+        if key in self.tracked:
+            history,record=self.tracked[key];history.progress(record,value)
         item = self.jobs.get(key)
         if item and item[3]:
             item[3](value)
@@ -78,6 +86,9 @@ class TaskManager(QObject):
     @Slot(str, object, object)
     def _completed(self, key, result, error):
         item = self.jobs.pop(key, None)
+        tracked=self.tracked.pop(key,None)
+        if item and tracked:
+            history,record=tracked;history.finish(record,'cancelled' if item[0].cancel.is_set() else 'failed' if error else 'complete',str(error) if error else '')
         if item:
             callback = item[2] if error else item[1]
             if callback:

@@ -78,6 +78,41 @@ def run_raster(output):
     return 0
 
 
+def check_next_features(window,base,application):
+    """Exercise newly bundled imports, offline plan/apply/undo and embedded pages."""
+    import io,hashlib,zipfile
+    from ..mod_plan import build_plan,apply_plan,undo_last
+    from ..mod_audit import audit
+    vid='next-features-fixture';version=window.repo.versions_dir/vid;version.mkdir(parents=True,exist_ok=True)
+    (version/(vid+'.json')).write_text(json.dumps(dict(id=vid,onionGameVersion='1.21.1',mainClass='Main',libraries=[])),encoding='utf-8')
+    def idle():
+        application.processEvents();deadline=time.monotonic()+10
+        while window.tasks.jobs and time.monotonic()<deadline:application.processEvents();time.sleep(.01)
+        assert not window.tasks.jobs,'Next feature page timeout'
+    window.reload_versions();idle();assert window.set_selected(vid)
+    window.instances.update(vid,favorite=True,tags=['selfcheck']);window.instances.load();assert window.instances.get(vid).favorite
+    data=io.BytesIO()
+    with zipfile.ZipFile(data,'w') as archive:archive.writestr('fabric.mod.json',json.dumps(dict(id='selfcheck',version='1.0')))
+    payload=data.getvalue();release=dict(id='selfcheck-1',project_id='selfcheck',version_number='1.0',loaders=['fabric'],game_versions=['1.21.1'],dependencies=[],files=[dict(filename='selfcheck.jar',url='https://example.com/selfcheck.jar',size=len(payload),hashes=dict(sha1=hashlib.sha1(payload).hexdigest()))])
+    class LocalDownload:
+        def fetch_json(self,url):raise AssertionError('Frozen feature selfcheck must not request network')
+        def download_one(self,job):job.path.write_bytes(payload)
+    original=window.repo.downloader;window.repo.downloader=LocalDownload()
+    try:
+        folder=window.repo.run_dir(vid)/'mods';plan=build_plan(window.repo.downloader,folder,[release],'1.21.1','fabric')
+        apply_plan(window.repo,vid,plan);assert (folder/'selfcheck.jar').is_file();assert not [i for i in audit(folder,'1.21.1','fabric') if i.severity=='error']
+        undo_last(window.repo,vid);assert not (folder/'selfcheck.jar').exists()
+    finally:window.repo.downloader=original
+    window.open_instance_overview();idle();assert window.subpages[-1].tree.topLevelItemCount()>=1;render_hidden(window);window.subpages[-1].reject()
+    window.open_mod_manager(vid);idle();assert not window.subpages[-1].busy;render_hidden(window);window.subpages[-1].reject()
+    window.preflight(vid);idle();render_hidden(window);window.subpages[-1].reject()
+    window.diagnose();idle();assert window.subpages[-1].report;window.subpages[-1].reject()
+    record=window.task_history.begin('离线自检',window.repo.game_dir,vid);window.task_history.finish(record,'complete')
+    window.open_task_center();render_hidden(window);assert window.workshop.views['tasks'].tree.topLevelItemCount()>=1
+    from ..skins import SkinLibrary
+    library=SkinLibrary(base);skin=library.import_skin(base/'blur-check.png');library.set_favorite(skin,True);assert library.is_favorite(skin)
+
+
 def run(output):
     output=Path(output).resolve();output.parent.mkdir(parents=True,exist_ok=True)
     application=QApplication.instance() or QApplication([]);application.setStyle('Fusion');configure_fonts(application)
@@ -203,6 +238,7 @@ def run(output):
         generated=generate('-3829811542736183482','26.3',x=68148,z=80990,y=77,scale=4,size=32,structures=False)
         assert 188 in generated.ids
         window.workshop.views['seedmap'].canvas.set_data(generated);render_hidden(window)
+        check_next_features(window,base,application)
         window.navigate('home')
         assert window.accounts.path==window.instances.path==window.version_settings.path==config.path
         assert config.path.exists()

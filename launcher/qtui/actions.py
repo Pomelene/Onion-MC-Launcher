@@ -11,6 +11,14 @@ from ..paths import LAUNCHER_VERSION,LAUNCHER_NAME
 
 
 class Actions:
+    def open_mod_manager(self,vid):
+        from .mod_manager import ModManager
+        self.show_subpage(ModManager(self,vid))
+
+    def preflight(self,vid):
+        from .health_report import HealthReport
+        self.show_subpage(HealthReport(self,vid))
+
     def launch_selected(self):
         if not self.flush_settings():return
         vid=self.selected_version
@@ -24,6 +32,11 @@ class Actions:
         def work(job):
             from ..launch import Account,LaunchSettings,launch
             from ..java import resolve_java
+            from ..preflight import inspect
+            job.emit('启动前环境体检')
+            issues=inspect(repo,vid,overrides,write_probe=True)
+            errors=[issue.message for issue in issues if issue.severity=='error']
+            if errors:raise RuntimeError('启动前检查发现问题，请在实例管理中打开“环境体检”：\n'+'\n'.join(errors[:12]))
             job.emit('正在验证账号')
             fresh=self.accounts.refresh(record) if record.is_expired() else record
             rv=repo.install(vid,job.emit,lambda a,b:job.emit((a,b)))

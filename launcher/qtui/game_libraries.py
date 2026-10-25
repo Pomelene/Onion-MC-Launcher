@@ -34,7 +34,7 @@ class LibraryRail(QWidget):
             item.setChecked(key==current);item.setToolTip(str(path));item.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             item.customContextMenuRequested.connect(lambda point,p=path,w=item:self.context(w,point,p))
             listing.addWidget(item);self.buttons[key]=item
-        listing.addStretch();body.addWidget(button('添加游戏文件夹',self.add,glyph='plus'))
+        listing.addStretch();body.addWidget(button('全部实例总览',window.open_instance_overview,'soft','grid'));body.addWidget(button('添加游戏文件夹',self.add,glyph='plus'))
         body.addWidget(label('右键可重命名或移出列表','muted',True))
 
     def add(self):

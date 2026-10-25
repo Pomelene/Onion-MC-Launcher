@@ -188,3 +188,45 @@ def diagnose_file(path: Path) -> dict:
     result["suspected"] = info.get("suspected", [])
     result["exception"] = info.get("exception", "")
     return result
+
+
+def redact(text):
+    text=re.sub(r'(?i)(Bearer\s+)\S+',r'\1[已隐藏]',text)
+    text=re.sub(r'''(?i)((?:access[_-]?token|refresh[_-]?token|client[_-]?secret|password)["']?\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)''',r'\1[已隐藏]',text)
+    text=re.sub(r'(?i)(--(?:accessToken|uuid|username|xuid)\s+)(?:"[^"]*"|\S+)',r'\1[已隐藏]',text)
+    return text
+
+
+def reports(run_dir):
+    """Combine bounded tails of game log, latest report and JVM crash log."""
+    root=Path(run_dir);paths=[];latest=latest_crash_report(root)
+    if latest:paths.append(latest)
+    paths.append(root/'logs/latest.log')
+    native=[]
+    for path in root.glob('hs_err_pid*.log'):
+        try:native.append((path.stat().st_mtime,path))
+        except OSError:continue
+    native=[p for _,p in sorted(native,key=lambda pair:pair[0],reverse=True)]
+    if native:paths.append(native[0])
+    findings=[]
+    for path in paths:
+        if not path.is_file() or path.is_symlink():continue
+        try:
+            from .safety import contained
+            contained(path,root)
+            with path.open('rb') as source:
+                source.seek(max(0,path.stat().st_size-2*1024**2));sample=redact(source.read(2*1024**2).decode('utf-8','replace'))
+        except OSError:continue
+        # Generic mentions of a renderer or a mod are not evidence of a crash.
+        for rule in RULES:
+            if rule['id'] in ('unknown','shader_error','java_missing'):continue
+            evidence=next((line.strip()[:500] for line in sample.splitlines() if any(re.search(p,line,re.I) for p in rule.get('patterns',()))),'')
+            if evidence and not any(item['id']==rule['id'] for item in findings):
+                findings.append(dict(id=rule['id'],title=rule['title'],advice=rule['advice'],evidence=evidence,source=path.name))
+        for pattern,title,advice in [
+            (r'Could not find or load main class|Unable to access jarfile','启动入口或类路径不可用','检查游戏文件、加载器和启动参数；这条错误本身不代表没有安装 Java。'),
+            (r'Could not reserve enough space|Invalid maximum heap size','无法分配 JVM 堆内存','降低最大内存，检查是否使用 32 位 Java，并检查额外 -Xmx 参数。'),
+            (r'Failed to verify username|Invalid session|Authentication servers are down','会话或认证不可用','重新登录账户并检查网络；服务器白名单或服务端认证策略需由服主管理。')]:
+            evidence=next((line.strip()[:500] for line in sample.splitlines() if re.search(pattern,line,re.I)),'')
+            if evidence and not any(item['title']==title for item in findings):findings.append(dict(id=title,title=title,advice=advice,evidence=evidence,source=path.name))
+    return findings or [dict(id='unknown',title='没有找到可确认的常见原因',advice='诊断为规则匹配，无法证明因果关系。请结合完整日志、最近改动的模组及加载器提示排查。',evidence='',source='')]

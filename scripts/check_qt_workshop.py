@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='workshop-ui-') as tmp:
     base=Path(tmp);game=base/'game';vid='1.20.6';folder=game/'versions'/vid;folder.mkdir(parents=True)
     (folder/(vid+'.json')).write_text(json.dumps({'id':vid,'mainClass':'Main','libraries':[]}))
     config=Config(base/'onionmcl.json');config.set('game_dir',str(game))
-    window=MainWindow(config.path,base);window.error=lambda error:errors.append(str(error));window.show()
+    window=MainWindow(config.path,base);window.error=lambda error:errors.append(str(error));window.resize(1440,900);window.show()
     pump(lambda:not window.tasks.jobs and bool(window.versions));window.set_selected(vid)
     run=window.repo.run_dir(vid);schematics=run/'schematics';schematics.mkdir(parents=True)
     (schematics/'建筑').mkdir();(schematics/'红石机器.litematic').write_bytes(b'invalid metadata, still listed')

@@ -19,6 +19,18 @@ from typing import Optional
 DEFAULT_GROUP = "默认"
 
 
+def normalize_tags(value):
+    if isinstance(value,str):value=value.replace('，',',').split(',')
+    if not isinstance(value,list):return []
+    result=[]
+    for item in value[:128]:
+        if not isinstance(item,str):continue
+        item=' '.join(item.split())[:32]
+        if item and item.casefold() not in {v.casefold() for v in result}:result.append(item)
+        if len(result)>=16:break
+    return result
+
+
 def default_instance_name(version: str, loader: str = 'vanilla') -> str:
     names={'vanilla':'原版','fabric':'Fabric','forge':'Forge','neoforge':'NeoForge','quilt':'Quilt','optifine':'OptiFine'}
     return f"{version}-{names.get(loader.lower(),loader)}"
@@ -40,6 +52,8 @@ class InstanceMeta:
     last_played: float = 0.0
     play_seconds: float = 0.0
     launch_count: int = 0
+    favorite: bool = False
+    tags: list[str] = field(default_factory=list)
 
     @property
     def display_name(self) -> str:
@@ -102,6 +116,8 @@ class InstanceStore:
                 last_played=float(entry.get("last_played") or 0),
                 play_seconds=float(entry.get("play_seconds") or 0),
                 launch_count=int(entry.get("launch_count") or 0),
+                favorite=entry.get('favorite') is True,
+                tags=normalize_tags(entry.get('tags',[])),
             )
         self._data = data
 
@@ -115,6 +131,8 @@ class InstanceStore:
                 "last_played": meta.last_played,
                 "play_seconds": round(meta.play_seconds, 1),
                 "launch_count": meta.launch_count,
+                "favorite": meta.favorite,
+                "tags": meta.tags,
             }
             for meta in self._data.values()
         }
@@ -151,12 +169,12 @@ class InstanceStore:
     # ------------------------------------------------------------ 更新
 
     def update(self, version_id: str, **fields) -> InstanceMeta:
-        allowed = {"name", "group", "notes", "icon"}
+        allowed = {"name", "group", "notes", "icon", "favorite", "tags"}
         with self._lock:
             meta = self._data.get(version_id) or InstanceMeta(version_id=version_id)
             for key, value in fields.items():
                 if key in allowed:
-                    setattr(meta, key, str(value or "").strip())
+                    setattr(meta,key,bool(value) if key=='favorite' else normalize_tags(value) if key=='tags' else str(value or '').strip())
             if not meta.group:
                 meta.group = DEFAULT_GROUP
             self._data[version_id] = meta

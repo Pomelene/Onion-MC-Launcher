@@ -124,7 +124,7 @@ class JavaManager(QWidget):
         def failed(error):
             cancelled=finish()
             if isValid(self):self.status.setText('下载已取消' if cancelled else '下载失败：'+str(error))
-        self.job=self.window.tasks.submit(lambda job:download_java(major,repo.downloader,job.emit,lambda a,b:job.emit((a,b))),done,failed,progress,repo.downloader)
+        self.job=self.window.tasks.submit(lambda job:download_java(major,repo.downloader,job.emit,lambda a,b:job.emit((a,b))),done,failed,progress,repo.downloader,title='下载 Java '+str(major),library=str(repo.game_dir))
 
     def cancel_download(self):
         if self.job:self.job.cancel.set();self.cancel.setEnabled(False);self.status.setText('正在取消下载…')

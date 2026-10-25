@@ -82,11 +82,11 @@ class InstancePicker(QDialog):
 
     def filter(self):
         w=self.launcher;query=self.query.text().strip().lower();self.tree.clear()
-        for vid in sorted(w.versions,key=lambda v:(w.instances.display_name(v).casefold(),v.casefold())):
-            if query not in (vid+' '+w.instances.display_name(vid)+' '+w.instances.get(vid).group).lower():continue
+        for vid in sorted(w.versions,key=lambda v:(not w.instances.get(v).favorite,w.instances.display_name(v).casefold(),v.casefold())):
+            if query not in (vid+' '+w.instances.display_name(vid)+' '+w.instances.get(vid).group+' '+' '.join(w.instances.get(vid).tags)).lower():continue
             kind=w.kinds.get(vid,'原版');version=vid[:-(len(kind)+1)] if vid.casefold().endswith('-'+kind.casefold()) else vid
-            detail=' · '.join(part for part in (version,kind,w.instances.get(vid).group) if part)
-            item=QTreeWidgetItem([w.instances.display_name(vid)]);item.setData(0,Qt.ItemDataRole.UserRole,vid);item.setData(0,Qt.ItemDataRole.UserRole+1,detail)
+            detail=' · '.join(part for part in (version,kind,w.instances.get(vid).group,*w.instances.get(vid).tags) if part)
+            item=QTreeWidgetItem([('★ ' if w.instances.get(vid).favorite else '')+w.instances.display_name(vid)]);item.setData(0,Qt.ItemDataRole.UserRole,vid);item.setData(0,Qt.ItemDataRole.UserRole+1,detail)
             item.setToolTip(0,w.instances.display_name(vid)+'\n'+vid+' · '+kind);self.tree.addTopLevelItem(item)
             if vid==w.selected_version:self.tree.setCurrentItem(item)
         count=self.tree.topLevelItemCount();self.count.setText(str(count));self.empty.setVisible(not count);self.tree.setVisible(bool(count))
@@ -147,12 +147,14 @@ class InstanceWorkspace(QWidget):
     def build_info(self):
         w=self.launcher;page=self.pages['info'];clear(page.body);meta=w.instances.get(self.vid)
         card=Card('实例信息');fields={};form=QFormLayout()
-        for key,title,value in [('name','显示名称',meta.name),('group','分组',meta.group),('notes','备注',meta.notes)]:
+        for key,title,value in [('name','显示名称',meta.name),('group','分组',meta.group),('tags','标签（逗号分隔）',', '.join(meta.tags)),('notes','备注',meta.notes)]:
             edit=QLineEdit(value);edit.setPlaceholderText(self.vid if key=='name' else '可选');fields[key]=edit;form.addRow(title,edit)
         card.body.addLayout(form)
+        from PySide6.QtWidgets import QCheckBox
+        favorite=QCheckBox('收藏此实例');favorite.setChecked(meta.favorite);card.body.addWidget(favorite)
         def save():
-            w.instances.update(self.vid,**{key:edit.text().strip() for key,edit in fields.items()});w.update_selection();w.reload_versions(refresh_page=False);w.status.setText('实例信息已保存')
+            w.instances.update(self.vid,favorite=favorite.isChecked(),**{key:edit.text().strip() for key,edit in fields.items()});w.update_selection();w.reload_versions(refresh_page=False);w.status.setText('实例信息已保存')
         card.body.addWidget(button('保存实例信息',save,'primary'));page.body.addWidget(card)
         card=Card('维护与恢复','文件移除后进入恢复中心，可在原位置不存在时恢复。')
-        for title,callback in [('校验游戏文件',lambda:w.verify_version(self.vid)),('导出整合包',lambda:w.export_modpack(self.vid)),('恢复中心',w.recovery),('移除当前实例',lambda:w.delete_version(self.vid))]:card.body.addWidget(button(title,callback,'soft'))
+        for title,callback in [('启动前环境体检',lambda:w.preflight(self.vid)),('模组依赖与更新',lambda:w.open_mod_manager(self.vid)),('校验游戏文件',lambda:w.verify_version(self.vid)),('导出整合包',lambda:w.export_modpack(self.vid)),('恢复中心',w.recovery),('移除当前实例',lambda:w.delete_version(self.vid))]:card.body.addWidget(button(title,callback,'soft'))
         page.body.addWidget(card)

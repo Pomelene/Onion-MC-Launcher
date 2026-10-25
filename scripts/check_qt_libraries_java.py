@@ -92,7 +92,7 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='libraries-java-') as fol
     window.navigate('home');window.set_selected('same')
     account=AccountRecord('offline','Fixture',offline_uuid('Fixture'));window.accounts.add(account);window.accounts.set_current(account.uuid)
     process=SimpleNamespace(proc=SimpleNamespace(poll=lambda:None),stop=lambda:None)
-    with patch.object(window.repo,'install',return_value=SimpleNamespace(java_major=21)),patch('launcher.java.resolve_java',return_value=fixture),patch('launcher.launch.launch',return_value=process):
+    with patch.object(window.repo,'install',return_value=SimpleNamespace(java_major=21)),patch('launcher.java.probe_java',return_value=fixture),patch('launcher.java.resolve_java',return_value=fixture),patch('launcher.launch.launch',return_value=process):
         window.launch_selected();idle(window)
     assert window.process is process and window.instances.get('same').launch_count==1
     window.started_at=time.time()-10;assert window.switch_game_library(b);idle(window)

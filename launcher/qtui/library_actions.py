@@ -5,6 +5,19 @@ from ..storage import directory_key
 
 
 class LibraryActions:
+    def open_instance_overview(self):
+        from .instance_overview import InstanceOverview
+        dialog=InstanceOverview(self);self.show_subpage(dialog)
+
+    def select_library_instance(self,path,vid,page='home'):
+        if self.mutating or self.launch_pending:self.status.setText('请等待当前文件操作完成');return False
+        if directory_key(path)==directory_key(self.repo.game_dir):
+            if not self.set_selected(vid,refresh_page=False):return False
+            self.navigate(page);return True
+        if not self.switch_game_library(path):return False
+        self._overview_target=(directory_key(path),vid,page)
+        return True
+
     def bind_game_library(self):
         from ..instance import InstanceStore
         from ..version_settings import VersionSettingsStore
@@ -34,6 +47,7 @@ class LibraryActions:
         """Also used by the existing settings path editor after a validated save."""
         from ..repository import GameRepository
         from .widgets import clear
+        self._overview_target=None
         self.repo=GameRepository(self.config_obj);self.game_libraries.ensure_current();self.bind_game_library()
         self.selected_version=self.game_libraries.selection(self.repo.game_dir) if selected is None else selected
         self.versions=[];self.kinds={};self.instance_context='';self.instance_editor=None

@@ -22,6 +22,16 @@ The source is available under the [MIT License](LICENSE). The project's communit
 
 ## Features
 
+### Next version development (not released)
+
+- Local mod dependency checks and guided search, update previews, shared required/optional dependency plans, verified downloads, original-file backups, undo and interrupted-change recovery.
+- Local preflight checks and evidence-based diagnostics from game logs, crash reports and JVM error logs.
+- An all-folder instance overview, favorites, tags and search, with directory-scoped identities for instances sharing a name.
+- A Workshop task center with live status, received bytes, cancellation, background operation and safe in-session retries; the latest 100 local task records are retained.
+- Skin favorites, favorite-first ordering and filtering; content-based identity survives renaming.
+
+Dependency checks cover recognized metadata and supported version predicates, not the loader's entire resolver. Uncertain cases are warnings. Users select dependency projects/versions and confirm the plan before installation. Launcher self-update checking is outside this work.
+
 - Qt interface, instance selection, background downloads, cancellation and logs.
 - Installation workflows for vanilla Minecraft, Fabric, Quilt, Forge, NeoForge and OptiFine.
 - Management of mods, resource packs, shaders, and Modrinth / CurseForge modpacks.

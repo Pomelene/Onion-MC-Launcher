@@ -187,6 +187,7 @@ PATHS = {
  'up':[[(6,15),(12,9),(18,15)]],
  'java':[[(5,9),(5,17),(8,20),(15,20),(18,17),(18,9),(5,9)],[(18,10),(22,10),(22,14),(18,14)],[(10,6),(11,3)]],
  'feedback':[[(5,3),(19,3),(21,5),(21,15),(19,17),(9,17),(4,21),(4,17),(3,15),(3,5),(5,3)],[(7,8),(17,8)],[(7,12),(14,12)]],
+ 'star':[[(12,3),(14.8,8.7),(21,9.6),(16.5,14),(17.6,20.2),(12,17.3),(6.4,20.2),(7.5,14),(3,9.6),(9.2,8.7),(12,3)]],
 }
 
 def icon(name, color='#bac7cd'):
@@ -677,7 +678,7 @@ class TaskDialog(QDialog):
         self.stage_body.addWidget(self.detail)
         footer=row();stats=column(spacing=3)
         self.speed=label('0 B/s','muted');self.transferred=label('','muted');stats.addWidget(self.speed);stats.addWidget(self.transferred)
-        footer.addLayout(stats,1);self.cancel_button=button('取消',self.cancel_job);footer.addWidget(self.cancel_button,0,Qt.AlignmentFlag.AlignBottom);self.body.addLayout(footer)
+        footer.addLayout(stats,1);footer.addWidget(button('后台运行',self.background),0,Qt.AlignmentFlag.AlignBottom);self.cancel_button=button('取消',self.cancel_job);footer.addWidget(self.cancel_button,0,Qt.AlignmentFlag.AlignBottom);self.body.addLayout(footer)
         self.samples=deque();self.total_bytes=0;self.timer=QTimer(self);self.timer.setInterval(250);self.timer.timeout.connect(self.update_speed);self.timer.start()
 
     def paintEvent(self,event):
@@ -737,3 +738,6 @@ class TaskDialog(QDialog):
 
     def reject(self):
         self.cancel_job()
+
+    def background(self):
+        self.setModal(False);self.hide()

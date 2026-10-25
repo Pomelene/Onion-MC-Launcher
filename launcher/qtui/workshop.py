@@ -15,6 +15,7 @@ class Wardrobe(QWidget):
     def __init__(self,owner):
         super().__init__();self.owner=owner;self.library=SkinLibrary(owner.root);self.path=None;self.uploading=False
         body=column(self,0,14);toolbar=row();toolbar.addWidget(label('皮肤库','heading'),1)
+        self.favorites_only=ChoiceComboBox();self.favorites_only.addItems(['全部皮肤','仅收藏']);self.favorites_only.currentIndexChanged.connect(self.refresh);toolbar.addWidget(self.favorites_only)
         toolbar.addWidget(button('导入皮肤',self.import_skin,'soft','plus'));body.addLayout(toolbar)
         split=QSplitter();body.addWidget(split,1)
         left=Page();left.setMinimumWidth(240);self.list=left.body;split.addWidget(left)
@@ -36,10 +37,15 @@ class Wardrobe(QWidget):
         self.reset.setVisible(bool(account and account.type=='offline'))
         self.apply.setEnabled(bool(account and account.type=='offline' and self.path))
         self.upload.setEnabled(bool(account and account.type=='microsoft' and self.path and not self.uploading))
-        try:files=self.library.files()
+        try:
+            files=self.library.files();favorite_states={p:self.library.is_favorite(p) for p in files}
+            files.sort(key=lambda p:(not favorite_states[p],p.name.casefold()))
+            if self.favorites_only.currentIndex():files=[p for p in files if favorite_states[p]]
         except Exception as error:self.status.setText(str(error));return
         selected=self.library.selected(account.uuid) if account else None
-        if not files:self.list.addWidget(Empty('导入你的第一张皮肤','支持经典和纤细模型的 PNG 皮肤','skin'));return
+        if not files:
+            self.list.addWidget(Empty('尚无收藏' if self.favorites_only.currentIndex() else '导入你的第一张皮肤','支持经典和纤细模型的 PNG 皮肤','skin'))
+            self.path=None;self.apply.setEnabled(False);self.upload.setEnabled(False);self.preview.image=QImage();self.preview.update();self.filename.setText('选择皮肤');return
         for path in files:
             active=bool(selected and path==selected[0]);item=ContentRow(self.display_name(path),('当前账户使用中' if active else ''),'skin')
             try:image=QImage.fromData(skin_bytes(path))
@@ -47,17 +53,22 @@ class Wardrobe(QWidget):
             if not image.isNull():item.image.setPixmap(QPixmap.fromImage(image.copy(8,8,8,8).scaled(32,32)));item.has_artwork=True
             item.mouseDoubleClickEvent=lambda event,p=path:self.choose(p)
             item.action('预览',lambda p=path:self.choose(p),'skin')
+            item.action('取消收藏' if favorite_states[path] else '收藏',lambda p=path:self.toggle_favorite(p),'star')
             item.action('重命名',lambda p=path:self.rename_skin(p),'edit')
             item.action('移入恢复区',lambda p=path:self.remove_skin(p),'trash');self.list.addWidget(item)
         if not self.path or self.path not in files:
-            if selected:self.model.setCurrentIndex(max(0,self.model.findData(selected[1])))
-            self.choose(selected[0] if selected else files[0])
+            if selected and selected[0] in files:self.model.setCurrentIndex(max(0,self.model.findData(selected[1])))
+            self.choose(selected[0] if selected and selected[0] in files else files[0])
         else:self.choose(self.path)
 
     @staticmethod
     def display_name(path):
         import re
         return re.sub(r'-[a-f0-9]{10}$','',path.stem)
+
+    def toggle_favorite(self,path):
+        try:self.library.set_favorite(path,not self.library.is_favorite(path));self.refresh()
+        except Exception as error:self.owner.error(str(error))
 
     def choose(self,path):
         self.path=path;self.filename.setText(self.display_name(path));self.filename.setToolTip(str(path));self.update_preview()
@@ -137,6 +148,12 @@ class Workshop(QWidget):
         super().__init__();self.owner=owner;self.views={};body=column(self,24,0);self.stack=QStackedWidget();body.addWidget(self.stack)
     def open_tab(self,key):
         if key not in self.views:
-            self.views[key]=Wardrobe(self.owner) if key=='skins' else SeedMap(self.owner);self.stack.addWidget(self.views[key])
+            if key=='tasks':
+                from .task_center import TaskCenter
+                self.views[key]=TaskCenter(self.owner)
+            else:self.views[key]=Wardrobe(self.owner) if key=='skins' else SeedMap(self.owner)
+            self.stack.addWidget(self.views[key])
         self.stack.setCurrentWidget(self.views[key])
         if key=='skins':self.views[key].refresh()
+        if key=='tasks':self.views[key].refresh()
+        return True

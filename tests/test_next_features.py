@@ -284,3 +284,21 @@ def test_preflight_accepts_shared_game_root_and_read_only_checks():
         issues=inspect(repo,'fixture',dict(min_memory=512,max_memory=2048,java_path=''),write_probe=True)
         assert not [i for i in issues if i.code in ('directory','writable')]
         assert not (repo.game_dir/'.onion-preflight-probe').exists()
+
+
+def test_shared_mods_cannot_bypass_another_instance_lock_or_interrupted_change():
+    from launcher.mod_plan import assert_mods_idle
+    from launcher.preflight import inspect
+    with tempfile.TemporaryDirectory() as tmp:
+        repo,folder,_=fixture(Path(tmp));folder.rmdir();repo.config.set('version_isolation',False)
+        other=repo.versions_dir/'other';other.mkdir();(other/'other.json').write_text(json.dumps(dict(id='other',mainClass='Main',libraries=[])))
+        def check(vid):
+            if vid=='other':raise RuntimeError('Other shared instance is running')
+        with patch.object(repo,'assert_idle',side_effect=check):
+            try:assert_mods_idle(repo,'fixture');assert False
+            except RuntimeError:pass
+        stage=repo.game_dir/'.onion/mod-changes/interrupted';stage.mkdir(parents=True)
+        (stage/'journal.json').write_text(json.dumps(dict(status='applying',version='other',folder='mods',old={},new={})))
+        issues=inspect(repo,'fixture',dict(min_memory=512,max_memory=2048))
+        assert any(i.code=='interrupted' for i in issues)
+        assert recover_interrupted(repo,'fixture')==0

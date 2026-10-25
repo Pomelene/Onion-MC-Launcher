@@ -1,7 +1,9 @@
 """Embedded Java inventory with local scanning and inline download progress."""
+from .lists import FlatTreeWidget as QTreeWidget
+
 from pathlib import Path
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QWidget,QTreeWidget,QTreeWidgetItem,QFileDialog,QProgressBar
+from PySide6.QtWidgets import QWidget,QTreeWidgetItem,QFileDialog,QProgressBar
 from shiboken6 import isValid
 from .widgets import column,row,label,button
 from .choices import ChoiceComboBox

@@ -1,6 +1,8 @@
 """Readable local preflight and evidence-based crash clues, embedded in the shell."""
+from .lists import FlatTreeWidget as QTreeWidget
+
 from PySide6.QtCore import Qt,QTimer
-from PySide6.QtWidgets import QDialog,QTreeWidget,QTreeWidgetItem,QPlainTextEdit,QApplication
+from PySide6.QtWidgets import QDialog,QTreeWidgetItem,QPlainTextEdit,QApplication
 from .widgets import column,row,label,button
 
 

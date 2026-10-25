@@ -1,7 +1,9 @@
 """Instance selection and management keep every action bound to one instance."""
+from .lists import FlatTreeWidget as QTreeWidget
+
 from PySide6.QtCore import Qt,QPoint,QRectF,QSize,QEvent
 from PySide6.QtGui import QColor,QPainter,QPen,QFont,QFontMetrics
-from PySide6.QtWidgets import QWidget,QDialog,QLineEdit,QTreeWidget,QTreeWidgetItem,QStackedWidget,QFormLayout,QMessageBox,QStyledItemDelegate,QStyle
+from PySide6.QtWidgets import QWidget,QDialog,QLineEdit,QTreeWidgetItem,QStackedWidget,QFormLayout,QMessageBox,QStyledItemDelegate,QStyle
 from .widgets import Page,Card,column,row,label,button,clear,icon,control_accent
 from .theme import paint_color,surface_opacity,config_for,contrasting_accent,appearance_values,effective_accent,corner,text_size,row_height,preference
 

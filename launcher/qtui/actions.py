@@ -11,9 +11,26 @@ from ..paths import LAUNCHER_VERSION,LAUNCHER_NAME
 
 
 class Actions:
-    def open_mod_manager(self,vid,mode='audit'):
-        from .mod_manager import ModManager
-        self.show_subpage(ModManager(self,vid,mode=mode))
+    def update_mods(self,vid):
+        if not self.flush_settings():return
+        repo=self.repo
+        def work(job):
+            from ..modpack import _detect_loader
+            from ..mod_plan import updates
+            from ..mod_updates import install_selected
+            repo.assert_idle(vid);game=repo.resolver.resolve(vid).game_version;loader,_=_detect_loader(repo,vid)
+            if not game:raise ValueError('无法识别游戏版本，请先检查实例文件')
+            job.emit('检查模组更新')
+            selected,unknown=updates(repo.downloader,repo.run_dir(vid)/'mods',game,loader,job)
+            return install_selected(repo,vid,selected,job),unknown
+        def done(result):
+            files,unknown=result
+            if self.repo is repo and self.selected_version==vid and self.current_page=='instance' and self.instance_tab=='mods':self.build_mods()
+            self.status.setText((f'已更新 {len(files)} 个模组' if files else '未发现可用更新')+(f' · {len(unknown)} 个文件未识别' if unknown else ''))
+        def start():
+            if self.repo is not repo:self.error('游戏目录已切换，请回到原实例重新检查');return
+            return self.task('检查并更新模组',work,done,retry=start,task_repo=repo,task_instance=vid)
+        return start()
 
     def preflight(self,vid):
         from .health_report import HealthReport

@@ -41,6 +41,7 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='next-ui-') as directory:
     old=release('a',original,date='2026-01-01');dep=release('lib',libdata,'2.0')
     new=release('a',updated,'2.0',deps=[dict(project_id='lib',version_id=dep['id'],dependency_type='required')])
     (folder/'a-old.jar').write_bytes(original)
+    (folder/'private.jar').write_bytes(jar('private'))
     window=MainWindow(base/'onionmcl.json',base);errors=[];window.error=lambda e:errors.append(str(e));window.show();quiet(window)
     catalog=LocalCatalog([old,new,dep],{new['files'][0]['url']:updated,dep['files'][0]['url']:libdata});window.repo.downloader=catalog
     second=base/'other-game';version=second/'versions/fixture';version.mkdir(parents=True)
@@ -67,30 +68,20 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='next-ui-') as directory:
     assert window.switch_game_library(repo.game_dir);quiet(window);window.repo.downloader=catalog
     assert window.instances.get('fixture').favorite
 
-    window.open_mod_manager('fixture');manager=window.subpages[-1];quiet(window)
-    assert manager.issues.topLevelItemCount()>=1
-    assert 'Minecraft 1.21.1' in manager.context_label.text() and 'Java 21' in manager.context_label.text()
-    for i in range(manager.issues.topLevelItemCount()):
-        node=manager.issues.topLevelItem(i)
-        if node.data(0,Qt.ItemDataRole.UserRole)=='lib':manager.issues.setCurrentItem(node);break
-    assert manager.search_button.isEnabled()
-    manager.reject();window.open_mod_manager('fixture','updates');manager=window.subpages[-1];quiet(window)
-    assert len(manager.rows)==1 and manager.apply_button.isEnabled()
-    manager.populate(manager.entries,['custom.jar · 未在 Modrinth 收录'])
-    assert manager.apply_button.isEnabled() and not manager.details.isVisible()
-    assert manager.apply_button.text()=='更新所选（1）'
-    assert not any(hasattr(manager,key) for key in ('plan_button','undo_button','recover_button','optional','proposal'))
-    click(manager.rows[0][1]);assert not manager.apply_button.isEnabled()
-    click(manager.rows[0][1]);assert manager.apply_button.isEnabled()
+    window.navigate('instance');window.open_instance_tab('mods');quiet(window)
+    assert not hasattr(window,'open_mod_manager')
+    controls=window.page_map['instance'].findChildren(QPushButton)
+    update_button=next(b for b in controls if b.text()=='检查并更新')
+    assert not any(b.text() in ('依赖检查','检查更新','生成依赖方案','更新所选') for b in controls)
     for mode in ('light','dark'):
         window.config_obj.set('color_mode',mode);window.apply_appearance()
         for width,height in ((900,600),(1200,800)):
             window.resize(width,height);QTest.qWait(40)
             assert window.width()==width and window.height()==height,('Feature page prevents resizing',window.size())
-            assert manager.rect().contains(manager.apply_button.mapTo(manager,manager.apply_button.rect().center()))
+            assert window.rect().contains(update_button.mapTo(window,update_button.rect().center()))
             window.grab().save(str(ROOT/'tmp'/('next-mod-plan-'+mode+('-small' if width==900 else '')+'.png')))
     catalog.fail=True
-    click(manager.apply_button)
+    click(update_button)
     quiet(window);assert errors and (folder/'a-old.jar').read_bytes()==original;errors.clear()
     failed=window.task_history.items[-1];assert failed['state']=='failed'
     catalog.fail=False;window.open_task_center();center=window.download_tasks;center.refresh()
@@ -100,19 +91,18 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='next-ui-') as directory:
     assert (folder/'a-2.0.jar').read_bytes()==updated and (folder/'a-old.jar.old').read_bytes()==original
     assert not (folder/'lib-2.0.jar').exists()
     assert window.task_history.items[-1]['state']=='complete'
+    assert '1 个文件未识别' in window.status.text() and (folder/'private.jar').exists()
     center.refresh();window.grab().save(str(ROOT/'tmp/next-task-center.png'))
-    window.open_mod_manager('fixture');manager=window.subpages[-1];quiet(window)
-    assert any('缺少 lib' in manager.issues.topLevelItem(i).text(1) for i in range(manager.issues.topLevelItemCount()))
-    manager.reject();window.preflight('fixture');health=window.subpages[-1];quiet(window)
+    window.navigate('instance');window.open_instance_tab('mods');quiet(window)
+    assert not window.subpages
+    window.preflight('fixture');health=window.subpages[-1];quiet(window)
     assert any('缺少 lib' in health.tree.topLevelItem(i).text(0) for i in range(health.tree.topLevelItemCount()))
     health.reject()
     # New installs still resolve required dependencies without a separate plan UI.
-    from launcher.qtui.mod_manager import ModManager
-    install=ModManager(window,'fixture',release_id=new['id']);window.show_subpage(install);quiet(window)
-    assert install.apply_button.isEnabled() and not install.preview_versions.isVisible()
-    click(install.apply_button);quiet(window)
+    window.install_project('a','mod','1.21.1','fabric',version_id='fixture',release_id=new['id']);quiet(window)
     assert (folder/'lib-2.0.jar').read_bytes()==libdata and (folder/'a-old.jar.old').read_bytes()==original
-    install.reject();logs=window.repo.run_dir('fixture')/'logs';logs.mkdir(exist_ok=True)
+    assert not window.subpages
+    logs=window.repo.run_dir('fixture')/'logs';logs.mkdir(exist_ok=True)
     (logs/'latest.log').write_text('java.lang.OutOfMemoryError: Java heap space access_token=SECRET_VALUE',encoding='utf-8')
     window.diagnose();diagnosis=window.subpages[-1];quiet(window)
     assert '内存不足' in diagnosis.report and 'SECRET_VALUE' not in diagnosis.report

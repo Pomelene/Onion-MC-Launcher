@@ -24,7 +24,7 @@ The source is available under the [MIT License](LICENSE). The project's communit
 
 ### Next version development (not released)
 
-- Local mod dependency checks and guided search; select mods and update directly. Downloads are verified before old files are renamed with an `.old` suffix.
+- A single Check and update button in the existing mod list scans and updates in the background. Downloads are verified before old files are renamed with an `.old` suffix; no additional mod inspection or update pages.
 - Local preflight checks and evidence-based diagnostics from game logs, crash reports and JVM error logs.
 - An all-folder instance overview, favorites, tags and search, with directory-scoped identities for instances sharing a name.
 - A download task center with live status, received bytes, cancellation, background operation and safe in-session retries; the latest 100 local task records are retained.

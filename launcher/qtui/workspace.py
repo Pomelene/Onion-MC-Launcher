@@ -156,5 +156,5 @@ class InstanceWorkspace(QWidget):
             w.instances.update(self.vid,favorite=favorite.isChecked(),**{key:edit.text().strip() for key,edit in fields.items()});w.update_selection();w.reload_versions(refresh_page=False);w.status.setText('实例信息已保存')
         card.body.addWidget(button('保存实例信息',save,'primary'));page.body.addWidget(card)
         card=Card('维护与恢复','文件移除后进入恢复中心，可在原位置不存在时恢复。')
-        for title,callback in [('启动前环境体检',lambda:w.preflight(self.vid)),('模组更新',lambda:w.open_mod_manager(self.vid,'updates')),('校验游戏文件',lambda:w.verify_version(self.vid)),('导出整合包',lambda:w.export_modpack(self.vid)),('恢复中心',w.recovery),('移除当前实例',lambda:w.delete_version(self.vid))]:card.body.addWidget(button(title,callback,'soft'))
+        for title,callback in [('启动前环境体检',lambda:w.preflight(self.vid)),('校验游戏文件',lambda:w.verify_version(self.vid)),('导出整合包',lambda:w.export_modpack(self.vid)),('恢复中心',w.recovery),('移除当前实例',lambda:w.delete_version(self.vid))]:card.body.addWidget(button(title,callback,'soft'))
         page.body.addWidget(card)

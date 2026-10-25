@@ -65,4 +65,4 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='wallpaper-source-') as f
     source.setCurrentIndex(source.findData('custom'));assert editor.flush()
     assert editor.fields['accent_color'].text()=='#e36827' and '自定义' in editor.palette_feedback.text()
     window.close()
-print('PASS: both options fully visible, 24 mouse-click round trips, all densities, large font, stored manual color and wallpaper palette')
+print('PASS: both options fully visible, 24 mouse-click round trips, large font, stored manual color and wallpaper palette')

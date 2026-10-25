@@ -370,6 +370,13 @@ class ToggleSwitch(QCheckBox):
 
 class InlineSpinBox(QSpinBox):
     """Keep the editor usable with borderless, button-free Qt styles."""
+    def __init__(self,parent=None):
+        super().__init__(parent);self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def wheelEvent(self,event):
+        if not self.hasFocus():event.ignore();return
+        super().wheelEvent(event)
+
     def _layout_editor(self):
         self.lineEdit().setGeometry(8,4,max(1,self.width()-16),max(1,self.height()-8))
 

@@ -277,3 +277,10 @@ Appearance settings show the extracted wallpaper seed and final scheme color, ex
 ### Background picker callback binding regression
 
 The appearance preview subscription loop reused the constructor-local `field` variable captured by the picture-picker and reset closures. Depending on hash iteration order, button callbacks targeted an unrelated field, sometimes a spin box without `setText`. Both callbacks now capture their intended background editor explicitly; the subscription loop has a separate local name. `scripts/check_qt_background_picker.py` clicks the actual buttons with only the OS file dialog mocked, checks unrelated fields, cancellation, default reset, Unicode paths, persistence, home and restart, and is run with multiple `PYTHONHASHSEED` values. Frozen self-checks also exercise these actual button callbacks. Real user preferences are never used in these checks.
+
+
+## Interaction reliability pass
+
+Unfocused choice boxes, numeric editors and settings sliders leave wheel events to their surrounding scroll area. Explicitly focused editors retain keyboard and wheel input. Catalog version refresh disables installation while pending, preserves the selected release ID when it remains present, and restores retry controls after failure. Closed catalog pages do not start a delayed fetch; completed callbacks do not touch closed pages. Compatibility and missing-file guards apply both to buttons and direct install calls.
+
+The instance library exposes a clear-search action, complete cell tooltips, and disables selection-dependent actions when no row is available. `python scripts/check_qt_usability.py` covers wheel/keyboard behavior, refresh success/failure/close, release selection preservation, incompatible or empty releases, and empty/filtered instance lists using isolated fixtures.

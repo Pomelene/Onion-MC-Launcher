@@ -118,6 +118,12 @@ class ChoicePopup(QFrame):
 class ChoiceComboBox(QComboBox):
     def __init__(self,parent=None):
         super().__init__(parent);self.choice_popup=None;self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def wheelEvent(self,event):
+        # Scrolling a page must not silently change an unfocused preference.
+        if not self.hasFocus():event.ignore();return
+        super().wheelEvent(event)
 
     def showPopup(self):
         if not self.count() or not self.isEnabled():return

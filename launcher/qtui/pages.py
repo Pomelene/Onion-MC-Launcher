@@ -51,7 +51,7 @@ class Pages:
 
     def build_versions(self):
         body=self.page('versions')
-        toolbar=row();query=QLineEdit();self.library_search=query;query.setPlaceholderText('搜索实例');query.setText(getattr(self,'library_query',''));toolbar.addWidget(query,1)
+        toolbar=row();query=QLineEdit();self.library_search=query;query.setPlaceholderText('搜索实例');query.setClearButtonEnabled(True);query.setText(getattr(self,'library_query',''));toolbar.addWidget(query,1)
         kinds=ChoiceComboBox();kinds.addItems(['全部类型','原版','Fabric','Forge','NeoForge','Quilt','OptiFine']);kinds.setCurrentIndex(getattr(self,'library_kind',0));toolbar.addWidget(kinds)
         sort=ChoiceComboBox();sort.addItems(['名称排序','最近游玩','游玩时长']);sort.setCurrentIndex(getattr(self,'library_sort',0));toolbar.addWidget(sort)
         kinds.setMaximumWidth(110);sort.setMaximumWidth(125)
@@ -67,7 +67,9 @@ class Pages:
             versions=[v for v in self.versions if (kinds.currentIndex()==0 or self.kinds.get(v)==kinds.currentText()) and text in (v+' '+self.instances.display_name(v)+' '+self.instances.get(v).group).lower()]
             versions.sort(key=(lambda v:self.instances.display_name(v).lower()) if sort.currentIndex()==0 else (lambda v:self.instances.get(v).last_played) if sort.currentIndex()==1 else (lambda v:self.instances.get(v).play_seconds),reverse=sort.currentIndex()!=0)
             for vid in versions:
-                meta=self.instances.get(vid);item=QTreeWidgetItem([meta.display_name,vid+' · '+self.kinds.get(vid,'原版'),meta.group,meta.last_played_text()]);item.setData(0,Qt.ItemDataRole.UserRole,vid);tree.addTopLevelItem(item)
+                meta=self.instances.get(vid);item=QTreeWidgetItem([meta.display_name,vid+' · '+self.kinds.get(vid,'原版'),meta.group,meta.last_played_text()]);item.setData(0,Qt.ItemDataRole.UserRole,vid)
+                for column in range(tree.columnCount()):item.setToolTip(column,item.text(column))
+                tree.addTopLevelItem(item)
                 if vid==self.selected_version:tree.setCurrentItem(item)
             summary.setText(f'{len(versions)} / {len(self.versions)} 个实例')
         tree.setToolTip('单击选择，双击返回首页；右键管理实例')
@@ -86,8 +88,15 @@ class Pages:
             for title,callback in [('选择并返回首页',select_home),('重命名实例',lambda:self.rename_instance(vid)),('管理实例',lambda:self.instance_settings(vid)),('启动游戏',lambda:self.launch_version_id(vid)),('打开目录',lambda:self.open_folder(self.repo.run_dir(vid))),('导出整合包',lambda:self.export_modpack(vid)),('移入恢复中心',lambda:self.delete_version(vid))]:menu.addAction(title,callback)
             menu.exec(tree.viewport().mapToGlobal(point))
         tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);tree.customContextMenuRequested.connect(context)
-        query.textChanged.connect(render);kinds.currentIndexChanged.connect(render);sort.currentIndexChanged.connect(render);render()
-        actions=row(spacing=4);actions.addWidget(button('管理',manage,glyph='settings'));actions.addWidget(button('新建',self.create_instance,glyph='plus'));actions.addWidget(button('导入',self.import_modpack,glyph='package'));actions.addWidget(button('恢复',self.recovery,glyph='history'));actions.addStretch();actions.addWidget(button('使用此实例',select_home,'primary'));body.addLayout(actions)
+        actions=row(spacing=4);manage_button=button('管理',manage,glyph='settings');actions.addWidget(manage_button)
+        create_button=button('新建',self.create_instance,glyph='plus');actions.addWidget(create_button)
+        actions.addWidget(button('导入',self.import_modpack,glyph='package'));actions.addWidget(button('恢复',self.recovery,glyph='history'));actions.addStretch()
+        use_button=button('使用此实例',select_home,'primary');actions.addWidget(use_button);body.addLayout(actions)
+        def selection_state():
+            available=bool(chosen());manage_button.setEnabled(available);use_button.setEnabled(available)
+            create_button.setEnabled(bool(self.selected_version))
+        tree.currentItemChanged.connect(lambda *_:selection_state())
+        query.textChanged.connect(render);kinds.currentIndexChanged.connect(render);sort.currentIndexChanged.connect(render);render();selection_state()
 
     def build_about(self):
         body=self.page('about')

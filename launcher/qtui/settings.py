@@ -7,6 +7,16 @@ from .widgets import Page,SettingsSection as Card,ToggleSwitch,InlineSpinBox,Set
 from .theme import paint_color,APPEARANCE_KEYS,effective_accent
 
 
+class SettingsSlider(QSlider):
+    """Let the surrounding page scroll until this editor is explicitly focused."""
+    def __init__(self,*args):
+        super().__init__(*args);self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def wheelEvent(self,event):
+        if not self.hasFocus():event.ignore();return
+        super().wheelEvent(event)
+
+
 class SettingsEditor(QWidget):
     def __init__(self,window,version_id=None,flat=False,external_nav=False):
         super().__init__();self.launcher=window;self.vid=version_id;self.fields={};self.overrides={};self.flat=flat;self.custom_controls=[]
@@ -308,7 +318,7 @@ class SettingsEditor(QWidget):
     def number_slider(self,card,key,title,description,low,high,suffix='',preview=False):
         field=InlineSpinBox();field.setRange(low,high);field.setSingleStep(1);field.setKeyboardTracking(False)
         field.setValue(int(self.initial(key) or 0));field.setAccessibleName(title+'数值')
-        slider=QSlider(Qt.Orientation.Horizontal);slider.setRange(low,high);slider.setSingleStep(1);slider.setPageStep(5)
+        slider=SettingsSlider(Qt.Orientation.Horizontal);slider.setRange(low,high);slider.setSingleStep(1);slider.setPageStep(5)
         slider.setMinimumHeight(28);slider.setValue(field.value());slider.setAccessibleName(title+'滑动条')
         slider.valueChanged.connect(field.setValue);field.valueChanged.connect(slider.setValue)
         holder=self.number_holder(key,field,suffix.strip(),slider);self.sliders[key]=slider

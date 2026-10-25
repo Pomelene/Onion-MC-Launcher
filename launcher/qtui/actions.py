@@ -11,9 +11,9 @@ from ..paths import LAUNCHER_VERSION,LAUNCHER_NAME
 
 
 class Actions:
-    def open_mod_manager(self,vid):
+    def open_mod_manager(self,vid,mode='audit'):
         from .mod_manager import ModManager
-        self.show_subpage(ModManager(self,vid))
+        self.show_subpage(ModManager(self,vid,mode=mode))
 
     def preflight(self,vid):
         from .health_report import HealthReport

@@ -57,6 +57,6 @@ def inspect(repo,vid,settings,*,write_probe=False,cancel=None,progress=None):
     issues.extend(mods)
     try:
         from .mod_plan import pending_changes
-        if pending_changes(repo,run/'mods'):issues.append(Issue('error','interrupted','此模组目录有未完成变更，请先在模组检查页恢复中断变更（包括共用目录的其他实例）'))
+        if pending_changes(repo,run/'mods'):issues.append(Issue('error','interrupted','检测到旧版未完成的模组操作，请先核对游戏目录 .onion/mod-changes 中的原文件备份'))
     except (OSError,ValueError,KeyError,TypeError) as error:issues.append(Issue('error','journal','无法确认模组事务状态：'+str(error)[:180]))
     return issues

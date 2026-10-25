@@ -20,7 +20,7 @@ def error_hook(kind,error,tb):exceptions.append(str(error));sys.__excepthook__(k
 sys.excepthook=error_hook
 def wait(predicate,seconds=15):
     end=time.monotonic()+seconds
-    while not predicate() and time.monotonic()<end:QTest.qWait(10)
+    while not predicate() and time.monotonic()<end:app.processEvents();time.sleep(.01)
     assert predicate(),'UI task timed out'
 def click(button):QTest.mouseClick(button,Qt.MouseButton.LeftButton);app.processEvents()
 def quiet(window):QTest.qWait(50);wait(lambda:not window.tasks.jobs)
@@ -74,10 +74,14 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='next-ui-') as directory:
         node=manager.issues.topLevelItem(i)
         if node.data(0,Qt.ItemDataRole.UserRole)=='lib':manager.issues.setCurrentItem(node);break
     assert manager.search_button.isEnabled()
-    click(manager.updates_button);quiet(window)
-    assert manager.versions.topLevelItemCount()==1 and manager.plan_button.isEnabled()
-    click(manager.plan_button);quiet(window)
-    assert len(manager.plan['entries'])==2 and manager.apply_button.isEnabled()
+    manager.reject();window.open_mod_manager('fixture','updates');manager=window.subpages[-1];quiet(window)
+    assert len(manager.rows)==1 and manager.apply_button.isEnabled()
+    manager.populate(manager.entries,['custom.jar · 未在 Modrinth 收录'])
+    assert manager.apply_button.isEnabled() and not manager.details.isVisible()
+    assert manager.apply_button.text()=='更新所选（1）'
+    assert not any(hasattr(manager,key) for key in ('plan_button','undo_button','recover_button','optional','proposal'))
+    click(manager.rows[0][1]);assert not manager.apply_button.isEnabled()
+    click(manager.rows[0][1]);assert manager.apply_button.isEnabled()
     for mode in ('light','dark'):
         window.config_obj.set('color_mode',mode);window.apply_appearance()
         for width,height in ((900,600),(1200,800)):
@@ -86,23 +90,29 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='next-ui-') as directory:
             assert manager.rect().contains(manager.apply_button.mapTo(manager,manager.apply_button.rect().center()))
             window.grab().save(str(ROOT/'tmp'/('next-mod-plan-'+mode+('-small' if width==900 else '')+'.png')))
     catalog.fail=True
-    with patch.object(QMessageBox,'question',return_value=QMessageBox.StandardButton.Yes):click(manager.apply_button)
+    click(manager.apply_button)
     quiet(window);assert errors and (folder/'a-old.jar').read_bytes()==original;errors.clear()
     failed=window.task_history.items[-1];assert failed['state']=='failed'
     catalog.fail=False;window.open_task_center();center=window.download_tasks;center.refresh()
     assert window.current_page=='download' and window.nav['tasks'].isChecked()
     assert center.current()['id']==failed['id'] and center.retry_button.isEnabled()
     click(center.retry_button);quiet(window)
-    assert (folder/'a-2.0.jar').read_bytes()==updated and (folder/'lib-2.0.jar').read_bytes()==libdata
+    assert (folder/'a-2.0.jar').read_bytes()==updated and (folder/'a-old.jar.old').read_bytes()==original
+    assert not (folder/'lib-2.0.jar').exists()
     assert window.task_history.items[-1]['state']=='complete'
     center.refresh();window.grab().save(str(ROOT/'tmp/next-task-center.png'))
     window.open_mod_manager('fixture');manager=window.subpages[-1];quiet(window)
-    assert not [manager.issues.topLevelItem(i) for i in range(manager.issues.topLevelItemCount()) if manager.issues.topLevelItem(i).text(0)=='需处理']
-    with patch.object(QMessageBox,'question',return_value=QMessageBox.StandardButton.Yes):click(manager.undo_button)
-    quiet(window);assert (folder/'a-old.jar').read_bytes()==original and not (folder/'a-2.0.jar').exists()
+    assert any('缺少 lib' in manager.issues.topLevelItem(i).text(1) for i in range(manager.issues.topLevelItemCount()))
     manager.reject();window.preflight('fixture');health=window.subpages[-1];quiet(window)
     assert any('缺少 lib' in health.tree.topLevelItem(i).text(0) for i in range(health.tree.topLevelItemCount()))
-    health.reject();logs=window.repo.run_dir('fixture')/'logs';logs.mkdir(exist_ok=True)
+    health.reject()
+    # New installs still resolve required dependencies without a separate plan UI.
+    from launcher.qtui.mod_manager import ModManager
+    install=ModManager(window,'fixture',release_id=new['id']);window.show_subpage(install);quiet(window)
+    assert install.apply_button.isEnabled() and not install.preview_versions.isVisible()
+    click(install.apply_button);quiet(window)
+    assert (folder/'lib-2.0.jar').read_bytes()==libdata and (folder/'a-old.jar.old').read_bytes()==original
+    install.reject();logs=window.repo.run_dir('fixture')/'logs';logs.mkdir(exist_ok=True)
     (logs/'latest.log').write_text('java.lang.OutOfMemoryError: Java heap space access_token=SECRET_VALUE',encoding='utf-8')
     window.diagnose();diagnosis=window.subpages[-1];quiet(window)
     assert '内存不足' in diagnosis.report and 'SECRET_VALUE' not in diagnosis.report
@@ -140,4 +150,4 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='next-ui-') as directory:
     assert restored.instances.get('fixture').favorite and restored.instances.get('fixture').tags==['生存']
     restored.close()
 assert not exceptions,exceptions
-print('PASS: cross-folder same-name selection, tags/favorites, dependency/update/preview, failed-download retry, transaction undo, preflight/diagnosis, skin favorites, background cancellation and restart')
+print('PASS: cross-folder selection, filters, direct selected updates, .old backups, failed-download retry, preflight/diagnosis, skin favorites, cancellation and restart')

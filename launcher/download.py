@@ -31,6 +31,9 @@ USER_AGENT = f"Onion Minecraft Launcher/{LAUNCHER_VERSION} (Minecraft Launcher)"
 class DownloadError(Exception):
     """下载失败（含校验失败）。"""
 
+    def __init__(self,message,http_status=None):
+        super().__init__(message);self.http_status=http_status
+
 
 class DownloadCancelled(DownloadError):
     """用户主动取消了下载。"""
@@ -133,7 +136,8 @@ class Downloader:
                 return data if binary else data.decode("utf-8")
             except Exception as e:  # noqa: BLE001
                 last = e
-        raise DownloadError(f"网络请求失败（{type(last).__name__}），请检查网络及服务状态") from None
+                if isinstance(e,urllib.error.HTTPError) and e.code==404:break
+        raise DownloadError(f"网络请求失败（{type(last).__name__}），请检查网络及服务状态",getattr(last,'code',None)) from None
 
     def fetch_json(self, url: str, headers: Optional[dict] = None):
         return json.loads(self.fetch(url, headers=headers))

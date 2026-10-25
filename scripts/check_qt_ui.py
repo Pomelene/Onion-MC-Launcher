@@ -144,9 +144,10 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
     selected_release=dict(releases[1],project_id='fixture')
     with patch.object(window.repo.downloader,'fetch_json',return_value=selected_release):
         window.install_project('fixture','mod','1.21.1','fabric',version_id=old_vid,release_id='old');preview=window.subpages[-1]
-        pump(lambda:preview.versions.topLevelItemCount()==1 and not preview.busy)
+        pump(lambda:len(preview.rows)==1 and not preview.busy)
         assert preview.release_id=='old'
-        assert preview.roots()[0]['id']=='old' and preview.plan is None
+        assert preview.selected()[0]['latest']['id']=='old' and preview.apply_button.isEnabled()
+        assert not hasattr(preview,'plan_button')
         preview.reject()
     # A modpack creates a new instance even when no existing target was chosen.
     from unittest.mock import Mock

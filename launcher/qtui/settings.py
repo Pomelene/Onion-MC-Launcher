@@ -143,8 +143,6 @@ class SettingsEditor(QWidget):
             card=Card('布局与动效')
             self.check(card,'titlebar_transparent','标题栏透明','关闭后标题栏保持不透明；背景与正文控件仍独立控制')
             self.number_slider(card,'corner_radius','圆角大小','控件和弹出选择框的圆角；滑块、开关保留圆形结构',0,24,'px',preview=True)
-            self.combo(card,'list_density','列表密度','模组、资源包、实例选择等列表的行间距',[
-                ('紧凑','compact'),('标准','standard'),('宽松','comfortable')])
             self.number_slider(card,'animation_duration','动画时长','控制悬停、按压与开关动效；0 表示关闭，导航尾随按比例变化',0,600,'ms',preview=True)
             self.check(card,'ui_animations','界面动效','导航胶囊滑动、按钮按压和开关滑动；关闭可减少动态效果');body.addWidget(card)
             card=Card('首页背景','独立设置背景显示方式与透明度，不改变首页按钮和文字。')

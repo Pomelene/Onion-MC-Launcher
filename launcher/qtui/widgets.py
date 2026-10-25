@@ -427,8 +427,7 @@ class ContentRow(QWidget):
 
     def apply_appearance(self):
         self.setFixedHeight(row_height(self))
-        spacing=6 if preference(config_for(self),'list_density','standard')=='compact' else 10
-        self.line.setContentsMargins(10,spacing,10,spacing)
+        self.line.setContentsMargins(10,10,10,10)
 
     def showEvent(self,event):
         self.apply_appearance();super().showEvent(event)

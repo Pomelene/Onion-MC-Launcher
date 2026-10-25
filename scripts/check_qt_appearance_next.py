@@ -59,8 +59,6 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='appearance-next-') as fo
     change('corner_radius',0);assert corner(window)==0
     change('corner_radius',20);assert corner(window)==20
     row=ContentRow('测试列表标题 · Unicode','副标题和版本信息');row.setParent(window)
-    change('list_density','compact');compact=row.height()
-    change('list_density','comfortable');assert row.height()>compact
     change('font_size',18);assert window.font().pixelSize()==18
     change('log_font_size',20);assert '20px' in window.logs.styleSheet()
     change('font_antialiasing','gray');assert window.font().styleStrategy() & QFont.StyleStrategy.NoSubpixelAntialias
@@ -84,4 +82,4 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='appearance-next-') as fo
     assert window.close()
     restored=Config(config.path);assert restored.get('color_style')=='tonal_spot'
 assert not errors,errors
-print('PASS: all controls, 12 palettes, wallpaper seed, OS mode changes, fonts, density, corner, blur cache, durations, reset and persistence')
+print('PASS: all controls, 12 palettes, wallpaper seed, OS mode changes, fonts, corner, blur cache, durations, reset and persistence')

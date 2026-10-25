@@ -49,7 +49,7 @@ def appearance_values(config=None):
 APPEARANCE_KEYS={'accent_color','accent_source','color_style','color_mode','bold_text',
  'text_transparency','ui_transparency','background_image','background_mode','background_transparency',
  'background_scope','background_blur','titlebar_transparent','corner_radius','animation_duration',
- 'font_family','font_size','log_font_family','log_font_size','font_antialiasing','list_density'}
+ 'font_family','font_size','log_font_family','log_font_size','font_antialiasing'}
 
 def preference(config,key,default=None):
     return getattr(config,'_qt_appearance_preview',{}).get(key,config.get(key,default))
@@ -77,8 +77,8 @@ def effective_accent(config):return palette_for_config(config)['accent']
 def corner(widget,base=10):return max(0,min(24,int(preference(config_for(widget),'corner_radius',10))))*base/10
 def text_size(widget,base=14):return round(base*int(preference(config_for(widget),'font_size',14))/14)
 def row_height(widget,base=68):
-    config=config_for(widget);delta={'compact':-12,'standard':0,'comfortable':14}.get(preference(config,'list_density','standard'),0)
-    return max(44,base+delta+max(0,2*(int(preference(config,'font_size',14))-14)))
+    config=config_for(widget)
+    return max(44,base+max(0,2*(int(preference(config,'font_size',14))-14)))
 
 
 def surface_opacity(config=None):

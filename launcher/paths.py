@@ -52,3 +52,8 @@ def default_accounts_path() -> Path:
 def default_log_dir() -> Path:
     """启动器自身日志；与游戏运行目录的 logs 分开。"""
     return app_root() / ".onion" / "logs"
+
+
+def cache_dir(root=None) -> Path:
+    """Launcher caches belong under .onion, apart from Minecraft runtime data."""
+    return Path(root or app_root()) / '.onion' / 'cache'

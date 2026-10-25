@@ -152,7 +152,7 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
     with patch('launcher.catalog.versions',return_value=[]),patch('launcher.catalog.pick_version',return_value={'id':'fixture'}),patch('launcher.catalog.download_version',side_effect=lambda downloader,version,target:target/'fixture.mrpack') as downloaded,patch('launcher.modpack.import_modpack',return_value='new-pack'),patch.object(window,'installed') as installed:
         window.install_project('fixture','modpack','','',version_id='');pump(lambda:not window.tasks.jobs)
         assert installed.call_args.args==('new-pack',)
-        assert downloaded.call_args.args[2]==window.repo.game_dir/'.cache/modpacks'
+        assert downloaded.call_args.args[2]==window.repo.game_dir/'.onion/cache/modpacks'
     # A custom background is read locally and does not change the game library.
     original_library=window.repo.game_dir;background=QImage(160,90,QImage.Format.Format_RGB32);background.fill(0xff527a6b);background.save(str(base/'wallpaper.png'))
     editor.fields['background_image'].setText(str(base/'wallpaper.png'));editor.save();pump(lambda:not window.tasks.jobs)
@@ -175,9 +175,9 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
     assert installer.loader_tree.topLevelItemCount()==2 and installer.build.text()=='0.18.0'
     installer.loader_tree.setCurrentItem(installer.loader_tree.topLevelItem(1));assert installer.build.text()=='0.14.0'
     render(installer,'qt-install.png')
-    with patch('launcher.install.fabric.install_loader',return_value='new-loader-fixture') as selected_loader,patch.object(window.repo,'install'),patch.object(window,'installed'):
+    with patch('launcher.install.instance.install_instance',return_value='new-loader-fixture') as selected_loader,patch.object(window,'installed'):
         expected_name=installer.instance_name.text();installer.install();pump(lambda:not window.tasks.jobs)
-        assert selected_loader.call_args.args[2]=='0.14.0'
+        assert selected_loader.call_args.args[1:4]==(installer.version.text(),'fabric','0.14.0')
         assert window.instances.display_name('new-loader-fixture')==expected_name
     installer.reject()
     for size in ((1100,740),(1920,1080)):

@@ -89,25 +89,14 @@ class InstallDialog(QDialog):
         repo=self.launcher.repo
         from ..instance import default_instance_name
         name=self.instance_name.text().strip() or default_instance_name(version,kind)
+        from ..install.instance import next_instance_id
+        import uuid
+        try:target_id=next_instance_id(repo,name)
+        except ValueError as error:self.status.setText(str(error));return
+        request_id=uuid.uuid4().hex
         def work(job):
-            progress=lambda a,b:job.emit((a,b))
-            if kind=='vanilla':target=version
-            elif kind in ('fabric','quilt'):
-                from ..install.fabric import install_loader
-                target=install_loader(repo,version,build or None,kind,job.emit)
-            elif kind=='optifine':
-                from ..install.optifine import install,pick_edition
-                from ..java import resolve_java
-                base=repo.install(version,job.emit,progress)
-                java=resolve_java(base.java_major or 8,self.launcher.config_obj.get('java_path'),repo.downloader,job.emit,progress)
-                if not java:raise RuntimeError('安装 OptiFine 需要可用的 Java。')
-                edition=pick_edition(repo.downloader,version,build)
-                if edition is None:raise RuntimeError('所选 OptiFine 版本已不可用，请刷新版本表。')
-                target=install(repo,version,edition,java_path=str(java.path),on_stage=job.emit,on_progress=progress)
-            else:
-                from ..install.forge import install_forge
-                target=install_forge(repo,version,kind,build,job.emit,progress)
-            repo.install(target,job.emit,progress);return target
+            from ..install.instance import install_instance
+            return install_instance(repo,version,kind,build,target_id,request_id,job.emit,lambda a,b:job.emit((a,b)),job.cancel)
         # Keep this dialog available if another mutation prevents starting.
         def installed(target):
             if not self.launcher.instances.get(target).name:
@@ -116,7 +105,7 @@ class InstallDialog(QDialog):
         owner=self.launcher
         def start():
             if owner.repo is not repo:owner.error('游戏目录已切换，请回到原目录重新安装');return
-            return owner.task('安装 '+version,work,installed,retry=start,task_repo=repo,task_instance=version)
+            return owner.task('安装 '+version,work,installed,retry=start,task_repo=repo,task_instance=target_id)
         if start():self.accept()
 
     def choose_loader(self,item):

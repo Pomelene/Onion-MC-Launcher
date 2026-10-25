@@ -76,7 +76,7 @@ class Actions:
             if authlib_url:
                 job.emit('正在准备外置登录组件')
                 from ..auth.authlib import ensure_injector
-                injector=str(ensure_injector(repo.downloader,repo.game_dir/'.cache/authlib-injector.jar'))
+                injector=str(ensure_injector(repo.downloader,repo.cache_path('authlib-injector.jar')))
             settings=LaunchSettings(java_path=str(java.path),min_memory=overrides['min_memory'],max_memory=overrides['max_memory'],
                 width=overrides['width'],height=overrides['height'],fullscreen=overrides['fullscreen'],demo=bool(self.config_obj.get('demo')),
                 server_address=overrides['server_address'],extra_jvm_args=shlex.split(overrides['jvm_args']),extra_game_args=shlex.split(overrides['game_args']),

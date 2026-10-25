@@ -71,6 +71,13 @@ class GameRepository:
     def remap(self, url: str) -> str:
         return self.source.remap(url)
 
+    def cache_path(self, *parts) -> Path:
+        from .paths import cache_dir
+        from .storage import _hide
+        path=self.assert_writable(child(cache_dir(self.game_dir),str(Path(*parts))))
+        path.parent.mkdir(parents=True,exist_ok=True);_hide(self.game_dir/'.onion')
+        return path
+
     # ------------------------------------------------------------ 只读回退
 
     def readonly_roots(self) -> list[Path]:

@@ -90,11 +90,19 @@ class Pages:
         actions=row(spacing=4);actions.addWidget(button('管理',manage,glyph='settings'));actions.addWidget(button('新建',self.create_instance,glyph='plus'));actions.addWidget(button('导入',self.import_modpack,glyph='package'));actions.addWidget(button('恢复',self.recovery,glyph='history'));actions.addStretch();actions.addWidget(button('使用此实例',select_home,'primary'));body.addLayout(actions)
 
     def build_about(self):
-        body=self.page('about');card=Card('Onion Minecraft Launcher','免费、开源、公益的 Minecraft Java 版启动器。')
-        card.body.addWidget(label('版本 '+self.config_obj.get('launcher_version')+'  ·  MIT License','muted'))
-        card.body.addWidget(label('界面操作结构参考 HMCL 与美西螈，使用 Python 与 Qt 实现。Minecraft 为 Mojang / Microsoft 的商标，本项目与其无隶属关系。','muted',True))
-        card.body.addWidget(button('查看项目源代码',lambda:QDesktopServices.openUrl(QUrl('https://github.com/Pomelene/Onion-MC-Launcher')),'soft'))
-        body.addWidget(card)
+        body=self.page('about')
+        card=Card('Onion Minecraft Launcher','免费、开源、公益的 Minecraft Java 版启动器。')
+        card.body.addWidget(label('版本 '+self.config_obj.get('launcher_version'),'muted'))
+        card.body.addSpacing(8)
+        card.body.addWidget(label('Onion 启动器参考 HMCL、Axolotl（美西螈）等启动器的开源实现与交互设计进行重构，使用 Python 与 Qt 实现。感谢这些项目的开发者及开源社区的贡献。','',True))
+        card.body.addWidget(label('本项目自有代码基于 MIT 协议开源。第三方组件遵循各自的开源协议。','muted',True))
+        source=row();source.addWidget(button('查看源代码',lambda:QDesktopServices.openUrl(QUrl('https://github.com/Pomelene/Onion-MC-Launcher')),'soft','github'));source.addStretch()
+        card.body.addLayout(source);body.addWidget(card)
+        body.addStretch()
+        footer=row();notice=label('Minecraft 为 Mojang / Microsoft 的商标，本项目与其无隶属关系。','muted',True)
+        footer.addWidget(notice,1)
+        footer.addWidget(button('反馈问题',lambda:QDesktopServices.openUrl(QUrl('https://github.com/Pomelene/Onion-MC-Launcher/issues')),'soft','feedback'))
+        body.addLayout(footer)
 
     def launch_version_id(self,vid):
         if self.set_selected(vid):self.launch_selected()

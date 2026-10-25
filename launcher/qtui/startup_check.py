@@ -44,7 +44,7 @@ def run(output):
                     assert window.isVisible(), 'Main window never opened'
                     assert not failures, failures
                     window.navigate('tools')
-                    expected = {'skins', 'seedmap', 'services'} if LAUNCHER_VERSION.endswith('-T') else {'skins', 'seedmap'}
+                    expected = {'skins', 'seedmap', 'tasks', 'services'} if LAUNCHER_VERSION.endswith('-T') else {'skins', 'seedmap', 'tasks'}
                     assert set(window.nav) == expected, 'Edition navigation mismatch'
                     window.navigate('home')
                     assert window.close(), 'Main window failed to close'

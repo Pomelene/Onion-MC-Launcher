@@ -34,7 +34,10 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         self.repo=GameRepository(self.config_obj);self.accounts=AccountStore(portable or self.root/'config/accounts.json')
         from ..game_libraries import GameLibraries
         self.game_libraries=GameLibraries(self.config_obj);self.game_libraries.ensure_current();self.bind_game_library()
-        self.tasks=TaskManager(self);self.versions=[];self.kinds={};self.selected_version=self.config_obj.get('selected_version') or ''
+        self.tasks=TaskManager(self)
+        from ..task_history import TaskHistory
+        self.task_history=TaskHistory(self.root)
+        self.versions=[];self.kinds={};self.selected_version=self.config_obj.get('selected_version') or ''
         self.page_seq={};self.process=None;self.launch_pending=False;self.started_at=0;self.mutating=False;self.dialogs=[]
         self.setWindowTitle(f'{LAUNCHER_NAME} {LAUNCHER_VERSION}')
         resource=Path(getattr(sys,'_MEIPASS',self.root))/'assets/craftbridge.ico'
@@ -73,7 +76,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         self.status=FeedbackLabel();self.status.setContentsMargins(14,4,14,4);body.addWidget(self.status)
         self.task_strip=QWidget();strip=column(self.task_strip,10,5);info=row(spacing=8)
         self.task_stage=label('','muted');info.addWidget(self.task_stage,1);self.task_amount=label('','muted');info.addWidget(self.task_amount)
-        self.task_cancel=button('取消',self.cancel_active_task);info.addWidget(self.task_cancel);strip.addLayout(info)
+        self.task_cancel=button('取消',self.cancel_active_task);info.addWidget(button('任务中心',lambda:self.open_task_center(),'soft','history'));info.addWidget(self.task_cancel);strip.addLayout(info)
         self.task_progress=QProgressBar();self.task_progress.setTextVisible(False);strip.addWidget(self.task_progress);body.addWidget(self.task_strip);self.task_strip.hide();self.active_task=None
         self.selector=QComboBox(self);self.selector.hide();self.selector.currentIndexChanged.connect(self.choose_version)
         self.logs=QPlainTextEdit();self.logs.setReadOnly(True);self.logs.setMaximumBlockCount(3000)
@@ -139,7 +142,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
                 item=entry(name,title,glyph,lambda k=name:self.open_instance_tab(k));item.setChecked(name==self.instance_tab)
             nav.addStretch();entry('launch','启动游戏','play',self.launch_selected);entry('folder','浏览实例目录','folder',lambda:self.open_folder(self.repo.run_dir(self.selected_version)));entry('info','管理','settings',lambda:self.open_instance_tab('info'))
         elif key=='tools':
-            for name,title,glyph in [('skins','皮肤管理','skin'),('seedmap','种子地图','world'),('services','社团服务','tools')]:
+            for name,title,glyph in [('skins','皮肤管理','skin'),('seedmap','种子地图','world'),('tasks','任务中心','history'),('services','社团服务','tools')]:
                 item=entry(name,title,glyph,lambda k=name:self.open_tools_tab(k));item.setChecked(name==getattr(self,'tools_tab','skins'))
             nav.addStretch()
         elif key=='settings' and self.settings_editor:
@@ -206,6 +209,14 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         if self.workshop.open_tab(getattr(self,'tools_tab','skins')) is False:
             self.tools_tab='skins';self.workshop.open_tab('skins')
 
+    def open_task_center(self):
+        active=self.active_task
+        if active:active.background()
+        self.navigate('tools');self.open_tools_tab('tasks')
+        if active:
+            key=next((key for key,value in self.task_history.live.items() if value is active),None)
+            if key:self.workshop.views['tasks'].select_task(key)
+
     def navigate(self,key,record_history=True,force=False):
         self.flush_settings()
         for view in list(reversed(self.subpages)):
@@ -269,6 +280,13 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         def done(result):
             if repo is not self.repo:return
             self.versions,self.kinds=result
+            overview=getattr(self,'_overview_target',None)
+            if overview:
+                from ..storage import directory_key
+                if overview[0]==directory_key(repo.game_dir):
+                    self._overview_target=None
+                    if overview[1] in self.versions:self.selected_version=overview[1]
+                    else:self.status.setText('目标实例已不在该目录中，请刷新实例总览');overview=None
             if self.selected_version not in self.versions:self.selected_version=self.versions[0] if self.versions else ''
             self.selector.blockSignals(True);self.selector.clear()
             for vid in self.versions:self.selector.addItem(self.instances.display_name(vid),vid)
@@ -277,6 +295,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
             self.update_selection()
             self.game_libraries.remember(self.selected_version)
             if refresh_page and self.current_page!='settings':self.navigate(self.current_page,force=True)
+            if overview:self.navigate(overview[2],force=True)
         self.tasks.submit(scan,done,self.error)
 
     def choose_version(self,index):
@@ -366,12 +385,16 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
     def error(self,error):
         self.status.setText(str(error));QMessageBox.warning(self,'操作未完成',str(error))
 
-    def task(self,title,work,done=None,mutates=True):
+    def task(self,title,work,done=None,mutates=True,retry=None,task_repo=None,task_instance=None):
         if mutates and self.mutating:self.error('已有文件操作进行中，请等待完成或取消当前任务。');return
         if mutates:self.mutating=True
         dialog=TaskDialog(self,title);self.dialogs.append(dialog)
+        task_repo=task_repo or self.repo
+        record=self.task_history.begin(title,task_repo.game_dir,self.selected_version if task_instance is None else task_instance)
+        if retry:self.task_history.retries[record['id']]=retry
         self.active_task=dialog;self.task_strip.show();self.task_cancel.setEnabled(True);self.task_stage.setText(title+' · 准备中…');self.task_amount.setText('');self.task_progress.setRange(0,0)
         def progress(value):
+            self.task_history.progress(record,value)
             dialog.update_progress(value)
             if self.active_task is not dialog:return
             if isinstance(value,str):
@@ -386,14 +409,17 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
             if self.active_task is dialog:self.active_task=None;self.task_strip.hide()
         def success(value):
             if mutates:self.mutating=False
+            self.task_history.finish(record,'cancelled' if dialog.job.cancel.is_set() else 'complete')
             dialog.complete();dialog.accept();finish();self.status.setText('任务已取消' if dialog.job.cancel.is_set() else title+' · 完成')
             if done:done(value)
         def failure(error):
             if mutates:self.mutating=False
+            self.task_history.finish(record,'cancelled' if dialog.job and dialog.job.cancel.is_set() else 'failed',str(error))
             dialog.complete(failed=True);dialog.accept();finish()
             if dialog.job and dialog.job.cancel.is_set():self.status.setText('任务已取消')
             else:self.error(error)
-        dialog.job=self.tasks.submit(work,success,failure,progress,self.repo.downloader)
+        dialog.job=self.tasks.submit(work,success,failure,progress,task_repo.downloader)
+        self.task_history.live[record['id']]=dialog
         dialog.open();return dialog.job
 
     def cancel_active_task(self):

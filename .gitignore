@@ -42,6 +42,7 @@ settings.json
 !/docs/microsoft-auth.md
 !/docs/ui-motion-audit.md
 !/docs/ui-copy-audit.md
+!/docs/next-features.md
 
 # Portable user data and build output must never be published.
 onionmcl.json

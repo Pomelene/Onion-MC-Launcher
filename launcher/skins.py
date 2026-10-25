@@ -29,6 +29,24 @@ class SkinLibrary:
         self.root = Path(app_root) / '.onion' / 'skins'
         self.selections = self.root / 'selections.json'
 
+    def favorites(self):
+        path=contained(self.root/'favorites.json',self.root)
+        try:
+            if path.stat().st_size>65536:raise ValueError('皮肤收藏文件过大')
+            data=json.loads(path.read_text(encoding='utf-8'))
+        except FileNotFoundError:return set()
+        if not isinstance(data,list):raise ValueError('皮肤收藏格式无效')
+        return {value for value in data if isinstance(value,str) and len(value)==64 and all(c in '0123456789abcdef' for c in value)}
+
+    def is_favorite(self,path):return hashlib.sha256(skin_bytes(contained(Path(path),self.root))).hexdigest() in self.favorites()
+
+    def set_favorite(self,path,favorite):
+        digest=hashlib.sha256(skin_bytes(contained(Path(path),self.root))).hexdigest()
+        self.prepare();values=self.favorites()
+        if favorite:values.add(digest)
+        else:values.discard(digest)
+        write_text(contained(self.root/'favorites.json',self.root),json.dumps(sorted(values)))
+
     def prepare(self):
         # Refuse linked roots before writing any files.
         contained(self.root, self.root.parent.parent)

@@ -64,10 +64,11 @@ class Pages:
         summary=label('','muted');body.addWidget(summary)
         def render():
             self.library_query=query.text();self.library_kind=kinds.currentIndex();self.library_sort=sort.currentIndex();tree.clear();text=query.text().strip().lower()
-            versions=[v for v in self.versions if (kinds.currentIndex()==0 or self.kinds.get(v)==kinds.currentText()) and text in (v+' '+self.instances.display_name(v)+' '+self.instances.get(v).group).lower()]
+            versions=[v for v in self.versions if (kinds.currentIndex()==0 or self.kinds.get(v)==kinds.currentText()) and text in (v+' '+self.instances.display_name(v)+' '+self.instances.get(v).group+' '+' '.join(self.instances.get(v).tags)).lower()]
             versions.sort(key=(lambda v:self.instances.display_name(v).lower()) if sort.currentIndex()==0 else (lambda v:self.instances.get(v).last_played) if sort.currentIndex()==1 else (lambda v:self.instances.get(v).play_seconds),reverse=sort.currentIndex()!=0)
+            versions.sort(key=lambda v:not self.instances.get(v).favorite)
             for vid in versions:
-                meta=self.instances.get(vid);item=QTreeWidgetItem([meta.display_name,vid+' · '+self.kinds.get(vid,'原版'),meta.group,meta.last_played_text()]);item.setData(0,Qt.ItemDataRole.UserRole,vid)
+                meta=self.instances.get(vid);item=QTreeWidgetItem([('★ ' if meta.favorite else '')+meta.display_name,vid+' · '+self.kinds.get(vid,'原版'),' · '.join([meta.group,*meta.tags]),meta.last_played_text()]);item.setData(0,Qt.ItemDataRole.UserRole,vid)
                 for column in range(tree.columnCount()):item.setToolTip(column,item.text(column))
                 tree.addTopLevelItem(item)
                 if vid==self.selected_version:tree.setCurrentItem(item)
@@ -85,6 +86,12 @@ class Pages:
             item=tree.itemAt(point)
             if not item:return
             tree.setCurrentItem(item);vid=chosen();menu=ActionMenu(tree)
+            def favorite():self.instances.update(vid,favorite=not self.instances.get(vid).favorite);render()
+            def tags():
+                from PySide6.QtWidgets import QInputDialog
+                value,ok=QInputDialog.getText(self,'实例标签','多个标签用逗号分隔',text=', '.join(self.instances.get(vid).tags))
+                if ok:self.instances.update(vid,tags=value);render()
+            menu.addAction('取消收藏' if self.instances.get(vid).favorite else '收藏实例',favorite);menu.addAction('编辑标签',tags);menu.addSeparator()
             for title,callback in [('选择并返回首页',select_home),('重命名实例',lambda:self.rename_instance(vid)),('管理实例',lambda:self.instance_settings(vid)),('启动游戏',lambda:self.launch_version_id(vid)),('打开目录',lambda:self.open_folder(self.repo.run_dir(vid))),('导出整合包',lambda:self.export_modpack(vid)),('移入恢复中心',lambda:self.delete_version(vid))]:menu.addAction(title,callback)
             menu.exec(tree.viewport().mapToGlobal(point))
         tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);tree.customContextMenuRequested.connect(context)
@@ -152,6 +159,9 @@ class Pages:
     def install_project(self,project_id,kind,game,loader,version_id=None,release_id=None):
         vid=self.selected_version if version_id is None else version_id
         if not vid and kind!='modpack':self.error('请先选择一个游戏实例。');return
+        if kind=='mod':
+            from .mod_manager import ModManager
+            self.show_subpage(ModManager(self,vid,release_id,project_id));return True
         repo=self.repo;run=repo.run_dir(vid) if vid else repo.game_dir
         def work(job):
             from ..catalog import versions,pick_version,download_version
@@ -168,7 +178,10 @@ class Pages:
                 return import_modpack(repo,path,job.emit,lambda a,b:job.emit((a,b)))
             if kind=='mod':install_dependencies(repo.downloader,chosen.get('id'),target,game,loader)
             return None
-        return self.task('安装内容',work,lambda vid:self.installed(vid) if vid else self.status.setText('内容已安装'))
+        def start():
+            if self.repo is not repo:self.error('游戏目录已切换，请回到原目录重新安装');return
+            return self.task('安装内容',work,lambda installed:self.installed(installed) if installed else self.status.setText('内容已安装'),retry=start,task_repo=repo,task_instance=vid)
+        return start()
 
     def build_mods(self,content_kind='mods'):
         body=self.page('mods');seq=self.page_seq['mods'];vid=self.selected_version
@@ -176,6 +189,7 @@ class Pages:
         tabs=row();kind=ChoiceComboBox()
         for title,key in [('模组','mods'),('资源包','resourcepacks'),('光影','shaderpacks')]:kind.addItem(title,key)
         kind.setCurrentIndex(max(0,kind.findData(content_kind)));kind.hide()
+        if content_kind=='mods':tabs.addWidget(button('依赖检查 / 更新',lambda:self.open_mod_manager(vid),'soft','settings'))
         tabs.addWidget(label({'mods':'模组','resourcepacks':'资源包','shaderpacks':'光影'}[content_kind]+' · '+self.instances.display_name(vid),'muted'),1);tabs.addWidget(button('打开目录',lambda:self.open_folder(self.repo.run_dir(vid)/content_kind),glyph='folder'));tabs.addStretch();tabs.addWidget(button('搜索安装',lambda:self.open_content_download(content_kind),'soft','search'));body.addLayout(tabs)
         query=QLineEdit();query.setPlaceholderText('搜索名称、版本、说明或文件名');tabs.addWidget(query)
         holder=QWidget();results=column(holder,0,0);body.addWidget(holder)
@@ -267,17 +281,14 @@ class Pages:
 
     def build_logs(self):
         body=self.page('logs');bar=row();bar.addWidget(button('打开实例日志',lambda:self.open_folder(self.repo.logs_dir(self.selected_version)) if self.selected_version else None,glyph='folder'))
-        bar.addWidget(button('崩溃诊断',self.diagnose));bar.addStretch();bar.addWidget(button('停止游戏',lambda:self.process.stop() if self.process and self.process.proc.poll() is None else None,'danger'));body.addLayout(bar)
+        bar.addWidget(button('崩溃诊断',self.diagnose));bar.addWidget(button('环境体检',lambda:self.preflight(self.selected_version)));bar.addStretch();bar.addWidget(button('停止游戏',lambda:self.process.stop() if self.process and self.process.proc.poll() is None else None,'danger'));body.addLayout(bar)
         body.addWidget(self.logs,1)
         self.logs.setMinimumHeight(450)
 
     def diagnose(self):
         if not self.selected_version:return
-        from ..crash import latest_crash_report,summarize
-        def work(job):
-            report=latest_crash_report(self.repo.run_dir(self.selected_version))
-            return summarize(report) if report else '没有发现崩溃报告。'
-        self.tasks.submit(work,lambda text:QMessageBox.information(self,'崩溃诊断',text),self.error)
+        from .health_report import HealthReport
+        self.show_subpage(HealthReport(self,self.selected_version,crash=True))
 
     def build_settings(self):
         from .settings import SettingsEditor

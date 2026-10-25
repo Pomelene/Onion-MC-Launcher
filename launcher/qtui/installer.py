@@ -100,7 +100,11 @@ class InstallDialog(QDialog):
             if not self.launcher.instances.get(target).name:
                 self.launcher.instances.update(target,name=name)
             self.launcher.installed(target)
-        if self.launcher.task('安装 '+version,work,installed):self.accept()
+        owner=self.launcher
+        def start():
+            if owner.repo is not repo:owner.error('游戏目录已切换，请回到原目录重新安装');return
+            return owner.task('安装 '+version,work,installed,retry=start,task_repo=repo,task_instance=version)
+        if start():self.accept()
 
     def choose_loader(self,item):
         self.build.setText(item.data(0,Qt.ItemDataRole.UserRole) if item else '')

@@ -47,10 +47,19 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='next-ui-') as directory:
     (version/'fixture.json').write_text((repo.versions_dir/'fixture/fixture.json').read_text())
     window.game_libraries.add(second);window.instances.update('fixture',name='同名实例',favorite=True,tags=['生存'])
     other=InstanceStore(window.instances.path,second,window.config_obj.get('library_legacy_root'));other.update('fixture',name='同名实例',tags=['测试'])
+    window.navigate('versions');app.processEvents();window.library_favorites.setCurrentIndex(1);assert window.version_tree.topLevelItemCount()==1
+    window.library_tags.setCurrentIndex(window.library_tags.findData('生存'));assert window.version_tree.topLevelItemCount()==1
+    star=window.version_tree.itemWidget(window.version_tree.topLevelItem(0),4);assert star.isChecked();filled=star.icon().pixmap(20,20).toImage()
+    click(star);assert window.version_tree.topLevelItemCount()==0 and not window.instances.get('fixture').favorite
+    window.library_favorites.setCurrentIndex(0);star=window.version_tree.itemWidget(window.version_tree.topLevelItem(0),4)
+    assert not star.isChecked() and star.icon().pixmap(20,20).toImage()!=filled
+    click(star);assert window.instances.get('fixture').favorite
     window.open_instance_overview();view=window.subpages[-1];quiet(window)
     assert view.tree.topLevelItemCount()==2
     view.only_favorites.setChecked(True);assert view.tree.topLevelItemCount()==1
     view.only_favorites.setChecked(False);view.query.setText('测试');assert view.tree.topLevelItemCount()==1
+    view.tags_filter.setCurrentIndex(view.tags_filter.findData('测试'));view.only_favorites.setChecked(True);assert view.tree.topLevelItemCount()==0
+    view.only_favorites.setChecked(False);assert view.tree.topLevelItemCount()==1
     click(view.use_button);quiet(window)
     assert directory_key(window.repo.game_dir)==directory_key(second) and window.selected_version=='fixture'
     assert window.instances.get('fixture').tags==['测试'] and not window.instances.get('fixture').favorite
@@ -60,6 +69,7 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='next-ui-') as directory:
 
     window.open_mod_manager('fixture');manager=window.subpages[-1];quiet(window)
     assert manager.issues.topLevelItemCount()>=1
+    assert 'Minecraft 1.21.1' in manager.context_label.text() and 'Java 21' in manager.context_label.text()
     for i in range(manager.issues.topLevelItemCount()):
         node=manager.issues.topLevelItem(i)
         if node.data(0,Qt.ItemDataRole.UserRole)=='lib':manager.issues.setCurrentItem(node);break
@@ -79,7 +89,8 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='next-ui-') as directory:
     with patch.object(QMessageBox,'question',return_value=QMessageBox.StandardButton.Yes):click(manager.apply_button)
     quiet(window);assert errors and (folder/'a-old.jar').read_bytes()==original;errors.clear()
     failed=window.task_history.items[-1];assert failed['state']=='failed'
-    catalog.fail=False;window.open_task_center();center=window.workshop.views['tasks'];center.refresh()
+    catalog.fail=False;window.open_task_center();center=window.download_tasks;center.refresh()
+    assert window.current_page=='download' and window.nav['tasks'].isChecked()
     assert center.current()['id']==failed['id'] and center.retry_button.isEnabled()
     click(center.retry_button);quiet(window)
     assert (folder/'a-2.0.jar').read_bytes()==updated and (folder/'lib-2.0.jar').read_bytes()==libdata
@@ -100,8 +111,13 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='next-ui-') as directory:
     window.navigate('tools');window.open_tools_tab('skins');wardrobe=window.workshop.views['skins']
     source=base/'skin.png';source.write_bytes(png());skin=wardrobe.library.import_skin(source);wardrobe.refresh();QTest.qWait(50)
     star=next(b for b in wardrobe.findChildren(QPushButton) if b.isVisible() and b.accessibleName()=='收藏')
-    click(star);assert wardrobe.library.is_favorite(skin)
+    empty_star=star.icon().pixmap(20,20).toImage();assert not star.isChecked()
+    click(star);assert wardrobe.library.is_favorite(skin);QTest.qWait(40)
+    filled_star=next(b for b in wardrobe.findChildren(QPushButton) if b.isVisible() and b.accessibleName()=='取消收藏')
+    assert filled_star.isChecked() and filled_star.icon().pixmap(20,20).toImage()!=empty_star
     wardrobe.favorites_only.setCurrentIndex(1);QTest.qWait(50);assert wardrobe.path==skin
+    wardrobe.query.setText('no-such-skin');QTest.qWait(30);assert wardrobe.path is None and wardrobe.skin_count.text()=='0 / 1'
+    wardrobe.query.clear();QTest.qWait(30);assert wardrobe.path==skin
     star=next(b for b in wardrobe.findChildren(QPushButton) if b.isVisible() and b.accessibleName()=='取消收藏')
     click(star);assert wardrobe.path is None and not wardrobe.apply.isEnabled() and not wardrobe.upload.isEnabled()
 

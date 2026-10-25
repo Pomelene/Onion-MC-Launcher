@@ -16,7 +16,7 @@ def inspect(repo,vid,settings,*,write_probe=False):
     try:
         from .modpack import _base_version,_detect_loader
         rv=repo.resolver.resolve(vid);required=rv.java_major
-        game=_base_version(repo,vid);loader,loader_version=_detect_loader(repo,vid)
+        game=rv.game_version;loader,loader_version=_detect_loader(repo,vid)
     except Exception as error:issues.append(Issue('warning','version','本地版本信息未完整解析，启动时将尝试补全：'+str(error)[:180]))
     nearest=run
     while not nearest.exists() and nearest!=nearest.parent:nearest=nearest.parent
@@ -43,8 +43,13 @@ def inspect(repo,vid,settings,*,write_probe=False):
             java_major=str(java.major)
             if required and java.major<required:issues.append(Issue('error','java',f'该游戏要求 Java {required} 或更高，当前为 Java {java.major}'))
             if java.bits==32 and high>1400:issues.append(Issue('warning','java_memory','32 位 Java 使用较大堆内存可能无法启动，建议选择 64 位 Java'))
-    else:issues.append(Issue('info','java',f'启动时自动选择兼容 Java'+(f'（游戏要求 {required}）' if required else '')))
-    mods=audit(run/'mods',game,loader,loader_version,java_major)
+    else:
+        java_major=str(required or '')
+        issues.append(Issue('info','java',f'启动时自动选择 Java {required}，未安装时下载对应运行时' if required else '启动时自动选择兼容 Java'))
+    from .mod_audit import runtime_modules
+    try:runtime=runtime_modules(repo,vid)
+    except (OSError,ValueError):runtime=[]
+    mods=audit(run/'mods',game,loader,loader_version,java_major,runtime_mods=runtime)
     if (run/'config/fabric_loader_dependencies.json').exists():
         for item in mods:
             if item.code in ('missing','version','conflict'):item.severity='warning'

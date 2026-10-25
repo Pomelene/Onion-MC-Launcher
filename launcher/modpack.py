@@ -18,6 +18,7 @@ from typing import Optional
 
 from .download import DownloadError, DownloadJob
 from .archives import validate_archive,copy_member,read_member
+from .version import VersionError
 
 
 @dataclass
@@ -328,6 +329,10 @@ def _install_curseforge_files(repo, instance: Path, entries: list[dict],
 def _base_version(repo, version_id: str) -> str:
     """沿 inheritsFrom 链找到最底层的原版版本号。"""
     vid = version_id
+    try:
+        actual=repo.resolver.resolve(version_id).game_version
+        if actual:return actual
+    except (OSError,ValueError,AttributeError,VersionError):pass
     try:
         data = repo.resolver.load_raw(vid)
         if data.get('onionGameVersion'):return str(data['onionGameVersion'])

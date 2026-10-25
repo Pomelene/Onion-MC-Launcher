@@ -142,7 +142,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
                 item=entry(name,title,glyph,lambda k=name:self.open_instance_tab(k));item.setChecked(name==self.instance_tab)
             nav.addStretch();entry('launch','启动游戏','play',self.launch_selected);entry('folder','浏览实例目录','folder',lambda:self.open_folder(self.repo.run_dir(self.selected_version)));entry('info','管理','settings',lambda:self.open_instance_tab('info'))
         elif key=='tools':
-            for name,title,glyph in [('skins','皮肤管理','skin'),('seedmap','种子地图','world'),('tasks','任务中心','history')]:
+            for name,title,glyph in [('skins','皮肤管理','skin'),('seedmap','种子地图','world')]:
                 item=entry(name,title,glyph,lambda k=name:self.open_tools_tab(k));item.setChecked(name==getattr(self,'tools_tab','skins'))
             nav.addStretch()
         elif key=='settings' and self.settings_editor:
@@ -155,6 +155,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
             heading('游戏内容')
             for name,title,glyph in [('mod','模组','package'),('resourcepack','资源包','grid'),('shader','光影','world')]:
                 item=entry(name,title,glyph,lambda k=name:self.choose_download_kind(k));item.setChecked(name==getattr(self,'download_kind','mod'))
+            heading('任务');item=entry('tasks','下载任务','history',self.open_task_center);item.setChecked(getattr(self,'download_kind','mod')=='tasks')
             nav.addStretch();entry('import','导入整合包','plus',self.import_modpack)
         else:
             heading('账户');account=self.accounts.current()
@@ -210,10 +211,10 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
     def open_task_center(self):
         active=self.active_task
         if active:active.background()
-        self.navigate('tools');self.open_tools_tab('tasks')
+        self.download_kind='tasks';self.navigate('download')
         if active:
             key=next((key for key,value in self.task_history.live.items() if value is active),None)
-            if key:self.workshop.views['tasks'].select_task(key)
+            if key:self.download_tasks.select_task(key)
 
     def navigate(self,key,record_history=True,force=False):
         self.flush_settings()
@@ -237,7 +238,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         self.build_sidebar(key)
         if key=='download':
             from .browser import TITLES
-            self.page_title='下载 / '+TITLES[getattr(self,'download_kind','mod')];self.title.setText(self.page_title)
+            kind=getattr(self,'download_kind','mod');self.page_title='下载任务' if kind=='tasks' else '下载 / '+TITLES[kind];self.title.setText(self.page_title)
 
     def page(self,key):
         if key=='logs':self.logs.setParent(None)

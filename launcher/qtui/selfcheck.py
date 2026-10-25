@@ -84,7 +84,9 @@ def check_next_features(window,base,application):
     from ..mod_plan import build_plan,apply_plan,undo_last
     from ..mod_audit import audit
     vid='next-features-fixture';version=window.repo.versions_dir/vid;version.mkdir(parents=True,exist_ok=True)
-    (version/(vid+'.json')).write_text(json.dumps(dict(id=vid,onionGameVersion='1.21.1',mainClass='Main',libraries=[])),encoding='utf-8')
+    (version/(vid+'.json')).write_text(json.dumps(dict(id=vid,mainClass='Main',libraries=[])),encoding='utf-8')
+    with zipfile.ZipFile(version/(vid+'.jar'),'w') as archive:archive.writestr('version.json',json.dumps(dict(id='1.21.1',java_version=21)))
+    actual=window.repo.resolver.resolve(vid);assert actual.game_version=='1.21.1' and actual.java_major==21
     def idle():
         application.processEvents();deadline=time.monotonic()+10
         while window.tasks.jobs and time.monotonic()<deadline:application.processEvents();time.sleep(.01)
@@ -108,9 +110,14 @@ def check_next_features(window,base,application):
     window.preflight(vid);idle();render_hidden(window);window.subpages[-1].reject()
     window.diagnose();idle();assert window.subpages[-1].report;window.subpages[-1].reject()
     record=window.task_history.begin('离线自检',window.repo.game_dir,vid);window.task_history.finish(record,'complete')
-    window.open_task_center();render_hidden(window);assert window.workshop.views['tasks'].tree.topLevelItemCount()>=1
+    window.open_task_center();render_hidden(window);assert window.download_tasks.tree.topLevelItemCount()>=1
     from ..skins import SkinLibrary
     library=SkinLibrary(base);skin=library.import_skin(base/'blur-check.png');library.set_favorite(skin,True);assert library.is_favorite(skin)
+    window.navigate('tools');window.open_tools_tab('skins');wardrobe=window.workshop.views['skins'];wardrobe.refresh();application.processEvents()
+    wardrobe.favorites_only.setCurrentIndex(1);wardrobe.query.setText('not-a-skin');assert wardrobe.path is None
+    wardrobe.query.clear();assert wardrobe.path==skin
+    favorite=next(b for b in wardrobe.findChildren(QPushButton) if b.property('onionGlyph')=='star-filled' and b.isChecked())
+    favorite.click();assert not library.is_favorite(skin) and wardrobe.path is None
 
 
 def run(output):

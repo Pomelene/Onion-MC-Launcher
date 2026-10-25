@@ -42,7 +42,7 @@ class ModInfo:
 def _read_fabric_meta(zf: zipfile.ZipFile) -> Optional[dict]:
     try:
         with zf.open("fabric.mod.json") as f:
-            return json.loads(f.read().decode("utf-8", "replace"))
+            return json.loads(f.read().decode("utf-8-sig", "replace"),strict=False)
     except (KeyError, json.JSONDecodeError, OSError):
         return None
 

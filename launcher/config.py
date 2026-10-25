@@ -31,7 +31,6 @@ def _coerce(key: str, value: Any) -> Any:
     if key=='color_mode':return value if value in ('dark','light','auto') else 'dark'
     if key=='accent_source':return value if value in ('custom','wallpaper') else 'custom'
     if key=='color_style':return value if value in ('fidelity','tonal_spot','vibrant','neutral','fruit_salad','rainbow') else 'fidelity'
-    if key=='list_density':return value if value in ('compact','standard','comfortable') else 'standard'
     if key=='font_antialiasing':return value if value in ('auto','gray','subpixel') else 'auto'
     if key in ('font_family','log_font_family'):return str(value or '')[:128]
     if key=='background_mode':return value if value in ('fill','fit','stretch','center','tile') else 'fill'
@@ -120,7 +119,6 @@ DEFAULTS: dict[str, Any] = {
     "corner_radius": 10,
     "background_blur": 0,
     "animation_duration": 200,
-    "list_density": "standard",
     "text_transparency": 0,         # 0 为不透明；最多 70，保留文字可读性
     "ui_transparency": 0,           # 窗口及控件背景透明度（透出桌面），文字独立；最多90
     "background_transparency": 0,   # 首页图片/装饰透明度

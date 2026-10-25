@@ -325,7 +325,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
             log_family=preference(self.config_obj,'log_font_family','Consolas') or family
             if log_family not in QFontDatabase.families():log_family='Consolas'
             self.logs.setStyleSheet("font-family:'"+log_family.replace("'",'')+"';font-size:"+str(preference(self.config_obj,'log_font_size',12))+"px;")
-        if not previous or changed & {'list_density','font_size'}:
+        if not previous or changed & {'font_size'}:
             for item in self.findChildren(ContentRow):item.apply_appearance()
             for item in self.findChildren(NavigationItem):item.setSubtitle(item.subtitle)
         if not previous or changed & {'animation_duration','ui_animations'}:

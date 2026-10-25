@@ -24,8 +24,8 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='wallpaper-source-') as f
     editor.fields['accent_color'].setText('#ae45d2');assert editor.flush()
     custom=effective_accent(window.config_obj)
     for size in (14,18):
-        for density in ('compact','standard','comfortable'):
-            editor.fields['font_size'].setValue(size);editor.fields['list_density'].setCurrentIndex(editor.fields['list_density'].findData(density));assert editor.flush()
+        for repeat in range(3):
+            editor.fields['font_size'].setValue(size);assert editor.flush()
             page.ensureWidgetVisible(source,20,100);QTest.qWait(50)
             for value in ('wallpaper','custom','wallpaper','custom'):
                 source.showPopup();app.processEvents();popup=source.choice_popup

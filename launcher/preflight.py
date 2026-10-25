@@ -50,12 +50,8 @@ def inspect(repo,vid,settings,*,write_probe=False):
             if item.code in ('missing','version','conflict'):item.severity='warning'
         issues.append(Issue('warning','overrides','检测到 Fabric 依赖覆盖文件；依赖检查仅供参考，以加载器实际解析为准'))
     issues.extend(mods)
-    pending=repo.game_dir/'.onion/mod-changes'
-    for journal in pending.glob('*/journal.json') if pending.exists() else []:
-        try:
-            import json
-            if journal.stat().st_size>1024**2:continue
-            data=json.loads(journal.read_text(encoding='utf-8'))
-            if data.get('version')==vid and data.get('status')=='applying':issues.append(Issue('error','interrupted','有未完成的模组文件变更，请先在模组检查页恢复中断变更'))
-        except (OSError,ValueError):continue
+    try:
+        from .mod_plan import pending_changes
+        if pending_changes(repo,run/'mods'):issues.append(Issue('error','interrupted','此模组目录有未完成变更，请先在模组检查页恢复中断变更（包括共用目录的其他实例）'))
+    except (OSError,ValueError,KeyError,TypeError) as error:issues.append(Issue('error','journal','无法确认模组事务状态：'+str(error)[:180]))
     return issues

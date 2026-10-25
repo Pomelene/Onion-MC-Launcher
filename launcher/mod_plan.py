@@ -16,6 +16,22 @@ def snapshot(folder):
     return {p.name:mod_sha1(p) for p in sorted(folder.iterdir()) if p.is_file() and p.name.lower().endswith(('.jar','.zip','.jar.disabled','.zip.disabled'))} if folder.exists() else {}
 
 
+def assert_mods_idle(repo,vid):
+    repo.assert_idle(vid);folder=repo.run_dir(vid)/'mods'
+    for other in repo.list_installed():
+        if other!=vid and repo.run_dir(other)/'mods'==folder:repo.assert_idle(other)
+
+
+def pending_changes(repo,folder):
+    root=repo.game_dir/'.onion/mod-changes';result=[]
+    for file in root.glob('*/journal.json') if root.exists() else []:
+        contained(file,repo.game_dir)
+        if file.stat().st_size>1024**2:raise ValueError('模组事务记录过大，请检查：'+str(file))
+        data=json.loads(file.read_text(encoding='utf-8'))
+        if data.get('status')=='applying' and child(repo.game_dir,data['folder'])==folder:result.append(data)
+    return result
+
+
 def identify(downloader,folder,job=None):
     found={};unknown=[]
     for info in scan_mods(Path(folder)):
@@ -115,7 +131,9 @@ def build_plan(downloader,folder,roots,game,loader,job=None,optional=False):
 
 
 def apply_plan(repo,vid,plan,job=None):
-    repo.assert_idle(vid);folder=repo.run_dir(vid)/'mods';repo.assert_writable(folder);folder.mkdir(parents=True,exist_ok=True)
+    assert_mods_idle(repo,vid);folder=repo.run_dir(vid)/'mods';repo.assert_writable(folder)
+    if pending_changes(repo,folder):raise RuntimeError('此模组目录有未完成变更，请先恢复中断变更')
+    folder.mkdir(parents=True,exist_ok=True)
     if snapshot(folder)!=plan['before']:raise RuntimeError('模组目录已变化，请重新生成方案')
     entries=[e for e in plan['entries'] if e['action']!='保留']
     if not entries:return None
@@ -138,7 +156,7 @@ def apply_plan(repo,vid,plan,job=None):
             journal['new'][target.name]=file['hashes']['sha1']
             if entry['old']:journal['old'][entry['old']]=plan['before'][entry['old']]
             if job:job.emit((i+1,len(entries)))
-        _cancel(job);repo.assert_idle(vid)
+        _cancel(job);assert_mods_idle(repo,vid)
         if snapshot(folder)!=plan['before']:raise RuntimeError('下载期间模组目录已变化，未应用方案')
         # Inspect the proposed combined directory without changing the live instance.
         proposed=stage/'proposed';proposed.mkdir(exist_ok=True)
@@ -157,7 +175,7 @@ def apply_plan(repo,vid,plan,job=None):
         new_errors=[i.message for i in audit(proposed,plan['game'],plan['loader']) if i.severity=='error' and (i.code,i.message) not in before_errors]
         if new_errors:raise ValueError('下载后的依赖核对未通过：\n'+'\n'.join(new_errors[:12]))
         for file in proposed.iterdir():contained(file,stage).unlink()
-        proposed.rmdir();repo.assert_idle(vid);_cancel(job)
+        proposed.rmdir();assert_mods_idle(repo,vid);_cancel(job)
         if snapshot(folder)!=plan['before']:raise RuntimeError('检查期间模组目录发生变化，未应用方案')
         if any(mod_sha1(child(incoming,name))!=digest for name,digest in journal['new'].items()):raise ValueError('待安装文件在校验后发生变化')
         journal['status']='applying';save();moved=[];published=[]
@@ -179,7 +197,8 @@ def apply_plan(repo,vid,plan,job=None):
 
 
 def undo_last(repo,vid):
-    repo.assert_idle(vid);root=repo.game_dir/'.onion/mod-changes'
+    assert_mods_idle(repo,vid);root=repo.game_dir/'.onion/mod-changes'
+    if pending_changes(repo,repo.run_dir(vid)/'mods'):raise RuntimeError('请先恢复中断变更，再撤销历史变更')
     candidates=[]
     for file in root.glob('*/journal.json') if root.exists() else []:
         contained(file,repo.game_dir)
@@ -208,13 +227,12 @@ def undo_last(repo,vid):
 
 def recover_interrupted(repo,vid):
     """Rollback an interrupted commit only after checking every affected file."""
-    repo.assert_idle(vid);folder=repo.run_dir(vid)/'mods';repo.assert_writable(folder);root=repo.game_dir/'.onion/mod-changes'
+    assert_mods_idle(repo,vid);folder=repo.run_dir(vid)/'mods';repo.assert_writable(folder);root=repo.game_dir/'.onion/mod-changes'
     for file in root.glob('*/journal.json') if root.exists() else []:
         contained(file,repo.game_dir)
         if file.stat().st_size>1024**2:continue
         data=json.loads(file.read_text(encoding='utf-8'))
-        if data.get('version')!=vid or data.get('status')!='applying':continue
-        if child(repo.game_dir,data['folder'])!=folder:raise ValueError('实例目录已变化')
+        if data.get('status')!='applying' or child(repo.game_dir,data['folder'])!=folder:continue
         backup=file.parent/'backup';restorable=[];removable=[]
         for name,digest in data['old'].items():
             source=child(backup,name);live=child(folder,name)

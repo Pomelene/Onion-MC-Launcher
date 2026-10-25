@@ -1,11 +1,13 @@
 """Qt actions adapt existing launcher services without a second implementation."""
+from .lists import FlatTreeWidget as QTreeWidget
+
 import json
 import shlex
 import time
 from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QDialog,QFormLayout,QLineEdit,QComboBox,QInputDialog,
-    QFileDialog,QMessageBox,QTreeWidget,QTreeWidgetItem)
+    QFileDialog,QMessageBox,QTreeWidgetItem)
 from .widgets import column,row,label,button,Card
 from ..paths import LAUNCHER_VERSION,LAUNCHER_NAME
 

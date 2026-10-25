@@ -1,8 +1,10 @@
 """Account dialogs. Credentials stay in backend records, never in UI status strings."""
+from .lists import FlatTreeWidget as QTreeWidget
+
 import time
 from PySide6.QtCore import Qt,QTimer,QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import (QApplication,QDialog,QWidget,QLineEdit,QFormLayout,QTreeWidget,
+from PySide6.QtWidgets import (QApplication,QDialog,QWidget,QLineEdit,QFormLayout,
     QTreeWidgetItem,QInputDialog,QMessageBox,QDialogButtonBox)
 from .widgets import label,button,column,row,Card
 from ..accounts import AccountRecord,offline_uuid,validate_username

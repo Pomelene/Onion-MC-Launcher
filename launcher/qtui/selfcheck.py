@@ -221,7 +221,11 @@ def run(output):
         from ..version import VersionEntry
         installer.entries=[VersionEntry('1.21.1','release',''),VersionEntry('24w14a','snapshot','')]
         installer.render_versions();assert installer.tree.topLevelItemCount()==1
+        from .lists import FlatTreeWidget
+        assert isinstance(installer.tree,FlatTreeWidget) and installer.tree.isHeaderHidden()
+        assert installer.loader_panel.isHidden() and installer.build.isHidden()
         accounts=AccountsDialog(window)
+        assert isinstance(accounts.tree,FlatTreeWidget)
         entry=next(b for b in accounts.findChildren(QPushButton) if b.text()=='微软正版登录')
         # Keep the frozen diagnostic independent of unittest and its mock tools.
         from . import accounts as accounts_module

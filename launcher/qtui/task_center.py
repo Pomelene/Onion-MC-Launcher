@@ -1,19 +1,20 @@
 """Live, cancellable task history; retries are explicit in-memory safe recipes."""
+from .lists import FlatTreeWidget as QTreeWidget
+
 import time
 from PySide6.QtCore import Qt,QTimer
-from PySide6.QtWidgets import QWidget,QTreeWidget,QTreeWidgetItem,QPlainTextEdit,QSplitter
+from PySide6.QtWidgets import QWidget,QTreeWidgetItem,QPlainTextEdit,QSplitter
 from .widgets import column,row,label,button,TaskDialog
 
 
 class TaskCenter(QWidget):
     def __init__(self,owner):
-        super().__init__();self.owner=owner;body=column(self,0,12);heading=row();heading.addWidget(label('下载任务','heading'),1)
-        heading.addWidget(button('清除已结束记录',self.clear));body.addLayout(heading)
+        super().__init__();self.owner=owner;body=column(self,0,12)
         split=QSplitter(Qt.Orientation.Vertical);body.addWidget(split,1)
         self.tree=QTreeWidget();self.tree.setRootIsDecorated(False);self.tree.setHeaderLabels(['任务','状态','进度 / 已接收','时间']);self.tree.setColumnWidth(0,250);self.tree.setColumnWidth(1,90);self.tree.setColumnWidth(2,180);split.addWidget(self.tree)
         self.detail=QPlainTextEdit();self.detail.setReadOnly(True);split.addWidget(self.detail);split.setSizes([420,150])
         actions=row();self.cancel_button=button('取消任务',self.cancel);actions.addWidget(self.cancel_button)
-        self.retry_button=button('重新尝试',self.retry,'soft','refresh');actions.addWidget(self.retry_button);actions.addStretch();body.addLayout(actions)
+        self.retry_button=button('重新尝试',self.retry,'soft','refresh');actions.addWidget(self.retry_button);actions.addStretch();actions.addWidget(button('清除已结束记录',self.clear));body.addLayout(actions)
         self.tree.currentItemChanged.connect(lambda *_:self.selection())
         self.timer=QTimer(self);self.timer.setInterval(500);self.timer.timeout.connect(self.refresh);self.timer.start();self.refresh()
 

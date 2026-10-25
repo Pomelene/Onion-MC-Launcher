@@ -187,6 +187,20 @@ def appearance_style(accent,config=None):
         ('color_style','fidelity'),('font_family',''),('font_size',14),('corner_radius',10),('bold_text',False))}
     values.update(color_mode=resolved_mode(config),accent_color=seed)
     style=_cached_appearance_base(tuple(sorted(values.items())))
+    # Data surfaces use neutral chrome; the accent identifies focus and selection.
+    dark=resolved_mode(config)=='dark';size=int(preference(config,'font_size',14))
+    base,hover,selected,border,muted=('#121214','#1b1b1f','#25252b','#303034','#a1a1aa') if dark else ('#ffffff','#fafafa','#f0f0f3','#e5e5e7','#71717a')
+    style+='''
+QTreeWidget { background:BASE; border:0; border-radius:0; padding:0; outline:0; selection-background-color:SELECTED; }
+QTreeWidget::item { padding:7px 12px; border:0; border-bottom:1px solid BORDER; }
+QTreeWidget::item:hover { background:HOVER; }
+QTreeWidget::item:selected { background:SELECTED; }
+QWidget#listRow { background:BASE; border:0; border-bottom:1px solid BORDER; border-radius:0; }
+QWidget#listRow:hover { background:HOVER; }
+QHeaderView::section { background:transparent; border:0; border-bottom:1px solid BORDER; padding:5px 12px; color:MUTED; font-size:HEADERpx; font-weight:400; }
+QTreeWidget#instancePickerList { background:transparent; border:0; }
+QTreeWidget#instancePickerList::item,QTreeWidget#instancePickerList::item:selected,QTreeWidget#instancePickerList::item:hover { padding:0; border:0; background:transparent; }
+'''.replace('BASE',base).replace('HOVER',hover).replace('SELECTED',selected).replace('BORDER',border).replace('MUTED',muted).replace('HEADER',str(round(12*size/14)))
     text_opacity=opacity(preference(config,'text_transparency',0),70)
     if text_opacity<1:
         def text_alpha(match):
@@ -255,11 +269,6 @@ QComboBox QAbstractItemView,QMenu { background:#252d35; color:#edf2f4; border:1p
 QMenu::item { padding:9px 22px; border-radius:6px; }
 QMenu::item:selected { background:#493e59; }
 QMenu::separator { height:1px; margin:5px 8px; background:#35404a; }
-QTreeWidget { background:#1c2229; color:#edf2f4; border:1px solid #303941; border-radius:8px; padding:0; selection-background-color:#443852; }
-QTreeWidget::item { padding:12px 9px; border-bottom:1px solid #303941; }
-QTreeWidget::item:hover { background:#252f37; }
-QTreeWidget::item:selected { background:#443852; color:#f3fcfb; }
-QHeaderView::section { background:#222b33; border:0; border-bottom:1px solid #35404a; padding:10px; color:#aabac2; font-size:12px; }
 QScrollArea { border:0; background:transparent; }
 QScrollArea>QWidget>QWidget { background:transparent; }
 QScrollBar:vertical { background:transparent; width:7px; margin:2px; }
@@ -278,8 +287,6 @@ QWidget#settingRow:hover { background:rgba(187,221,221,7); }
 QWidget#settingRow QLineEdit,QWidget#settingRow QComboBox,QWidget#settingRow QSpinBox { background:transparent; border:1px solid transparent; padding:6px 8px; }
 QWidget#settingRow QLineEdit:focus,QWidget#settingRow QSpinBox:focus { background:#342c40; border-color:#9a81bd; border-radius:5px; }
 QSpinBox QLineEdit,QWidget#settingRow QSpinBox QLineEdit { padding:0; min-height:0; border:0; background:transparent; }
-QWidget#listRow { background:#1c2229; border-bottom:1px solid #303941; }
-QWidget#listRow:hover { background:#252f37; }
 QDialog[embedded='true'] { background:transparent; }
 QDialog#instancePicker,QTreeWidget#instancePickerList { background:transparent; border:0; }
 QTreeWidget#instancePickerList::item,QTreeWidget#instancePickerList::item:selected,QTreeWidget#instancePickerList::item:hover { padding:0; border:0; background:transparent; }

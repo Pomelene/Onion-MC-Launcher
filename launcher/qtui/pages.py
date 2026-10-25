@@ -1,10 +1,12 @@
 """Qt pages delegate filesystem, network and installation work to existing services."""
+from .lists import FlatTreeWidget as QTreeWidget
+
 from pathlib import Path
 from .choices import ChoiceComboBox,ActionMenu
 from PySide6.QtCore import Qt,QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QWidget,QLineEdit,QComboBox,QFormLayout,QCheckBox,QSpinBox,QHeaderView,
-    QTabWidget,QFileDialog,QMessageBox,QDialog,QTreeWidget,QTreeWidgetItem,QMenu)
+    QTabWidget,QFileDialog,QMessageBox,QDialog,QTreeWidgetItem,QMenu)
 from .widgets import Page,Card,Empty,HomeCanvas,ContentRow,WelcomeLine,label,button,column,row,clear,icon,favorite_button
 
 

@@ -6,7 +6,7 @@ from .choices import ActionMenu
 from PySide6.QtCore import Qt,Signal,Slot,QTimer,QUrl
 from PySide6.QtGui import QDesktopServices,QIcon
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QStackedWidget,QComboBox,
-    QLineEdit,QPlainTextEdit,QMessageBox,QInputDialog,QDialog,QFormLayout,QCheckBox,QSpinBox,QProgressBar,QSizePolicy)
+    QLineEdit,QPlainTextEdit,QMessageBox,QInputDialog,QDialog,QFormLayout,QCheckBox,QSpinBox,QProgressBar,QSizePolicy,QScrollArea,QFrame)
 from .widgets import STYLE,themed_style,Page,Card,Empty,label,button,column,row,clear,icon,TaskDialog,NavigationItem,GlassBackdrop,configure_fonts
 from .motion import NavigationSurface
 from .widgets import FeedbackLabel
@@ -61,11 +61,13 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         self.title=label('','heading');self.title.setMinimumWidth(0);self.title.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Preferred);heading_line.addWidget(self.title,1)
         self.brand_widget=QWidget();branding=row(self.brand_widget,0,8);branding.addWidget(label('Onion','heading'));branding.addWidget(label(LAUNCHER_VERSION,'pill'),0,Qt.AlignmentFlag.AlignVCenter);heading_line.addWidget(self.brand_widget);top.addWidget(window_controls(self.frame_controller));outer.addWidget(toolbar)
         lower=row(spacing=0);outer.addLayout(lower,1)
-        side=NavigationSurface();side.setObjectName('sidebar');side.setFixedWidth(220)
+        side=NavigationSurface();side.setObjectName('sidebar');side.setMaximumWidth(220)
         self.sidebar=side
         self.sidebar_body=column(side,0,0);self.sidebar_body.setSizeConstraint(self.sidebar_body.SizeConstraint.SetDefaultConstraint);self.nav={};self.account_button=None
         self.nav_motion=side.selection;self.sidebar_scheme=None
-        lower.addWidget(side)
+        self.sidebar_scroll=QScrollArea();self.sidebar_scroll.setWidgetResizable(True);self.sidebar_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.sidebar_scroll.setFixedWidth(220);self.sidebar_scroll.setMinimumHeight(0);self.sidebar_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.sidebar_scroll.setWidget(side);lower.addWidget(self.sidebar_scroll)
         main=QWidget();main.setObjectName('workspace');body=column(main,0,0);lower.addWidget(main,1)
         self.stack=QStackedWidget();self.page_map={};body.addWidget(self.stack,1)
         for key in ('home','instance','versions','download','settings','about','tools'):

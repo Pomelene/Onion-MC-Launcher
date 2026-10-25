@@ -1,6 +1,8 @@
 """All saved folders in one instance list; never identifies instances by name alone."""
+from .lists import FlatTreeWidget as QTreeWidget
+
 from PySide6.QtCore import Qt,QTimer
-from PySide6.QtWidgets import QDialog,QLineEdit,QTreeWidget,QTreeWidgetItem,QInputDialog,QCheckBox
+from PySide6.QtWidgets import QDialog,QLineEdit,QTreeWidgetItem,QInputDialog,QCheckBox,QHeaderView
 from .widgets import column,row,label,button,favorite_button,icon
 from .choices import ChoiceComboBox
 from ..instance import InstanceStore
@@ -12,7 +14,7 @@ class InstanceOverview(QDialog):
         self.finished.connect(lambda _:setattr(self,'active',False));body=column(self,24,12)
         filters=row();self.query=QLineEdit();self.query.setPlaceholderText('搜索实例、目录或标签');self.query.setClearButtonEnabled(True);filters.addWidget(self.query,1)
         self.only_favorites=QCheckBox('仅收藏');filters.addWidget(self.only_favorites);self.tags_filter=ChoiceComboBox();self.tags_filter.addItem('全部标签','');self.tags_filter.currentIndexChanged.connect(self.render);filters.addWidget(self.tags_filter);self.reload_button=button('刷新',self.fetch,glyph='refresh');filters.addWidget(self.reload_button);body.addLayout(filters)
-        self.tree=QTreeWidget();self.tree.setRootIsDecorated(False);self.tree.setHeaderLabels(['实例','游戏 / 加载器','所属文件夹','标签','收藏']);self.tree.setColumnWidth(0,220);self.tree.setColumnWidth(1,160);self.tree.setColumnWidth(2,200);self.tree.setColumnWidth(4,48);self.tree.header().setStretchLastSection(False);body.addWidget(self.tree,1)
+        self.tree=QTreeWidget();self.tree.setRootIsDecorated(False);self.tree.setHeaderLabels(['实例','游戏 / 加载器','所属文件夹','标签','收藏']);self.tree.setColumnWidth(1,140);self.tree.setColumnWidth(2,160);self.tree.setColumnWidth(3,100);self.tree.setColumnWidth(4,48);self.tree.header().setStretchLastSection(False);self.tree.header().setSectionResizeMode(0,QHeaderView.ResizeMode.Stretch);body.addWidget(self.tree,1)
         self.status=label('正在扫描…','muted',True);body.addWidget(self.status)
         actions=row();self.favorite_button=button('收藏 / 取消收藏',self.favorite,glyph='star');actions.addWidget(self.favorite_button);self.tags_button=button('编辑标签',self.tags);actions.addWidget(self.tags_button);actions.addStretch()
         self.manage_button=button('管理',lambda:self.use('instance'));actions.addWidget(self.manage_button);self.use_button=button('选择并返回首页',lambda:self.use('home'),'primary');actions.addWidget(self.use_button);body.addLayout(actions)

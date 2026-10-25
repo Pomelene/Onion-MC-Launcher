@@ -182,7 +182,7 @@ class Pages:
         def work(job):
             from ..catalog import versions,pick_version,download_version
             if vid and kind!='modpack':repo.assert_idle(vid)
-            target=repo.game_dir/'.cache/modpacks' if kind=='modpack' else run/{'mod':'mods','resourcepack':'resourcepacks','shader':'shaderpacks'}[kind];repo.assert_writable(target)
+            target=repo.cache_path('modpacks') if kind=='modpack' else run/{'mod':'mods','resourcepack':'resourcepacks','shader':'shaderpacks'}[kind];repo.assert_writable(target)
             available=versions(repo.downloader,project_id)
             if release_id is not None:available=[v for v in available if v.get('id')==release_id]
             chosen=pick_version(available,game,loader)

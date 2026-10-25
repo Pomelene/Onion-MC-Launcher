@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .java import JAVA_COMPONENTS
-from .paths import app_root
 
 MOJANG_MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
 BMCLAPI_MANIFEST = "https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json"
@@ -104,7 +103,8 @@ class InfoHub:
     def __init__(self, downloader, cache_dir: Optional[Path] = None,
                  timeout: float = 12.0) -> None:
         self.downloader = downloader
-        self.cache_dir = Path(cache_dir or (app_root() / "config" / "cache"))
+        from .paths import cache_dir as default_cache_dir
+        self.cache_dir = Path(cache_dir or (default_cache_dir() / 'feeds'))
         self.timeout = timeout
         self.data: dict[str, object] = {}
         self.statuses: dict[str, SourceStatus] = {
@@ -141,6 +141,9 @@ class InfoHub:
     def _save_cache(self, key: str, payload) -> None:
         try:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
+            if self.cache_dir.parent.parent.name=='.onion':
+                from .storage import _hide
+                _hide(self.cache_dir.parent.parent)
             path = self._cache_path(key)
             tmp = path.with_suffix(".tmp")
             tmp.write_text(json.dumps({"fetched_at": time.time(), "data": payload},

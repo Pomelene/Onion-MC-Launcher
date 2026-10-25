@@ -542,7 +542,7 @@ class App(tk.Tk):
     def _authlib_jar(self, url: str) -> str:
         if not url:
             return ""
-        jar = self.repo.game_dir / ".cache" / "authlib-injector.jar"
+        jar = self.repo.cache_path('authlib-injector.jar')
         try:
             from ..auth.authlib import ensure_injector
             ensure_injector(self.repo.downloader, jar)

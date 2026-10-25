@@ -72,7 +72,7 @@ def pick_edition(downloader, mc_version: str, edition: str = "") -> Optional[dic
 def _download_installer(repo, mc_version: str, edition: dict,
                         on_progress=None) -> Path:
     filename = edition["filename"]
-    target = child(child(Path(repo.game_dir) / "optifine", mc_version), filename)
+    target = child(child(repo.cache_path('optifine'), mc_version), filename)
     repo.assert_writable(target)
     if target.is_file() and target.stat().st_size > 1024:
         return target
@@ -106,7 +106,7 @@ def install(repo, mc_version: str, edition: Optional[dict] = None,
         raise RuntimeError("安装 OptiFine 需要指定 Java 路径")
 
     stage("准备隔离的安装环境")
-    staging = repo.assert_writable(repo.game_dir / ".craftbridge" / "staging")
+    staging = repo.cache_path('staging')
     staging.mkdir(parents=True, exist_ok=True)
     home = Path(tempfile.mkdtemp(prefix="optifine-", dir=staging))
     temp_mc = home / "AppData" / "Roaming" / ".minecraft"

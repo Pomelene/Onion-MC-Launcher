@@ -113,6 +113,24 @@ def check_next_features(window,base,application):
     controls=window.page_map['instance'].findChildren(QPushButton)
     assert len([b for b in controls if b.text()=='检查并更新'])==1
     assert not hasattr(window,'open_mod_manager') and not window.subpages
+    # Exercise the bundled component path, not the new-instance installer.
+    from ..components import replace_loader,component_info
+    from ..install.instance import next_instance_id
+    from .component_versions import ComponentVersions
+    assert next_instance_id(window.repo,vid)!=vid
+    component=dict(inheritsFrom='1.21.1',mainClass='net.fabricmc.loader.impl.launch.knot.KnotClient',libraries=[dict(name='net.fabricmc:fabric-loader:0.19.5')])
+    downloader,ensure=window.repo.downloader,window.repo._ensure_libraries
+    class ComponentDownload:
+        def fetch_json(self,url):return component if url.endswith('/profile/json') else [dict(loader=dict(version='0.19.5',stable=True))]
+        def cancellable(self,*args):return downloader.cancellable(*args)
+    window.repo.downloader=ComponentDownload();window.repo._ensure_libraries=lambda *args:None
+    try:
+        ids=window.repo.list_installed();replace_loader(window.repo,vid,'fabric','0.19.5')
+        assert window.repo.list_installed()==ids and component_info(window.repo,vid)==('1.21.1','fabric','0.19.5')
+        selector=ComponentVersions(window,vid,'fabric');window.show_subpage(selector);selector.fetch();idle()
+        assert selector.install_button.text()=='已安装' and not selector.install_button.isEnabled()
+        render_hidden(window);selector.reject()
+    finally:window.repo.downloader=downloader;window.repo._ensure_libraries=ensure
     window.preflight(vid);idle();render_hidden(window);window.subpages[-1].reject()
     window.diagnose();idle();assert window.subpages[-1].report;window.subpages[-1].reject()
     record=window.task_history.begin('离线自检',window.repo.game_dir,vid);window.task_history.finish(record,'complete')

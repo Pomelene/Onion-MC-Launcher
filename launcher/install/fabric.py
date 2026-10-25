@@ -7,6 +7,7 @@
 """
 
 import json
+from urllib.parse import quote
 from pathlib import Path
 from typing import Optional
 
@@ -23,7 +24,7 @@ def meta_base(kind: str) -> str:
 
 def list_loaders(downloader, kind: str, game_version: str) -> list[dict]:
     """列出某游戏版本可用的加载器版本（新的在前）。"""
-    url = f"{meta_base(kind)}/versions/loader/{game_version}"
+    url = f"{meta_base(kind)}/versions/loader/{quote(game_version,safe='')}"
     data = downloader.fetch_json(url)
     return data or []
 
@@ -65,7 +66,7 @@ def install_loader(repo, game_version: str, loader_version: Optional[str] = None
     version_id = f"{kind}-loader-{loader_ver}-{game_version}"
 
     stage(f"下载 {kind} 加载器配置")
-    url = f"{meta_base(kind)}/versions/loader/{game_version}/{loader_ver}/profile/json"
+    url = f"{meta_base(kind)}/versions/loader/{quote(game_version,safe='')}/{quote(loader_ver,safe='')}/profile/json"
     profile = repo.downloader.fetch_json(url)
 
     profile["id"] = version_id

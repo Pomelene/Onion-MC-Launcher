@@ -22,7 +22,7 @@ def test_forge_uses_staging_preserves_existing_profiles():
         (base / "1.20.4.jar").write_bytes(b"base")
         marker = repo.game_dir / "launcher_profiles.json"
         marker.write_bytes(b'{"profiles":{"user":"keep"}}')
-        installer_path = repo.game_dir / ".cache" / "installers" / "forge-1.20.4-test-installer.jar"
+        installer_path = repo.game_dir / ".onion" / "cache" / "installers" / "forge-1.20.4-test-installer.jar"
         installer_path.parent.mkdir(parents=True)
         with zipfile.ZipFile(installer_path, "w") as archive:
             archive.writestr("version.json", '{"libraries":[]}')

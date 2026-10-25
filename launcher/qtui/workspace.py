@@ -4,7 +4,7 @@ from .lists import FlatTreeWidget as QTreeWidget
 from PySide6.QtCore import Qt,QPoint,QRectF,QSize,QEvent
 from PySide6.QtGui import QColor,QPainter,QPen,QFont,QFontMetrics
 from PySide6.QtWidgets import QWidget,QDialog,QLineEdit,QTreeWidgetItem,QStackedWidget,QFormLayout,QMessageBox,QStyledItemDelegate,QStyle
-from .widgets import Page,Card,column,row,label,button,clear,icon,control_accent
+from .widgets import Page,Card,ContentRow,column,row,label,button,clear,icon,control_accent
 from .theme import paint_color,surface_opacity,config_for,contrasting_accent,appearance_values,effective_accent,corner,text_size,row_height,preference
 
 
@@ -140,11 +140,22 @@ class InstanceWorkspace(QWidget):
 
     def build_auto(self):
         w=self.launcher;page=self.pages['auto'];clear(page.body)
-        page.body.addWidget(label('游戏组件','eyebrow'))
-        for title,detail in [('Minecraft',self.vid),('当前加载器',w.kinds.get(self.vid,'原版'))]:
-            card=Card();line=row();line.addWidget(label(title),1);line.addWidget(label(detail,'muted'));card.body.addLayout(line);page.body.addWidget(card)
-        page.body.addWidget(label('为此版本创建带加载器的新版本，已有实例文件保持原状。','muted',True))
-        page.body.addWidget(button('选择并安装加载器',w.install_dialog,'soft','plus'))
+        from ..components import component_info
+        from ..version import VersionError
+        try:game,current,version=component_info(w.repo,self.vid)
+        except (OSError,ValueError,VersionError) as error:page.body.addWidget(label(str(error),'muted',True));return
+        page.body.setSpacing(0);page.body.addWidget(ContentRow('Minecraft',game,'package'))
+        for key,title in [('fabric','Fabric'),('quilt','Quilt'),('forge','Forge'),('neoforge','NeoForge'),('optifine','OptiFine')]:
+            supported=key in ('fabric','quilt') and (not current or current==key)
+            detail=version if current==key else '与 '+current.title()+' 不兼容' if current else '未安装'
+            if not supported and (not current or current==key):detail+=' · 暂不支持原位安装'
+            item=ContentRow(title,detail,'package')
+            if supported:
+                def choose(kind=key):
+                    from .component_versions import ComponentVersions
+                    w.show_subpage(ComponentVersions(w,self.vid,kind))
+                item.line.addWidget(button('更换版本' if current==key else '安装',choose,'soft','download'))
+            page.body.addWidget(item)
 
     def build_info(self):
         w=self.launcher;page=self.pages['info'];clear(page.body);meta=w.instances.get(self.vid)

@@ -92,7 +92,7 @@ def install_forge(repo, game_version: str, kind: str = "forge",
         if on_stage:
             on_stage(text)
 
-    repo.assert_writable(repo.game_dir / ".craftbridge")
+    repo.assert_writable(repo.game_dir / ".onion")
 
     stage(f"查询 {kind} 版本列表")
     if not version:
@@ -107,7 +107,7 @@ def install_forge(repo, game_version: str, kind: str = "forge",
     repo.install(game_version, on_stage=on_stage, on_progress=on_progress)
 
     rel, url = _installer_info(kind, game_version, version)
-    cache = repo.game_dir / ".cache" / "installers"
+    cache = repo.cache_path('installers')
     installer = cache / Path(rel).name
     stage(f"下载 {kind} 安装器 {version}")
     if not installer.is_file() or not zipfile.is_zipfile(installer):
@@ -118,7 +118,7 @@ def install_forge(repo, game_version: str, kind: str = "forge",
             repo.downloader.download_one(DownloadJob(url, installer, name=installer.name))
 
     # Never expose the real launcher_profiles.json or user instances to an installer.
-    staging = repo.assert_writable(repo.game_dir / ".craftbridge" / "staging")
+    staging = repo.cache_path('staging')
     staging.mkdir(parents=True, exist_ok=True)
     java = java_path or _pick_installer_java()
     if not java:

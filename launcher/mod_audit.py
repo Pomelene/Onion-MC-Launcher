@@ -4,6 +4,9 @@ Fabric metadata: https://docs.fabricmc.net/develop/loader/fabric-mod-json
 This is a preflight aid, not a replacement for the actual loader's resolver.
 """
 import io,json,re,zipfile,tomllib
+from collections import OrderedDict
+from copy import deepcopy
+from threading import Lock,BoundedSemaphore
 from dataclasses import dataclass,field
 from pathlib import Path
 
@@ -80,6 +83,41 @@ class Issue:
 class InspectionLimit(ValueError):pass
 
 
+# Metadata only: no JAR bytes, account data, or persistent files are cached.
+_METADATA_CACHE=OrderedDict()
+_CACHE_LOCK=Lock()
+_CACHE_BYTES=0
+_CACHE_LIMIT=16*1024*1024
+_ARCHIVE_SLOTS=BoundedSemaphore(4)
+
+
+def _file_identity(path):
+    stat=path.stat()
+    return stat.st_dev,stat.st_ino,stat.st_size,stat.st_mtime_ns,stat.st_ctime_ns
+
+
+def _cached_inspect(path,loader):
+    global _CACHE_BYTES
+    key=(str(path.absolute()),loader);identity=_file_identity(path)
+    with _CACHE_LOCK:
+        cached=_METADATA_CACHE.get(key)
+        if cached and cached[0]==identity:
+            _METADATA_CACHE.move_to_end(key)
+            return deepcopy(cached[1])
+    entries=inspect_jar(path,loader)
+    if _file_identity(path)!=identity:
+        raise OSError('检查期间模组文件发生变化，请重新检查')
+    weight=sum(512+len(m.id)+len(m.version)+len(json.dumps([m.requires,m.conflicts,m.aliases],ensure_ascii=True)) for m in entries)
+    if weight<=_CACHE_LIMIT:
+        with _CACHE_LOCK:
+            old=_METADATA_CACHE.pop(key,None)
+            if old:_CACHE_BYTES-=old[2]
+            _METADATA_CACHE[key]=(identity,deepcopy(entries),weight);_CACHE_BYTES+=weight
+            while len(_METADATA_CACHE)>512 or _CACHE_BYTES>_CACHE_LIMIT:
+                _,old=_METADATA_CACHE.popitem(last=False);_CACHE_BYTES-=old[2]
+    return entries
+
+
 def inspect_jar(path,preferred_loader=''):
     result=[];budget=[128*1024*1024,512]
     def read(zf,name,limit=256*1024):
@@ -144,30 +182,34 @@ def runtime_modules(repo,vid):
     return result
 
 
-def audit(mods_dir,game='',loader='',loader_version='',java='',*,runtime_mods=()):
+def audit(mods_dir,game='',loader='',loader_version='',java='',*,runtime_mods=(),cancel=None,progress=None,use_cache=True):
+    from .parallel import ordered_parallel
     mods_dir=Path(mods_dir);metadata=[];issues=[]
-    for path in sorted(p for p in mods_dir.iterdir() if p.is_file() and p.suffix.lower() in ('.jar','.zip')) if mods_dir.is_dir() else []:
-        if path.is_symlink():issues.append(Issue('warning','linked','跳过链接文件',str(path)));continue
+    paths=sorted(p for p in mods_dir.iterdir() if p.suffix.lower() in ('.jar','.zip') and p.is_file()) if mods_dir.is_dir() else []
+    def inspect_file(item):
+        path,runtime=item;entries=[];file_issues=[]
+        if path.is_symlink():return [],[Issue('warning','linked','跳过链接文件',str(path))]
         try:
-            entries=inspect_jar(path,loader);metadata.extend(m for m in entries if m.environment!='server')
-            if not entries:issues.append(Issue('warning','unknown','无法完整识别模组元数据：'+path.name,str(path)))
-            if any(m.uncertain for m in entries):issues.append(Issue('warning','unsupported',path.name+' 包含条件或组合依赖，需由加载器进一步解析',str(path)))
-        except InspectionLimit as error:issues.append(Issue('warning','unsupported',path.name+' · '+str(error),str(path)))
+            entries=_cached_inspect(path,loader) if use_cache else inspect_jar(path,loader)
+            if runtime:
+                for meta in entries:meta.runtime=True
+            else:
+                if not entries:file_issues.append(Issue('warning','unknown','无法完整识别模组元数据：'+path.name,str(path)))
+                if any(m.uncertain for m in entries):file_issues.append(Issue('warning','unsupported',path.name+' 包含条件或组合依赖，需由加载器进一步解析',str(path)))
+        except InspectionLimit as error:file_issues.append(Issue('warning','unsupported',path.name+' · '+str(error),str(path)))
         except (OSError,ValueError,KeyError,TypeError,AttributeError,zipfile.BadZipFile,tomllib.TOMLDecodeError) as error:
-            issues.append(Issue('error','metadata','模组损坏或元数据无效：'+path.name+' · '+str(error)[:160],str(path)))
-    for path in runtime_mods:
-        try:
-            entries=inspect_jar(path,loader)
-            for meta in entries:meta.runtime=True
-            metadata.extend(m for m in entries if m.environment!='server')
-        except (OSError,ValueError,KeyError,TypeError,zipfile.BadZipFile):issues.append(Issue('warning','unsupported','无法完整读取加载器内嵌组件',str(path)))
+            file_issues.append(Issue('warning' if runtime else 'error','unsupported' if runtime else 'metadata',('无法完整读取加载器内嵌组件' if runtime else '模组损坏或元数据无效：'+path.name+' · '+str(error)[:160]),str(path)))
+        return [m for m in entries if m.environment!='server'],file_issues
+    files=[(path,False) for path in paths]+[(Path(path),True) for path in runtime_mods]
+    for entries,file_issues in ordered_parallel(inspect_file,files,workers=4,cancel=cancel,progress=progress,slots=_ARCHIVE_SLOTS):
+        metadata.extend(entries);issues.extend(file_issues)
     # A bundled JAR is an alternative candidate, not another mandatory root mod.
     # Select shared nested providers against the requirements of active parents.
     roots=[m for m in metadata if m.depth==0];selected={};root_ids={m.id for m in roots}
     rank=lambda m:(_version(m.version) is not None,_version(m.version) or ((0,0,0,0),False,()),m.version)
     for item in roots:
         if item.id not in selected or rank(item)>rank(selected[item.id]):selected[item.id]=item
-    for key in root_ids:
+    for key in sorted(root_ids):
         items=[m for m in roots if m.id==key and not m.runtime]
         if len({str(m.path) for m in items})>1:issues.append(Issue('error','duplicate','重复的顶层模组 ID：'+key+' · '+'、'.join(sorted({m.path.name for m in items})),dependency=key))
     def provider_map(items):

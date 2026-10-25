@@ -48,14 +48,14 @@ def identify(downloader,folder,job=None):
             digest=mod_sha1(path);_cancel(job)
             data=_fetch(downloader,f'{MODRINTH_API}/version_file/{digest}?algorithm=sha1',job)
             if not isinstance(data,dict) or not data.get('project_id'):raise ValueError('未收录')
-            return path,data,''
+            return path,data,'',digest
         except DownloadCancelled:raise
-        except Exception as error:return path,None,str(error)[:120]
-    for path,data,error in ordered_parallel(identify_file,paths,workers=_workers(downloader),cancel=job.cancel if job else None,progress=_progress(job,'识别模组'),slots=_REQUEST_SLOTS):
+        except Exception as error:return path,None,('未在 Modrinth 收录' if getattr(error,'http_status',None)==404 else str(error)[:120]),''
+    for path,data,error,digest in ordered_parallel(identify_file,paths,workers=_workers(downloader),cancel=job.cancel if job else None,progress=_progress(job,'识别模组'),slots=_REQUEST_SLOTS):
         if error:unknown.append(path.name+' · '+error);continue
         pid=data['project_id']
         if pid in found:unknown.append(path.name+' · 同一项目存在多个启用版本，请先处理重复模组');continue
-        found[pid]={'path':path,'version':data}
+        found[pid]={'path':path,'version':data,'sha1':digest}
     return found,unknown
 
 
@@ -89,7 +89,7 @@ def updates(downloader,folder,game,loader,job=None,allow_preview=False):
         candidates=[v for v in versions if compatible(v,game,loader) and (allow_preview or v.get('version_type')=='release') and v.get('files')]
         candidates.sort(key=lambda v:v.get('date_published',''),reverse=True)
         if candidates and date and candidates[0].get('date_published','')>date and candidates[0].get('id')!=current.get('id'):
-            return {'path':item['path'],'current':current,'latest':candidates[0]}
+            return {'path':item['path'],'current':current,'latest':candidates[0],'old_sha1':item['sha1']}
     result=[item for item in ordered_parallel(latest,installed.items(),workers=_workers(downloader),cancel=job.cancel if job else None,progress=_progress(job,'检查更新'),slots=_REQUEST_SLOTS) if item]
     return result,unknown
 

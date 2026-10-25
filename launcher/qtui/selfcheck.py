@@ -79,9 +79,9 @@ def run_raster(output):
 
 
 def check_next_features(window,base,application):
-    """Exercise newly bundled imports, offline plan/apply/undo and embedded pages."""
+    """Exercise bundled direct-update code and embedded pages without network."""
     import io,hashlib,zipfile
-    from ..mod_plan import build_plan,apply_plan,undo_last
+    from ..mod_updates import install_selected
     from ..mod_audit import audit
     vid='next-features-fixture';version=window.repo.versions_dir/vid;version.mkdir(parents=True,exist_ok=True)
     (version/(vid+'.json')).write_text(json.dumps(dict(id=vid,mainClass='Main',libraries=[])),encoding='utf-8')
@@ -101,12 +101,23 @@ def check_next_features(window,base,application):
         def download_one(self,job):job.path.write_bytes(payload)
     original=window.repo.downloader;window.repo.downloader=LocalDownload()
     try:
-        folder=window.repo.run_dir(vid)/'mods';plan=build_plan(window.repo.downloader,folder,[release],'1.21.1','fabric')
-        apply_plan(window.repo,vid,plan);assert (folder/'selfcheck.jar').is_file();assert not [i for i in audit(folder,'1.21.1','fabric') if i.severity=='error']
-        undo_last(window.repo,vid);assert not (folder/'selfcheck.jar').exists()
+        folder=window.repo.run_dir(vid)/'mods';folder.mkdir(parents=True,exist_ok=True)
+        old=folder/'selfcheck-old.jar';old.write_bytes(b'old fixture version')
+        entry=dict(path=old,old_sha1=hashlib.sha1(old.read_bytes()).hexdigest(),latest=release)
+        install_selected(window.repo,vid,[entry]);assert (folder/'selfcheck.jar').is_file()
+        assert not old.exists() and (folder/'selfcheck-old.jar.old').read_bytes()==b'old fixture version'
+        assert not [i for i in audit(folder,'1.21.1','fabric') if i.severity=='error']
     finally:window.repo.downloader=original
     window.open_instance_overview();idle();assert window.subpages[-1].tree.topLevelItemCount()>=1;render_hidden(window);window.subpages[-1].reject()
     window.open_mod_manager(vid);idle();assert not window.subpages[-1].busy;render_hidden(window);window.subpages[-1].reject()
+    from .mod_manager import ModManager
+    class OfflineUpdates(ModManager):
+        def find_updates(self,*args):self.populate([entry],['custom.jar · 未在 Modrinth 收录'])
+    updates=OfflineUpdates(window,vid,mode='updates');window.show_subpage(updates)
+    idle();assert updates.apply_button.isEnabled() and len(updates.rows)==1
+    assert not any(hasattr(updates,key) for key in ('plan_button','undo_button','recover_button'))
+    updates.rows[0][1].click();assert not updates.apply_button.isEnabled()
+    updates.rows[0][1].click();assert updates.apply_button.isEnabled();render_hidden(window);updates.reject()
     window.preflight(vid);idle();render_hidden(window);window.subpages[-1].reject()
     window.diagnose();idle();assert window.subpages[-1].report;window.subpages[-1].reject()
     record=window.task_history.begin('离线自检',window.repo.game_dir,vid);window.task_history.finish(record,'complete')

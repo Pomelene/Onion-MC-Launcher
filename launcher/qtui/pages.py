@@ -206,9 +206,11 @@ class Pages:
         tabs=row();kind=ChoiceComboBox()
         for title,key in [('模组','mods'),('资源包','resourcepacks'),('光影','shaderpacks')]:kind.addItem(title,key)
         kind.setCurrentIndex(max(0,kind.findData(content_kind)));kind.hide()
-        if content_kind=='mods':tabs.addWidget(button('依赖检查 / 更新',lambda:self.open_mod_manager(vid),'soft','settings'))
-        tabs.addWidget(label({'mods':'模组','resourcepacks':'资源包','shaderpacks':'光影'}[content_kind]+' · '+self.instances.display_name(vid),'muted'),1);tabs.addWidget(button('打开目录',lambda:self.open_folder(self.repo.run_dir(vid)/content_kind),glyph='folder'));tabs.addStretch();tabs.addWidget(button('搜索安装',lambda:self.open_content_download(content_kind),'soft','search'));body.addLayout(tabs)
-        query=QLineEdit();query.setPlaceholderText('搜索名称、版本、说明或文件名');tabs.addWidget(query)
+        if content_kind=='mods':
+            tabs.addWidget(button('依赖检查',lambda:self.open_mod_manager(vid),glyph='search'))
+            tabs.addWidget(button('检查更新',lambda:self.open_mod_manager(vid,'updates'),glyph='refresh'))
+        tabs.addWidget(button('打开目录',lambda:self.open_folder(self.repo.run_dir(vid)/content_kind),glyph='folder'));tabs.addWidget(button('搜索安装',lambda:self.open_content_download(content_kind),'soft','search'));body.addLayout(tabs)
+        query=QLineEdit();query.setPlaceholderText('搜索名称、版本、说明或文件名');tabs.addWidget(query,1)
         holder=QWidget();results=column(holder,0,0);body.addWidget(holder)
         visible_rows=[]
         def filter_rows():

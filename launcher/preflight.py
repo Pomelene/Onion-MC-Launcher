@@ -4,7 +4,7 @@ from pathlib import Path
 from .mod_audit import Issue,audit
 
 
-def inspect(repo,vid,settings,*,write_probe=False):
+def inspect(repo,vid,settings,*,write_probe=False,cancel=None,progress=None):
     issues=[]
     try:
         repo.assert_idle(vid);run=repo.run_dir(vid)
@@ -49,7 +49,7 @@ def inspect(repo,vid,settings,*,write_probe=False):
     from .mod_audit import runtime_modules
     try:runtime=runtime_modules(repo,vid)
     except (OSError,ValueError):runtime=[]
-    mods=audit(run/'mods',game,loader,loader_version,java_major,runtime_mods=runtime)
+    mods=audit(run/'mods',game,loader,loader_version,java_major,runtime_mods=runtime,cancel=cancel,progress=progress)
     if (run/'config/fabric_loader_dependencies.json').exists():
         for item in mods:
             if item.code in ('missing','version','conflict'):item.severity='warning'

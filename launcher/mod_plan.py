@@ -1,10 +1,15 @@
 """Explicit Modrinth dependency plans and recoverable, verified mod changes."""
 import json,os,shutil,uuid
+from contextlib import nullcontext
+from threading import BoundedSemaphore
 from pathlib import Path
 from urllib.parse import quote,urlsplit
 from .download import DownloadJob,DownloadCancelled
 from .safety import child,component,contained,write_text
-from .mods import scan_mods,mod_sha1,MODRINTH_API
+from .mods import mod_sha1,MODRINTH_API
+from .parallel import ordered_parallel
+
+_REQUEST_SLOTS=BoundedSemaphore(8)
 
 
 def _cancel(job):
@@ -34,20 +39,40 @@ def pending_changes(repo,folder):
 
 def identify(downloader,folder,job=None):
     found={};unknown=[]
-    for info in scan_mods(Path(folder)):
-        if not info.enabled:continue
+    folder=Path(folder)
+    paths=sorted(p for p in folder.iterdir() if p.suffix.lower() in ('.jar','.zip') and p.is_file()) if folder.exists() else []
+    def identify_file(path):
         _cancel(job)
-        if job:job.emit('识别 '+info.path.name)
         try:
-            digest=mod_sha1(info.path)
-            data=downloader.fetch_json(f'{MODRINTH_API}/version_file/{digest}?algorithm=sha1')
+            if path.is_symlink():raise ValueError('跳过链接文件')
+            digest=mod_sha1(path);_cancel(job)
+            data=_fetch(downloader,f'{MODRINTH_API}/version_file/{digest}?algorithm=sha1',job)
             if not isinstance(data,dict) or not data.get('project_id'):raise ValueError('未收录')
-            pid=data['project_id']
-            if pid in found:raise ValueError('同一项目存在多个启用版本，请先处理重复模组')
-            found[pid]={'path':info.path,'version':data}
+            return path,data,''
         except DownloadCancelled:raise
-        except Exception as error:unknown.append(info.path.name+' · '+str(error)[:120])
+        except Exception as error:return path,None,str(error)[:120]
+    for path,data,error in ordered_parallel(identify_file,paths,workers=_workers(downloader),cancel=job.cancel if job else None,progress=_progress(job,'识别模组'),slots=_REQUEST_SLOTS):
+        if error:unknown.append(path.name+' · '+error);continue
+        pid=data['project_id']
+        if pid in found:unknown.append(path.name+' · 同一项目存在多个启用版本，请先处理重复模组');continue
+        found[pid]={'path':path,'version':data}
     return found,unknown
+
+
+def _workers(downloader):return max(1,min(8,int(getattr(downloader,'threads',8))))
+
+
+def _progress(job,title):
+    return (lambda done,total:job.emit(f'{title} {done}/{total}')) if job else None
+
+
+def _fetch(downloader,url,job):
+    _cancel(job)
+    # Downloader cancellation state is thread-local and must be installed in
+    # each new request worker, rather than inherited from the Qt task thread.
+    context=downloader.cancellable(job.cancel,getattr(job,'transferred',None)) if job and hasattr(downloader,'cancellable') else nullcontext()
+    with context:
+        data=downloader.fetch_json(url);_cancel(job);return data
 
 
 def compatible(version,game,loader):
@@ -56,21 +81,23 @@ def compatible(version,game,loader):
 
 def updates(downloader,folder,game,loader,job=None,allow_preview=False):
     installed,unknown=identify(downloader,folder,job);result=[]
-    for pid,item in installed.items():
+    def latest(entry):
+        pid,item=entry
         _cancel(job)
-        versions=downloader.fetch_json(f'{MODRINTH_API}/project/{quote(pid,safe="")}/version')
+        versions=_fetch(downloader,f'{MODRINTH_API}/project/{quote(pid,safe="")}/version',job)
         current=item['version'];date=current.get('date_published','')
         candidates=[v for v in versions if compatible(v,game,loader) and (allow_preview or v.get('version_type')=='release') and v.get('files')]
         candidates.sort(key=lambda v:v.get('date_published',''),reverse=True)
         if candidates and date and candidates[0].get('date_published','')>date and candidates[0].get('id')!=current.get('id'):
-            result.append({'path':item['path'],'current':current,'latest':candidates[0]})
+            return {'path':item['path'],'current':current,'latest':candidates[0]}
+    result=[item for item in ordered_parallel(latest,installed.items(),workers=_workers(downloader),cancel=job.cancel if job else None,progress=_progress(job,'检查更新'),slots=_REQUEST_SLOTS) if item]
     return result,unknown
 
 
 def build_plan(downloader,folder,roots,game,loader,job=None,optional=False):
     folder=Path(folder);before=snapshot(folder);installed,unknown=identify(downloader,folder,job)
     from .mod_audit import audit
-    if any(i.code=='duplicate' for i in audit(folder,game,loader)):raise ValueError('请先处理重复模组 ID，再生成安装或更新方案')
+    if any(i.code=='duplicate' for i in audit(folder,game,loader,cancel=job.cancel if job else None)):raise ValueError('请先处理重复模组 ID，再生成安装或更新方案')
     chosen={};reasons={};conflicts=[]
     def visit(version,reason):
         _cancel(job)
@@ -172,8 +199,8 @@ def apply_plan(repo,vid,plan,job=None):
         for name in journal['new']:link(child(incoming,name),child(proposed,name))
         from .mod_audit import audit,runtime_modules
         runtime=runtime_modules(repo,vid);java=str(repo.resolver.resolve(vid).java_major or '')
-        before_errors={(i.code,i.message) for i in audit(folder,plan['game'],plan['loader'],java=java,runtime_mods=runtime) if i.severity=='error'}
-        new_errors=[i.message for i in audit(proposed,plan['game'],plan['loader'],java=java,runtime_mods=runtime) if i.severity=='error' and (i.code,i.message) not in before_errors]
+        before_errors={(i.code,i.message) for i in audit(folder,plan['game'],plan['loader'],java=java,runtime_mods=runtime,cancel=job.cancel if job else None,use_cache=False) if i.severity=='error'}
+        new_errors=[i.message for i in audit(proposed,plan['game'],plan['loader'],java=java,runtime_mods=runtime,cancel=job.cancel if job else None,use_cache=False) if i.severity=='error' and (i.code,i.message) not in before_errors]
         if new_errors:raise ValueError('下载后的依赖核对未通过：\n'+'\n'.join(new_errors[:12]))
         for file in proposed.iterdir():contained(file,stage).unlink()
         proposed.rmdir();assert_mods_idle(repo,vid);_cancel(job)

@@ -79,7 +79,7 @@ class ModManager(QDialog):
     def check(self):
         def work(job):
             from ..mod_audit import audit,runtime_modules
-            game,loader,version=self.context();return audit(self.repo.run_dir(self.vid)/'mods',game,loader,version,self.environment['java'],runtime_mods=runtime_modules(self.repo,self.vid))
+            game,loader,version=self.context();return audit(self.repo.run_dir(self.vid)/'mods',game,loader,version,self.environment['java'],runtime_mods=runtime_modules(self.repo,self.vid),cancel=job.cancel,progress=lambda done,total:job.emit(f'检查模组 {done}/{total}'))
         def done(issues):
             self.issues.clear()
             for issue in issues:

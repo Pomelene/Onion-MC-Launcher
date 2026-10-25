@@ -29,7 +29,7 @@ class HealthReport(QDialog):
                 from ..crash import reports
                 return reports(self.repo.run_dir(self.vid))
             from ..preflight import inspect
-            return inspect(self.repo,self.vid,settings)
+            return inspect(self.repo,self.vid,settings,cancel=job.cancel)
         def done(items):
             if not self.active:return
             self.loading=False;self.refresh_button.setEnabled(True);self.tree.clear();blocks=[]

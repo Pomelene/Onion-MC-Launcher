@@ -34,7 +34,7 @@ class Actions:
             from ..java import resolve_java
             from ..preflight import inspect
             job.emit('启动前环境体检')
-            issues=inspect(repo,vid,overrides,write_probe=True)
+            issues=inspect(repo,vid,overrides,write_probe=True,cancel=job.cancel,progress=lambda done,total:job.emit(f'检查模组 {done}/{total}'))
             errors=[issue.message for issue in issues if issue.severity=='error']
             if errors:raise RuntimeError('启动前检查发现问题，请在实例管理中打开“环境体检”：\n'+'\n'.join(errors[:12]))
             job.emit('正在验证账号')

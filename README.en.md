@@ -4,11 +4,13 @@
 
 **A free, open-source, community-oriented launcher for Minecraft: Java Edition.**
 
-Current source version: [v0.3.0.1](https://github.com/Pomelene/Onion-MC-Launcher/tree/v0.3.0.1). Windows packages are available under [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases). Extract the ZIP and run `OnionMinecraftLauncher.exe`.
+Current source version: [v0.3.1](https://github.com/Pomelene/Onion-MC-Launcher/tree/v0.3.1). Windows packages are available under [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases). Extract the ZIP and run `OnionMinecraftLauncher.exe`.
 
-v0.3.0.1 corrected reissue: removes THUnion-only web initialization and navigation accidentally included in the public edition, fixing the missing `web_tools` startup crash. Release builds now exercise the real application entry point.
+**v0.3.1**: Improve appearance, UI, and usability.
 
 **v0.3.0.1**: First launch fits the available screen area. Closing saves the normal window size and maximized state; reopening on a smaller screen clamps the size. Uses DPI-aware logical pixels, independently of game resolution.
+
+v0.3.0.1 corrected reissue: removes THUnion-only web initialization and navigation accidentally included in the public edition, fixing the missing `web_tools` startup crash. Release builds now exercise the real application entry point.
 
 **v0.3.0 improves download and modpack installation**: compact task windows show real stages and network transfer speed. Modpacks are staged privately and published as one standalone instance. Pending paths with Unicode names and the skin head underside orientation have been corrected.
 

@@ -10,7 +10,7 @@ class ModManager(QDialog):
         super().__init__(owner);self.owner=owner;self.repo=owner.repo;self.vid=vid;self.release_id=release_id;self.project_id=project_id;self.active=True;self.busy=False;self.plan=None
         self.navigation_title='模组检查与更新 · '+owner.instances.display_name(vid);self.setWindowTitle(self.navigation_title)
         self.finished.connect(self.closed);self.read_job=None;body=column(self,24,12)
-        body.addWidget(label(owner.instances.display_name(vid),'heading'));body.addWidget(label(str(self.repo.run_dir(vid)/'mods'),'muted',True))
+        body.addWidget(label(owner.instances.display_name(vid),'heading'));self.context_label=label('正在读取运行环境…','muted',True);body.addWidget(self.context_label);body.addWidget(label(str(self.repo.run_dir(vid)/'mods'),'muted',True))
         actions=row();self.audit_button=button('依赖检查',self.check,glyph='search');actions.addWidget(self.audit_button)
         self.updates_button=button('检查模组更新',self.find_updates,glyph='refresh');actions.addWidget(self.updates_button)
         self.preview_versions=QCheckBox('包含测试版更新');actions.addWidget(self.preview_versions);actions.addStretch();body.addLayout(actions)
@@ -44,8 +44,15 @@ class ModManager(QDialog):
         if self.read_job:self.read_job.cancel.set()
 
     def context(self):
-        from ..modpack import _base_version,_detect_loader
-        game=_base_version(self.repo,self.vid);loader,version=_detect_loader(self.repo,self.vid)
+        from ..modpack import _detect_loader
+        rv=self.repo.resolver.resolve(self.vid);game=rv.game_version;loader,version=_detect_loader(self.repo,self.vid)
+        settings=self.owner.version_settings.resolve(self.vid,self.owner.config_obj);java=str(rv.java_major or '')
+        explicit=settings.get('java_path')
+        if explicit:
+            from pathlib import Path
+            from ..java import probe_java
+            selected=probe_java(Path(explicit));java=str(selected.major) if selected else ''
+        self.environment={'game':game,'loader':loader,'version':version,'java':java,'automatic':not bool(explicit),'source':rv.game_version_source}
         return game,loader,version
 
     def enabled(self):
@@ -58,21 +65,28 @@ class ModManager(QDialog):
         if self.busy or not self.active:return
         self.busy=True;self.status.setText(title);self.enabled()
         def success(value):
-            if self.active:self.busy=False;done(value);self.enabled()
+            if self.active:
+                self.busy=False
+                if hasattr(self,'environment'):
+                    env=self.environment
+                    self.context_label.setText(' · '.join(['Minecraft '+(env['game'] or '版本信息缺失'),(env['loader'] or '原版')+(' '+env['version'] if env['version'] else ''),'Java '+(env['java'] or '未识别')+('（自动选择）' if env['automatic'] else '（指定）')]))
+                    self.context_label.setToolTip('游戏版本来源：'+(env['source'] or '未找到客户端版本信息'))
+                done(value);self.enabled()
         def failed(error):
             if self.active:self.busy=False;self.status.setText(str(error));self.enabled()
         self.read_job=self.owner.tasks.submit(work,success,failed,lambda value:self.status.setText(value) if self.active and isinstance(value,str) else None,self.repo.downloader)
 
     def check(self):
         def work(job):
-            from ..mod_audit import audit
-            game,loader,version=self.context();return audit(self.repo.run_dir(self.vid)/'mods',game,loader,version)
+            from ..mod_audit import audit,runtime_modules
+            game,loader,version=self.context();return audit(self.repo.run_dir(self.vid)/'mods',game,loader,version,self.environment['java'],runtime_mods=runtime_modules(self.repo,self.vid))
         def done(issues):
             self.issues.clear()
             for issue in issues:
                 node=QTreeWidgetItem([{'error':'需处理','warning':'待核对','info':'提示'}.get(issue.severity,issue.severity),issue.message]);node.setData(0,Qt.ItemDataRole.UserRole,issue.dependency if issue.code in ('missing','version') and issue.dependency not in ('java','minecraft','fabricloader','quilt_loader','forge','neoforge') else '')
                 node.setToolTip(1,issue.message+'\n'+issue.path);self.issues.addTopLevelItem(node)
-            self.status.setText(f'{sum(i.severity=="error" for i in issues)} 项需处理，{sum(i.severity=="warning" for i in issues)} 项待核对。检查不能替代加载器的实际解析。' if issues else '未发现已支持规则中的依赖问题；仍需以实际加载结果为准。')
+            if not issues:self.issues.addTopLevelItem(QTreeWidgetItem(['通过','未发现缺少前置、版本不匹配或重复的顶层模组']))
+            self.status.setText(f'{sum(i.severity=="error" for i in issues)} 项需处理，{sum(i.severity=="warning" for i in issues)} 项提示。选择条目查看具体原因。' if issues else '依赖检查通过。')
             self.tabs.setCurrentWidget(self.issues)
         self.run_read('正在读取本地依赖…',work,done)
 

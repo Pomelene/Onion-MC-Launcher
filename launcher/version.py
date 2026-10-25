@@ -6,7 +6,8 @@
 - 产出可直接用于下载与启动的"展开版本"
 """
 
-import json
+import json,re,zipfile
+from functools import lru_cache
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -15,6 +16,22 @@ from .libraries import Library
 from .rules import evaluate_rules
 
 VERSION_MANIFEST_URL = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
+
+
+@lru_cache(maxsize=64)
+def _jar_version(path,stamp,size):
+    """Read small artifact metadata, cached by the actual file identity."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            entry=archive.getinfo('version.json')
+            if entry.file_size>65536:return {}
+            data=json.loads(archive.read(entry))
+            return data if isinstance(data,dict) else {}
+    except (OSError,ValueError,KeyError,zipfile.BadZipFile):return {}
+
+
+def _official_version(value):
+    return isinstance(value,str) and bool(re.fullmatch(r'(?:\d+\.\d+(?:\.\d+)?(?:-(?:pre|rc|alpha|beta)[.-]?\d+)?|\d{2}w\d{2}[a-z]|[ab]\d+(?:\.\d+)+)',value))
 
 
 class VersionError(Exception):
@@ -107,6 +124,8 @@ class ResolvedVersion:
     game_args: list[str] = field(default_factory=list)
     #: 旧版（1.12-）的 minecraftArguments 字符串
     minecraft_args: Optional[str] = None
+    game_version: str = ""
+    game_version_source: str = ""
 
     @property
     def uses_new_arguments(self) -> bool:
@@ -196,6 +215,20 @@ class VersionResolver:
                 if data.get("minecraftArguments") is not None:
                     rv.minecraft_args = data["minecraftArguments"]
                     break
+        # Merged/renamed profiles often omit inheritance and Java metadata.
+        # Read the client itself rather than interpreting the instance's name.
+        jar_owner=rv.jar_id or rv.client_version_id or version_id
+        artifact=self.json_path(jar_owner).with_suffix('.jar')
+        try:
+            stamp=artifact.stat();metadata=_jar_version(str(artifact),stamp.st_mtime_ns,stamp.st_size)
+        except OSError:metadata={}
+        actual=metadata.get('id') or metadata.get('name')
+        if _official_version(actual):rv.game_version=actual;rv.game_version_source='客户端 JAR / version.json'
+        if isinstance(metadata.get('java_version'),int) and 1<=metadata['java_version']<=100:rv.java_major=metadata['java_version']
+        if not rv.game_version:
+            explicit=next((data['onionGameVersion'] for data in chain if _official_version(data.get('onionGameVersion'))),'')
+            canonical=next((data['id'] for data in reversed(chain) if _official_version(data.get('id'))),'')
+            rv.game_version=explicit or canonical;rv.game_version_source='版本配置' if rv.game_version else ''
         return rv
 
     def list_installed(self) -> list[str]:

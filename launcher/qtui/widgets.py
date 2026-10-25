@@ -221,10 +221,10 @@ def icon(name, color='#bac7cd'):
     if name in ('search','account','world','history'):
         rect={'search':(3,3,14,14),'account':(8,3,8,8),'world':(2,2,20,20),'history':(3,3,18,18)}[name]
         painter.drawEllipse(QRectF(*rect))
-    for points in PATHS.get(name,[] if name in ('rocket','github') else PATHS['package']):
+    for points in (PATHS['star'] if name=='star-filled' else PATHS.get(name,[] if name in ('rocket','github') else PATHS['package'])):
         path=QPainterPath(QPointF(*points[0]))
         for point in points[1:]:path.lineTo(QPointF(*point))
-        if name=='play':painter.fillPath(path,QColor(color))
+        if name in ('play','star-filled'):painter.fillPath(path,QColor(color))
         else:painter.drawPath(path)
     painter.end();image.setDevicePixelRatio(3)
     return QIcon(image)
@@ -275,6 +275,16 @@ def button(text, callback=None, role='', glyph=None):
     item.setProperty('role',role)
     if glyph:item.setProperty('onionGlyph',glyph);item.setIcon(icon(glyph,'#281f35' if role=='primary' else '#bac7cd'));item.setIconSize(QSize(18,18))
     if callback:item.clicked.connect(lambda checked=False: callback())
+    return item
+
+
+def favorite_button(checked,callback):
+    item=button('');item.setCheckable(True);item.setFixedSize(34,34);item.setStyleSheet('padding:0;')
+    def state(value):
+        glyph='star-filled' if value else 'star';item.setProperty('onionGlyph',glyph)
+        item.setIcon(icon(glyph,control_accent(item) if value else '#a4b0ba'));item.setIconSize(QSize(20,20))
+        title='取消收藏' if value else '收藏';item.setToolTip(title);item.setAccessibleName(title)
+    item.toggled.connect(state);item.setChecked(bool(checked));state(bool(checked));item.clicked.connect(callback)
     return item
 
 

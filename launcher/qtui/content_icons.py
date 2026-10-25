@@ -16,7 +16,7 @@ def read_content_icon(path):
             candidates=[]
             for name in ('fabric.mod.json','quilt.mod.json'):
                 try:
-                    data=json.loads(read(name,256*1024))
+                    data=json.loads(read(name,256*1024).decode('utf-8-sig'),strict=False)
                     value=(data.get('quilt_loader',{}).get('metadata',{}) if name.startswith('quilt') else data).get('icon')
                     if isinstance(value,dict):value=next((value[k] for k in ('128','64','32','256') if k in value),next(iter(value.values()),None))
                     if isinstance(value,str):candidates.append(value)

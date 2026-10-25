@@ -7,7 +7,7 @@ from .widgets import column,row,label,button,TaskDialog
 
 class TaskCenter(QWidget):
     def __init__(self,owner):
-        super().__init__();self.owner=owner;body=column(self,0,12);heading=row();heading.addWidget(label('任务中心','heading'),1)
+        super().__init__();self.owner=owner;body=column(self,0,12);heading=row();heading.addWidget(label('下载任务','heading'),1)
         heading.addWidget(button('清除已结束记录',self.clear));body.addLayout(heading)
         split=QSplitter(Qt.Orientation.Vertical);body.addWidget(split,1)
         self.tree=QTreeWidget();self.tree.setRootIsDecorated(False);self.tree.setHeaderLabels(['任务','状态','进度 / 已接收','时间']);self.tree.setColumnWidth(0,250);self.tree.setColumnWidth(1,90);self.tree.setColumnWidth(2,180);split.addWidget(self.tree)

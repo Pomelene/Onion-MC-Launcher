@@ -3,9 +3,9 @@ from pathlib import Path
 from .choices import ChoiceComboBox,ActionMenu
 from PySide6.QtCore import Qt,QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import (QWidget,QLineEdit,QComboBox,QFormLayout,QCheckBox,QSpinBox,
+from PySide6.QtWidgets import (QWidget,QLineEdit,QComboBox,QFormLayout,QCheckBox,QSpinBox,QHeaderView,
     QTabWidget,QFileDialog,QMessageBox,QDialog,QTreeWidget,QTreeWidgetItem,QMenu)
-from .widgets import Page,Card,Empty,HomeCanvas,ContentRow,WelcomeLine,label,button,column,row,clear,icon
+from .widgets import Page,Card,Empty,HomeCanvas,ContentRow,WelcomeLine,label,button,column,row,clear,icon,favorite_button
 
 
 class Pages:
@@ -56,21 +56,33 @@ class Pages:
         sort=ChoiceComboBox();sort.addItems(['名称排序','最近游玩','游玩时长']);sort.setCurrentIndex(getattr(self,'library_sort',0));toolbar.addWidget(sort)
         kinds.setMaximumWidth(110);sort.setMaximumWidth(125)
         toolbar.addWidget(button('安装',self.install_dialog,'primary','plus'));body.addLayout(toolbar)
+        filters=row();favorites=ChoiceComboBox();favorites.addItems(['全部实例','仅收藏']);favorites.setCurrentIndex(int(getattr(self,'library_favorites_only',False)));self.library_favorites=favorites
+        tags=ChoiceComboBox();tags.addItem('全部标签','')
+        for tag in sorted({tag for vid in self.versions for tag in self.instances.get(vid).tags},key=str.casefold):tags.addItem(tag,tag)
+        tags.setCurrentIndex(max(0,tags.findData(getattr(self,'library_tag',''))));self.library_tags=tags
+        filters.addWidget(label('筛选','muted'));filters.addWidget(favorites);filters.addWidget(tags);filters.addStretch();body.addLayout(filters)
         library=row();path=label(str(self.repo.game_dir),'muted');path.setMinimumWidth(0)
         from PySide6.QtWidgets import QSizePolicy
         path.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Preferred);path.setToolTip(str(self.repo.game_dir))
         library.addWidget(path,1);library.addWidget(button('刷新',self.reload_versions,glyph='refresh'));body.addLayout(library)
-        tree=QTreeWidget();self.version_tree=tree;tree.setRootIsDecorated(False);tree.setHeaderLabels(['实例名称','游戏版本 / 加载器','分组','上次游玩']);tree.setColumnWidth(0,240);tree.setColumnWidth(1,240);tree.setColumnWidth(2,100);tree.setMinimumHeight(380);body.addWidget(tree,1)
+        tree=QTreeWidget();self.version_tree=tree;tree.setRootIsDecorated(False);tree.setHeaderLabels(['实例名称','游戏版本 / 加载器','分组 / 标签','上次游玩','收藏']);tree.header().setStretchLastSection(False);tree.header().setSectionResizeMode(0,QHeaderView.ResizeMode.Stretch);tree.setColumnWidth(1,210);tree.setColumnWidth(2,110);tree.setColumnWidth(3,140);tree.setColumnWidth(4,48);tree.setMinimumHeight(300);body.addWidget(tree,1)
         summary=label('','muted');body.addWidget(summary)
         def render():
             self.library_query=query.text();self.library_kind=kinds.currentIndex();self.library_sort=sort.currentIndex();tree.clear();text=query.text().strip().lower()
+            self.library_favorites_only=bool(favorites.currentIndex());self.library_tag=tags.currentData() or ''
             versions=[v for v in self.versions if (kinds.currentIndex()==0 or self.kinds.get(v)==kinds.currentText()) and text in (v+' '+self.instances.display_name(v)+' '+self.instances.get(v).group+' '+' '.join(self.instances.get(v).tags)).lower()]
+            versions=[v for v in versions if (not self.library_favorites_only or self.instances.get(v).favorite) and (not self.library_tag or self.library_tag in self.instances.get(v).tags)]
             versions.sort(key=(lambda v:self.instances.display_name(v).lower()) if sort.currentIndex()==0 else (lambda v:self.instances.get(v).last_played) if sort.currentIndex()==1 else (lambda v:self.instances.get(v).play_seconds),reverse=sort.currentIndex()!=0)
             versions.sort(key=lambda v:not self.instances.get(v).favorite)
             for vid in versions:
-                meta=self.instances.get(vid);item=QTreeWidgetItem([('★ ' if meta.favorite else '')+meta.display_name,vid+' · '+self.kinds.get(vid,'原版'),' · '.join([meta.group,*meta.tags]),meta.last_played_text()]);item.setData(0,Qt.ItemDataRole.UserRole,vid)
+                meta=self.instances.get(vid);item=QTreeWidgetItem([meta.display_name,vid+' · '+self.kinds.get(vid,'原版'),' · '.join([meta.group,*meta.tags]),meta.last_played_text(),'']);item.setData(0,Qt.ItemDataRole.UserRole,vid)
                 for column in range(tree.columnCount()):item.setToolTip(column,item.text(column))
                 tree.addTopLevelItem(item)
+                def mark(checked,version=vid):
+                    try:self.instances.update(version,favorite=checked)
+                    except Exception as error:self.error(error)
+                    render()
+                tree.setItemWidget(item,4,favorite_button(meta.favorite,mark))
                 if vid==self.selected_version:tree.setCurrentItem(item)
             summary.setText(f'{len(versions)} / {len(self.versions)} 个实例')
         tree.setToolTip('单击选择，双击返回首页；右键管理实例')
@@ -90,7 +102,7 @@ class Pages:
             def tags():
                 from PySide6.QtWidgets import QInputDialog
                 value,ok=QInputDialog.getText(self,'实例标签','多个标签用逗号分隔',text=', '.join(self.instances.get(vid).tags))
-                if ok:self.instances.update(vid,tags=value);render()
+                if ok:self.instances.update(vid,tags=value);self.build_versions()
             menu.addAction('取消收藏' if self.instances.get(vid).favorite else '收藏实例',favorite);menu.addAction('编辑标签',tags);menu.addSeparator()
             for title,callback in [('选择并返回首页',select_home),('重命名实例',lambda:self.rename_instance(vid)),('管理实例',lambda:self.instance_settings(vid)),('启动游戏',lambda:self.launch_version_id(vid)),('打开目录',lambda:self.open_folder(self.repo.run_dir(vid))),('导出整合包',lambda:self.export_modpack(vid)),('移入恢复中心',lambda:self.delete_version(vid))]:menu.addAction(title,callback)
             menu.exec(tree.viewport().mapToGlobal(point))
@@ -103,7 +115,7 @@ class Pages:
             available=bool(chosen());manage_button.setEnabled(available);use_button.setEnabled(available)
             create_button.setEnabled(bool(self.selected_version))
         tree.currentItemChanged.connect(lambda *_:selection_state())
-        query.textChanged.connect(render);kinds.currentIndexChanged.connect(render);sort.currentIndexChanged.connect(render);render();selection_state()
+        query.textChanged.connect(render);kinds.currentIndexChanged.connect(render);sort.currentIndexChanged.connect(render);favorites.currentIndexChanged.connect(render);tags.currentIndexChanged.connect(render);render();selection_state()
 
     def build_about(self):
         body=self.page('about')
@@ -130,6 +142,11 @@ class Pages:
         while page.body.count():
             item=page.body.takeAt(0)
             if item.widget():item.widget().setParent(None)
+        if kind=='tasks':
+            from .task_center import TaskCenter
+            if not hasattr(self,'download_tasks'):
+                self.download_tasks=TaskCenter(self);self.download_tasks.layout().setContentsMargins(24,20,24,20)
+            page.body.addWidget(self.download_tasks);self.download_tasks.show();self.download_tasks.refresh();return
         browser=self.download_browsers.get(kind)
         if browser is None or browser.repo is not self.repo:
             if browser is not None:browser.request_id+=1;browser.deleteLater()

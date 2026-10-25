@@ -52,7 +52,7 @@ def test_version_predicates_and_unknown_are_conservative():
     assert matches('1.2.3','>=1.2 <2') is True
     assert matches('1.9','1.2.x') is False
     assert matches('1.2.8','1.2.*') is True
-    assert matches('0.0.3','^0.0.3') is True and matches('0.0.4','^0.0.3') is False
+    assert matches('0.0.3','^0.0.3') is True and matches('0.0.4','^0.0.3') is True and matches('1.0','^0.0.3') is False
     assert matches('1.2.9','~1.2.3') is True and matches('1.3','~1.2.3') is False
     assert matches('1.2.3','[1.0,2.0)') is True and matches('2.0','[1.0,2.0)') is False
     assert matches('1.2.3-rc.1','>=1.2.3') is False

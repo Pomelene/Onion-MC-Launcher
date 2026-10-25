@@ -170,9 +170,10 @@ def apply_plan(repo,vid,plan,job=None):
         for name in plan['before']:
             if name not in journal['old'] and name.lower().endswith(('.jar','.zip')):link(child(folder,name),child(proposed,name))
         for name in journal['new']:link(child(incoming,name),child(proposed,name))
-        from .mod_audit import audit
-        before_errors={(i.code,i.message) for i in audit(folder,plan['game'],plan['loader']) if i.severity=='error'}
-        new_errors=[i.message for i in audit(proposed,plan['game'],plan['loader']) if i.severity=='error' and (i.code,i.message) not in before_errors]
+        from .mod_audit import audit,runtime_modules
+        runtime=runtime_modules(repo,vid);java=str(repo.resolver.resolve(vid).java_major or '')
+        before_errors={(i.code,i.message) for i in audit(folder,plan['game'],plan['loader'],java=java,runtime_mods=runtime) if i.severity=='error'}
+        new_errors=[i.message for i in audit(proposed,plan['game'],plan['loader'],java=java,runtime_mods=runtime) if i.severity=='error' and (i.code,i.message) not in before_errors]
         if new_errors:raise ValueError('下载后的依赖核对未通过：\n'+'\n'.join(new_errors[:12]))
         for file in proposed.iterdir():contained(file,stage).unlink()
         proposed.rmdir();assert_mods_idle(repo,vid);_cancel(job)

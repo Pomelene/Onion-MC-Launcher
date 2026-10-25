@@ -50,7 +50,7 @@ def identify(downloader,folder,job=None):
             if not isinstance(data,dict) or not data.get('project_id'):raise ValueError('未收录')
             return path,data,'',digest
         except DownloadCancelled:raise
-        except Exception as error:return path,None,('未在 Modrinth 收录' if getattr(error,'http_status',None)==404 else str(error)[:120]),''
+        except Exception as error:return path,None,('未在 Modrinth 收录' if getattr(error,'http_status',None)==404 else str(error)[:120] or type(error).__name__),''
     for path,data,error,digest in ordered_parallel(identify_file,paths,workers=_workers(downloader),cancel=job.cancel if job else None,progress=_progress(job,'识别模组'),slots=_REQUEST_SLOTS):
         if error:unknown.append(path.name+' · '+error);continue
         pid=data['project_id']

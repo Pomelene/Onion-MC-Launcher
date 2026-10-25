@@ -176,24 +176,25 @@ class Pages:
     def install_project(self,project_id,kind,game,loader,version_id=None,release_id=None):
         vid=self.selected_version if version_id is None else version_id
         if not vid and kind!='modpack':self.error('请先选择一个游戏实例。');return
-        if kind=='mod':
-            from .mod_manager import ModManager
-            self.show_subpage(ModManager(self,vid,release_id,project_id));return True
         repo=self.repo;run=repo.run_dir(vid) if vid else repo.game_dir
         def work(job):
             from ..catalog import versions,pick_version,download_version
-            from ..mods import install_dependencies
             if vid and kind!='modpack':repo.assert_idle(vid)
             target=repo.game_dir/'.cache/modpacks' if kind=='modpack' else run/{'mod':'mods','resourcepack':'resourcepacks','shader':'shaderpacks'}[kind];repo.assert_writable(target)
             available=versions(repo.downloader,project_id)
             if release_id is not None:available=[v for v in available if v.get('id')==release_id]
             chosen=pick_version(available,game,loader)
             if not chosen:raise RuntimeError('没有适配当前版本或加载器的文件。')
+            if kind=='mod':
+                from ..mod_plan import build_plan
+                from ..mod_updates import install_selected
+                plan=build_plan(repo.downloader,target,[chosen],game,loader,job)
+                selected=[dict(path=target/e['old'] if e['old'] else None,latest=e['version'],old_sha1=plan['before'].get(e['old'],'')) for e in plan['entries'] if e['action']!='保留']
+                install_selected(repo,vid,selected,job);return None
             target.mkdir(parents=True,exist_ok=True);job.emit('正在下载项目文件');path=download_version(repo.downloader,chosen,target)
             if kind=='modpack':
                 from ..modpack import import_modpack
                 return import_modpack(repo,path,job.emit,lambda a,b:job.emit((a,b)))
-            if kind=='mod':install_dependencies(repo.downloader,chosen.get('id'),target,game,loader)
             return None
         def start():
             if self.repo is not repo:self.error('游戏目录已切换，请回到原目录重新安装');return
@@ -207,8 +208,7 @@ class Pages:
         for title,key in [('模组','mods'),('资源包','resourcepacks'),('光影','shaderpacks')]:kind.addItem(title,key)
         kind.setCurrentIndex(max(0,kind.findData(content_kind)));kind.hide()
         if content_kind=='mods':
-            tabs.addWidget(button('依赖检查',lambda:self.open_mod_manager(vid),glyph='search'))
-            tabs.addWidget(button('检查更新',lambda:self.open_mod_manager(vid,'updates'),glyph='refresh'))
+            tabs.addWidget(button('检查并更新',lambda:self.update_mods(vid),glyph='refresh'))
         tabs.addWidget(button('打开目录',lambda:self.open_folder(self.repo.run_dir(vid)/content_kind),glyph='folder'));tabs.addWidget(button('搜索安装',lambda:self.open_content_download(content_kind),'soft','search'));body.addLayout(tabs)
         query=QLineEdit();query.setPlaceholderText('搜索名称、版本、说明或文件名');tabs.addWidget(query,1)
         holder=QWidget();results=column(holder,0,0);body.addWidget(holder)

@@ -13,7 +13,7 @@ class HealthReport(QDialog):
         self.tree=QTreeWidget();self.tree.setRootIsDecorated(False);self.tree.setHeaderLabels(['项目','来源 / 级别']);self.tree.setColumnWidth(0,430);body.addWidget(self.tree,1)
         self.details=QPlainTextEdit();self.details.setReadOnly(True);body.addWidget(self.details,1)
         actions=row();self.refresh_button=button('重新检查',self.fetch,glyph='refresh');actions.addWidget(self.refresh_button)
-        actions.addWidget(button('模组依赖检查',self.mods));actions.addStretch();actions.addWidget(button('复制报告',self.copy,glyph='copy'));actions.addWidget(button('返回',self.reject));body.addLayout(actions)
+        actions.addStretch();actions.addWidget(button('复制报告',self.copy,glyph='copy'));actions.addWidget(button('返回',self.reject));body.addLayout(actions)
         self.tree.currentItemChanged.connect(self.selection);QTimer.singleShot(0,self.fetch)
 
     def closed(self,*args):
@@ -51,5 +51,3 @@ class HealthReport(QDialog):
     def copy(self):
         from ..crash import redact
         QApplication.clipboard().setText(redact(self.report))
-
-    def mods(self):self.accept();self.owner.open_mod_manager(self.vid)

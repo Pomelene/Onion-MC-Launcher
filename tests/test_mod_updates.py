@@ -100,3 +100,15 @@ def test_unlisted_mod_is_not_network_failure_and_does_not_block_other_updates():
         assert len(selected)==1 and len(unknown)==1 and '未在 Modrinth 收录' in unknown[0]
         install_selected(repo,'fixture',selected)
         assert (folder/'custom.jar').exists() and (folder/'old.jar.old').read_bytes()==old_data
+
+
+def test_empty_identification_error_still_skips_only_that_file():
+    with tempfile.TemporaryDirectory() as tmp:
+        repo,folder,remote,entries,old_data,data=setup_update(Path(tmp));fetch=remote.fetch_json
+        (folder/'custom.jar').write_bytes(jar('custom'))
+        def lookup(url):
+            try:return fetch(url)
+            except StopIteration:raise ValueError()
+        remote.fetch_json=lookup
+        selected,unknown=updates(remote,folder,'1.21.1','fabric')
+        assert len(selected)==1 and len(unknown)==1 and 'ValueError' in unknown[0]

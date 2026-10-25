@@ -142,13 +142,11 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
         versions_page.install()
         assert selected_install.call_args.kwargs['release_id']=='old'
     selected_release=dict(releases[1],project_id='fixture')
-    with patch.object(window.repo.downloader,'fetch_json',return_value=selected_release):
-        window.install_project('fixture','mod','1.21.1','fabric',version_id=old_vid,release_id='old');preview=window.subpages[-1]
-        pump(lambda:len(preview.rows)==1 and not preview.busy)
-        assert preview.release_id=='old'
-        assert preview.selected()[0]['latest']['id']=='old' and preview.apply_button.isEnabled()
-        assert not hasattr(preview,'plan_button')
-        preview.reject()
+    with patch('launcher.catalog.versions',return_value=[selected_release]),patch('launcher.mod_plan.build_plan',return_value=dict(entries=[],before={})) as planned:
+        window.install_project('fixture','mod','1.21.1','fabric',version_id=old_vid,release_id='old')
+        pump(lambda:not window.tasks.jobs)
+        assert planned.call_args.args[2][0]['id']=='old'
+        assert not any(type(view).__name__=='ModManager' for view in window.subpages)
     # A modpack creates a new instance even when no existing target was chosen.
     from unittest.mock import Mock
     with patch('launcher.catalog.versions',return_value=[]),patch('launcher.catalog.pick_version',return_value={'id':'fixture'}),patch('launcher.catalog.download_version',side_effect=lambda downloader,version,target:target/'fixture.mrpack') as downloaded,patch('launcher.modpack.import_modpack',return_value='new-pack'),patch.object(window,'installed') as installed:

@@ -109,15 +109,10 @@ def check_next_features(window,base,application):
         assert not [i for i in audit(folder,'1.21.1','fabric') if i.severity=='error']
     finally:window.repo.downloader=original
     window.open_instance_overview();idle();assert window.subpages[-1].tree.topLevelItemCount()>=1;render_hidden(window);window.subpages[-1].reject()
-    window.open_mod_manager(vid);idle();assert not window.subpages[-1].busy;render_hidden(window);window.subpages[-1].reject()
-    from .mod_manager import ModManager
-    class OfflineUpdates(ModManager):
-        def find_updates(self,*args):self.populate([entry],['custom.jar · 未在 Modrinth 收录'])
-    updates=OfflineUpdates(window,vid,mode='updates');window.show_subpage(updates)
-    idle();assert updates.apply_button.isEnabled() and len(updates.rows)==1
-    assert not any(hasattr(updates,key) for key in ('plan_button','undo_button','recover_button'))
-    updates.rows[0][1].click();assert not updates.apply_button.isEnabled()
-    updates.rows[0][1].click();assert updates.apply_button.isEnabled();render_hidden(window);updates.reject()
+    window.navigate('instance');window.open_instance_tab('mods');idle();render_hidden(window)
+    controls=window.page_map['instance'].findChildren(QPushButton)
+    assert len([b for b in controls if b.text()=='检查并更新'])==1
+    assert not hasattr(window,'open_mod_manager') and not window.subpages
     window.preflight(vid);idle();render_hidden(window);window.subpages[-1].reject()
     window.diagnose();idle();assert window.subpages[-1].report;window.subpages[-1].reject()
     record=window.task_history.begin('离线自检',window.repo.game_dir,vid);window.task_history.finish(record,'complete')

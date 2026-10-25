@@ -186,12 +186,22 @@ PATHS = {
  'trash':[[(4,6),(20,6)],[(9,6),(9,3),(15,3),(15,6)],[(6,6),(7,21),(17,21),(18,6)],[(10,10),(10,17)],[(14,10),(14,17)]],
  'up':[[(6,15),(12,9),(18,15)]],
  'java':[[(5,9),(5,17),(8,20),(15,20),(18,17),(18,9),(5,9)],[(18,10),(22,10),(22,14),(18,14)],[(10,6),(11,3)]],
+ 'feedback':[[(5,3),(19,3),(21,5),(21,15),(19,17),(9,17),(4,21),(4,17),(3,15),(3,5),(5,3)],[(7,8),(17,8)],[(7,12),(14,12)]],
 }
 
 def icon(name, color='#bac7cd'):
     image=QPixmap(72,72); image.fill(Qt.GlobalColor.transparent)
     painter=QPainter(image);painter.setRenderHint(QPainter.RenderHint.Antialiasing);painter.scale(3,3)
     painter.setPen(QPen(QColor(color),1.6,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
+    if name=='github':
+        path=QPainterPath(QPointF(8,21))
+        path.lineTo(8,17);path.cubicTo(4,18,4,14,2,14)
+        path.moveTo(16,21);path.lineTo(16,17);path.cubicTo(16,16,15.5,15.5,15,15)
+        path.cubicTo(20,14.5,21,12,20,8);path.lineTo(20,4)
+        path.cubicTo(18,4,17,5,16,6);path.cubicTo(13,5,11,5,8,6)
+        path.cubicTo(7,5,6,4,4,4);path.lineTo(4,8)
+        path.cubicTo(3,12,4,14.5,9,15);path.cubicTo(8.5,15.5,8,16,8,17)
+        painter.drawPath(path)
     if name=='tools':
         # Open-jaw spanner, drawn as one continuous rounded outline.
         path=QPainterPath(QPointF(14.7,6.3))
@@ -210,7 +220,7 @@ def icon(name, color='#bac7cd'):
     if name in ('search','account','world','history'):
         rect={'search':(3,3,14,14),'account':(8,3,8,8),'world':(2,2,20,20),'history':(3,3,18,18)}[name]
         painter.drawEllipse(QRectF(*rect))
-    for points in PATHS.get(name,[] if name=='rocket' else PATHS['package']):
+    for points in PATHS.get(name,[] if name in ('rocket','github') else PATHS['package']):
         path=QPainterPath(QPointF(*points[0]))
         for point in points[1:]:path.lineTo(QPointF(*point))
         if name=='play':painter.fillPath(path,QColor(color))

@@ -317,7 +317,7 @@ def row(parent=None,margin=0,spacing=10):
 
 class Card(QFrame):
     def __init__(self,title='',subtitle='',parent=None):
-        super().__init__(parent);self.setObjectName('card');self.body=column(self,20,12)
+        super().__init__(parent);self.setFrameShape(QFrame.Shape.NoFrame);self.setObjectName('card');self.body=column(self,20,12)
         if title:self.body.addWidget(label(title,'heading'))
         if subtitle:self.body.addWidget(label(subtitle,'muted',True))
 
@@ -328,7 +328,26 @@ class SettingsSection(QWidget):
         if title:
             heading=label(title,'eyebrow');heading.setContentsMargins(0,12,0,9);outer.addWidget(heading)
             if subtitle:heading.setToolTip(subtitle)
-        surface=QWidget();surface.setObjectName('settingsSection');self.body=column(surface,0,0);outer.addWidget(surface)
+        surface=QWidget();surface.setObjectName('settingsSection');self.body=column(surface,1,0);outer.addWidget(surface)
+
+
+class SettingsRow(QWidget):
+    """Keep row feedback inside the group's outline, with no terminal divider."""
+    def __init__(self):
+        super().__init__();self.setObjectName('settingRow');self.setProperty('roundedRow',True)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover,True)
+
+    def paintEvent(self,event):
+        parent=self.parentWidget();p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if parent is not None and parent.objectName()=='settingsSection':
+            origin=self.mapFrom(parent,QPoint(0,0));bounds=QRectF(origin.x()+1,origin.y()+1,parent.width()-2,parent.height()-2)
+            clip=QPainterPath();clip.addRoundedRect(bounds,max(0,corner(self,10)-1),max(0,corner(self,10)-1));p.setClipPath(clip)
+            if self.underMouse():
+                tint=paint_color(self,'hover');tint.setAlpha(round(7*surface_opacity(config_for(self))));p.fillRect(self.rect(),tint)
+            if self.geometry().bottom()<parent.height()-2:
+                line=paint_color(self,'track');line.setAlpha(round(70*surface_opacity(config_for(self))))
+                p.setPen(QPen(line,1));p.drawLine(QPointF(16,self.height()-.5),QPointF(self.width()-16,self.height()-.5))
+        p.end()
 
 
 class ToggleSwitch(QCheckBox):
@@ -445,7 +464,8 @@ class ContentCheck(QCheckBox):
         if self.isChecked():
             p.setPen(QPen(QColor('#253047'),2,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
             path=QPainterPath(QPointF(7,14));path.lineTo(11,18);path.lineTo(18,10);p.drawPath(path)
-        if self.hasFocus():p.setPen(QPen(QColor(control_accent(self)),1,Qt.PenStyle.DotLine));p.setBrush(Qt.BrushStyle.NoBrush);p.drawRect(self.rect().adjusted(0,0,-1,-1))
+        if self.hasFocus() and self.testAttribute(Qt.WidgetAttribute.WA_KeyboardFocusChange):
+            p.setPen(QPen(QColor(control_accent(self)),1));p.setBrush(Qt.BrushStyle.NoBrush);p.drawRoundedRect(QRectF(self.rect()).adjusted(.5,.5,-.5,-.5),5,5)
         p.end()
 
 
@@ -644,7 +664,7 @@ class HomeCanvas(Landscape):
 
 def setting_row(layout,title,description,control):
     """A HMCL-style title, explanation and aligned editor row."""
-    container=QWidget();container.setObjectName('settingRow');container.setMinimumHeight(58)
+    container=SettingsRow();container.setMinimumHeight(58)
     line=row(container,16,20);line.setContentsMargins(16,6,16,6)
     text=label(title,'settingTitle');text.setToolTip(description);text.setMinimumWidth(128);line.addWidget(text,1)
     if isinstance(control,QWidget):
@@ -707,7 +727,7 @@ class TaskDialog(QDialog):
 
     def paintEvent(self,event):
         painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(paint_color(self,'base'));painter.drawRoundedRect(QRectF(self.rect()),12,12)
+        painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(paint_color(self,'base'));painter.drawRoundedRect(QRectF(self.rect()),corner(self,12),corner(self,12))
 
     @staticmethod
     def byte_text(value):

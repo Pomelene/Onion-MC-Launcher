@@ -166,7 +166,13 @@ QLabel#authCode { color:ACCENT; }
     size=int(preference(config or {},'font_size',14))
     style=re.sub(r'font-size:(\d+)px',lambda m:'font-size:'+str(round(int(m[1])*size/14))+'px',style)
     radius=int(preference(config or {},'corner_radius',10))
-    style=re.sub(r'border-radius:(\d+)px',lambda m:'border-radius:'+str(round(int(m[1])*radius/10) if int(m[1])>=5 else int(m[1]))+'px',style)
+    def round_rule(match):
+        selector,declarations=match[1],match[2]
+        # Slider thumbs and tracks are geometric primitives, not panel corners.
+        if 'QSlider::' not in selector:
+            declarations=re.sub(r'border-radius:(\d+)px',lambda m:'border-radius:'+str(round(int(m[1])*radius/10) if int(m[1])>=5 else int(m[1]))+'px',declarations)
+        return selector+'{'+declarations+'}'
+    style=re.sub(r'([^{}]+)\{([^{}]*)\}',round_rule,style)
     if values['bold_text']:style+='\nQWidget,QLabel#eyebrow,QLabel#muted { font-weight:600; }\n'
     return style
 
@@ -193,7 +199,7 @@ def appearance_style(accent,config=None):
     style+='''
 QTreeWidget { background:transparent; border:0; border-radius:0; padding:0; outline:0; }
 QTreeWidget::item,QTreeWidget::item:hover,QTreeWidget::item:selected { padding:0; border:0; background:transparent; }
-QWidget#listRow { background:BASE; border:0; border-bottom:1px solid BORDER; border-radius:0; }
+QWidget#listRow { background:BASE; border:0; border-radius:0; }
 QWidget#listRow:hover { background:HOVER; }
 QHeaderView::section { background:transparent; border:0; border-bottom:1px solid BORDER; padding:5px 12px; color:MUTED; font-size:HEADERpx; font-weight:400; }
 QTreeWidget#instancePickerList { background:transparent; border:0; }
@@ -246,7 +252,7 @@ QPushButton:hover { background:#303a43; }
 QPushButton:pressed { background:#3a4851; }
 QPushButton[animated='true']:hover,QPushButton[animated='true']:pressed { background:transparent; }
 QPushButton[animated='true'][role='primary']:hover,QPushButton[animated='true'][role='primary']:pressed { background:#cebafa; }
-QPushButton:focus { border-color:#a58acb; }
+QPushButton:focus { border-color:transparent; }
 QPushButton:disabled { color:#687780; background:transparent; }
 QPushButton[role='primary'] { background:#cebafa; color:#281f35; font-weight:600; border:1px solid transparent; }
 QPushButton[role='primary']:hover { background:#e0d1ff; }
@@ -269,6 +275,7 @@ QMenu::item:selected { background:#493e59; }
 QMenu::separator { height:1px; margin:5px 8px; background:#35404a; }
 QScrollArea { border:0; background:transparent; }
 QScrollArea>QWidget>QWidget { background:transparent; }
+QSplitter::handle { background:transparent; }
 QScrollBar:vertical { background:transparent; width:7px; margin:2px; }
 QScrollBar::handle:vertical { background:#51616b; border-radius:2px; min-height:30px; }
 QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical { height:0; }
@@ -282,6 +289,7 @@ QCheckBox::indicator:disabled { background:#2a3239; border-color:#4b575f; }
 QToolTip { background:#303c44; color:#f2f7f8; border:1px solid #50616a; border-radius:6px; padding:8px; }
 QWidget#settingRow { background:transparent; border-bottom:1px solid #303941; }
 QWidget#settingRow:hover { background:rgba(187,221,221,7); }
+QWidget#settingRow[roundedRow='true'],QWidget#settingRow[roundedRow='true']:hover { background:transparent; border:0; }
 QWidget#settingRow QLineEdit,QWidget#settingRow QComboBox,QWidget#settingRow QSpinBox { background:transparent; border:1px solid transparent; padding:6px 8px; }
 QWidget#settingRow QLineEdit:focus,QWidget#settingRow QSpinBox:focus { background:#342c40; border-color:#9a81bd; border-radius:5px; }
 QSpinBox QLineEdit,QWidget#settingRow QSpinBox QLineEdit { padding:0; min-height:0; border:0; background:transparent; }

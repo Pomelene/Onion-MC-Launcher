@@ -16,7 +16,9 @@ def paint_popup(widget,painter,radius=12):
     fill=paint_color(widget,'surface');factor=surface_opacity(config_for(widget));fill.setAlpha(round(252*factor))
     border=paint_color(widget,'icon');border.setAlpha(round(50*factor))
     painter.setPen(QPen(border,1));painter.setBrush(fill)
-    painter.drawRoundedRect(QRectF(widget.rect()).adjusted(.5,.5,-.5,-.5),corner(widget,radius),corner(widget,radius))
+    rect=QRectF(widget.rect()).adjusted(.5,.5,-.5,-.5)
+    rounding=min(corner(widget,radius),rect.width()/2,rect.height()/2)
+    painter.drawRoundedRect(rect,rounding,rounding)
 
 
 class ChoiceDelegate(QStyledItemDelegate):

@@ -112,6 +112,11 @@ class SettingsEditor(QWidget):
             self.check(card,'close_after_launch','启动后收起窗口','游戏启动成功后隐藏启动器')
             self.check(card,'keep_launcher_open','游戏退出后保留启动器','关闭此项会在游戏退出后结束启动器')
             self.check(card,'show_launch_logs','启动后显示日志页','便于查看游戏输出和定位问题');body.addWidget(card)
+            card=Card('启动器更新')
+            self.check(card,'check_launcher_updates','启动时检查更新','仅提示当前版本系列的新版本')
+            from ..paths import LAUNCHER_VERSION
+            setting_row(card.body,'当前版本','',button(LAUNCHER_VERSION+' · 检查更新',lambda:window.updater.check(manual=True),'soft','refresh'))
+            body.addWidget(card)
             card=Card('账号管理','正版、离线与外置账号在统一的账号窗口中管理。')
             card.body.addWidget(button('管理游戏账号',window.open_accounts,'soft','account'));body.addWidget(card)
             body=tab('外观','grid');card=Card('界面外观','透明度越高，显示越淡；修改后自动保存。')

@@ -74,11 +74,12 @@ class Downloader:
 
     def __init__(self, threads: int = 8, retries: int = DEFAULT_RETRIES,
                  timeout: int = DEFAULT_TIMEOUT, proxy: Optional[str] = None,
-                 speed_limit: int = 0):
+                 speed_limit: int = 0, *, use_system_proxy: bool = True):
         self.threads = max(1, threads)
         self.retries = max(1, retries)
         self.timeout = timeout
         self.proxy = proxy
+        self.use_system_proxy = use_system_proxy
         self.speed_limit = max(0, int(speed_limit))  # KB/s，0 表示不限
         self._local = threading.local()
         self._rate_lock = threading.Lock()
@@ -109,6 +110,8 @@ class Downloader:
         if self.proxy:
             handlers.append(urllib.request.ProxyHandler(
                 {"http": self.proxy, "https": self.proxy}))
+        elif not self.use_system_proxy:
+            handlers.append(urllib.request.ProxyHandler({}))
         return urllib.request.build_opener(*handlers)
 
     # ---------- 简单请求 ----------

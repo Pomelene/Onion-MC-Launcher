@@ -25,6 +25,7 @@ def run(output):
         root = Path(folder)
         config = Config(root/'onionmcl.json')
         config.set('game_dir', str(root/'game'))
+        config.set('check_launcher_updates', False)
         os.environ['WEBVIEW2_USER_DATA_FOLDER'] = str(root/'webview')
         log.setup_logging = lambda **kwargs: original_logging(root/'logs', **kwargs)
         sys.excepthook = lambda kind, error, tb: failures.append(str(error))

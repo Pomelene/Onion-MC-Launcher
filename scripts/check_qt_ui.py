@@ -14,9 +14,13 @@ from launcher.qtui.app import MainWindow
 from launcher.qtui.accounts import AccountsDialog,MicrosoftLogin
 from launcher.qtui.widgets import configure_fonts
 from unittest.mock import patch
+# Default browsing is asynchronous; all catalog data in this check is offline.
+_catalog_stub = patch('launcher.catalog.search', return_value={'hits': [], 'total_hits': 0})
+
 from launcher.auth.microsoft import DeviceCode,LoginCancelled
 
 print('Initializing offscreen QApplication',flush=True)
+_catalog_stub.start()
 app=QApplication([]);app.setStyle('Fusion');errors=[]
 configure_fonts(app)
 print('QApplication initialized',flush=True)
@@ -96,7 +100,7 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
     render(window,'qt-compact-download.png')
     assert len(window.page_map['download'].findChildren(ContentRow))==1,errors
     browser=window.download_browser
-    def catalog_fixture(dl,kind,text,game,loader,limit,offset):
+    def catalog_fixture(dl,kind,text,game,loader,limit,offset,**filters):
         return {'total_hits':60,'hits':[{'project_id':f'fixture-{offset+i}','title':f'示例内容 {offset+i:02d}','author':'示例作者','downloads':1000+i,'description':'用于验证列表布局、返回位置和分页状态的临时内容。'} for i in range(limit)]}
     with patch('launcher.catalog.search',side_effect=catalog_fixture) as searches:
         browser.search(0);pump(lambda:not window.tasks.jobs);app.processEvents()

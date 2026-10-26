@@ -14,19 +14,31 @@ KINDS = {"mod": "模组", "resourcepack": "资源包", "shader": "光影", "modp
 
 
 def search(downloader, kind: str, query: str, game_version: str = "",
-           loader: str = "", limit: int = 20, offset: int = 0) -> dict:
+           loader: str = "", limit: int = 20, offset: int = 0, *, category: str = "", sort: str = "relevance") -> dict:
     """搜索 Modrinth 项目，返回原始响应（含 hits 与 total_hits）。"""
+    from .catalog_search import SORTS,search_terms
+    if kind not in KINDS:raise ValueError('不支持的项目类型')
+    if sort not in {value for _,value in SORTS}:raise ValueError('不支持的排序方式')
     facets = [[f"project_type:{kind}"]]
     if game_version:
         facets.append([f"versions:{game_version}"])
     if loader:
         facets.append([f"categories:{loader}"])
+    if category:
+        facets.append([f"categories:{category}"])
     params = {
-        "query": query, "limit": str(limit), "offset": str(offset),
-        "index": "relevance", "facets": json.dumps(facets),
+        "query": search_terms(kind,query), "limit": str(max(1,min(100,int(limit)))), "offset": str(max(0,int(offset))),
+        "index": sort, "facets": json.dumps(facets),
     }
     url = f"{MODRINTH_API}/search?" + urllib.parse.urlencode(params)
     return downloader.fetch_json(url)
+
+
+def categories(downloader,kind):
+    """Read the provider's current category tags; never confuse them with loaders."""
+    data=downloader.fetch_json(f'{MODRINTH_API}/tag/category')
+    return sorted({entry['name'] for entry in data if isinstance(entry,dict)
+                   and entry.get('project_type')==kind and isinstance(entry.get('name'),str)})
 
 
 def project(downloader, project_id: str) -> dict:

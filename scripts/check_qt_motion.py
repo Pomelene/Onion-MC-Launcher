@@ -9,6 +9,9 @@ import tempfile
 import time
 from pathlib import Path
 from unittest.mock import patch
+# Default browsing is asynchronous; all catalog data in this check is offline.
+_catalog_stub = patch('launcher.catalog.search', return_value={'hits': [], 'total_hits': 0})
+
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / '.deps/qt')]
@@ -47,6 +50,7 @@ def almost_same(first,second):
     return all(abs(a-b)<.001 for a,b in zip(first.getRect(),second.getRect()))
 
 
+_catalog_stub.start()
 app = QApplication([])
 app.setStyle('Fusion')
 configure_fonts(app)

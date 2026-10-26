@@ -4,7 +4,9 @@
 
 **A free, open-source, community-oriented launcher for Minecraft: Java Edition.**
 
-Current source version: [v0.3.1](https://github.com/Pomelene/Onion-MC-Launcher/tree/v0.3.1). Windows packages are available under [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases). Extract the ZIP and run `OnionMinecraftLauncher.exe`.
+Current source version: [v0.3.2](https://github.com/Pomelene/Onion-MC-Launcher/tree/v0.3.1). Windows packages are available under [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases). Extract the ZIP and run `OnionMinecraftLauncher.exe`.
+
+**v0.3.2**: Improve mod checks and direct updates, crash diagnostics, and launch preflight. Add cross-folder instance overview, favorites and tags, a download task center, and skin favorites. Unify list layouts, replace Fabric / Quilt in place, publish one instance per new installation, and consolidate caches under `.onion`.
 
 **v0.3.1**: Improve appearance, UI, and usability.
 

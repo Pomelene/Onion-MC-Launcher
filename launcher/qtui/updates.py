@@ -7,13 +7,22 @@ from PySide6.QtWidgets import QApplication,QDialog,QMessageBox
 from .widgets import column,row,label,button
 from .tasks import TaskManager
 from .theme import paint_color,corner
+from .choices import ChoiceComboBox
 from .. import updates
 
 
-class UpdatePrompt(QDialog):
+class UpdateDialog(QDialog):
+    def paintEvent(self,event):
+        painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(paint_color(self,'base'))
+        painter.drawRoundedRect(QRectF(self.rect()),corner(self,12),corner(self,12))
+
+
+class UpdatePrompt(UpdateDialog):
     def __init__(self,owner,release):
         super().__init__(owner);self.setWindowTitle('启动器更新');self.setFixedWidth(460)
-        body=column(self,24,16);body.addWidget(label('发现新版本 '+release.version,'heading'))
+        title='发现新版本 ' if release.order>updates.LAUNCHER_UPDATE_ORDER else '切换到版本 '
+        body=column(self,24,16);body.addWidget(label(title+release.version,'heading'))
         if release.notes:
             notes=label(release.notes,'muted',True)
             notes.setTextFormat(Qt.TextFormat.PlainText)
@@ -23,10 +32,24 @@ class UpdatePrompt(QDialog):
         actions.addWidget(button('下载并重启',self.accept,'primary','download'));body.addLayout(actions)
         later.setDefault(True);later.setFocus()
 
-    def paintEvent(self,event):
-        painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(paint_color(self,'base'))
-        painter.drawRoundedRect(QRectF(self.rect()),corner(self,12),corner(self,12))
+class VersionPicker(UpdateDialog):
+    def __init__(self,owner,releases):
+        super().__init__(owner);self.setWindowTitle('版本管理');self.setFixedWidth(460)
+        body=column(self,24,14);self.versions=ChoiceComboBox();self.versions.setAccessibleName('启动器版本')
+        for item in releases:self.versions.addItem(item.version+('（当前）' if item.version==updates.LAUNCHER_VERSION else ''),item)
+        body.addWidget(self.versions);self.notes=label('','muted',True);self.notes.setTextFormat(Qt.TextFormat.PlainText);self.notes.setMaximumHeight(180);body.addWidget(self.notes)
+        self.warning=label('0.3.2 及以下版本不支持自动升级，之后需手动下载安装新版。','muted',True);body.addWidget(self.warning)
+        body.addWidget(label('保留当前程序路径、文件名和设置。','muted',True))
+        actions=row();actions.addStretch();actions.addWidget(button('取消',self.reject))
+        self.proceed=button('安装并重启',self.accept,'primary','download');actions.addWidget(self.proceed);body.addLayout(actions)
+        self.versions.currentIndexChanged.connect(self.changed);self.changed()
+
+    def changed(self):
+        item=self.versions.currentData()
+        self.notes.setText(item.notes if item else '');self.warning.setVisible(bool(item and not item.supports_updater))
+        self.proceed.setEnabled(bool(item and item.version!=updates.LAUNCHER_VERSION))
+
+    def selected_release(self):return self.versions.currentData()
 
 
 class UpdateController(QObject):
@@ -55,6 +78,17 @@ class UpdateController(QObject):
             # Startup connectivity and malformed remote data never create UI.
             self.checking=False
         self.check_tasks.submit(lambda job:updates.check_update(proxy=proxy),done,failed)
+
+    def manage_versions(self):
+        if self.checking or self.installing:return
+        self.checking=True;proxy=self.owner.repo.downloader.proxy
+        def done(releases):
+            self.checking=False;choices=updates.available_releases(releases)
+            if not choices:return
+            picker=VersionPicker(self.owner,choices)
+            if picker.exec()==QDialog.DialogCode.Accepted and picker.proceed.isEnabled():self.install(picker.selected_release())
+        def failed(error):self.checking=False
+        self.check_tasks.submit(lambda job:updates.fetch_releases(proxy=proxy),done,failed)
 
     def busy(self):
         w=self.owner

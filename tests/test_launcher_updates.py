@@ -41,6 +41,14 @@ def test_update_order_is_numeric_and_isolated_between_editions():
     assert updates.select_release([], '0.3.2',32) is None
 
 
+def test_manual_history_includes_downgrades_and_other_editions():
+    releases=updates.parse_manifest({'schema_version':1,'releases':[entry('0.2.0',1),entry('0.3.3',33),entry('0.3.2-T',32)]})
+    choices=updates.available_releases(releases,'0.3.3')
+    assert [r.version for r in choices]==['0.3.3','0.2.0','0.3.2-T']
+    assert [r.version for r in updates.available_releases(releases,'0.3.3-T')]==['0.3.2-T','0.3.3','0.2.0']
+    assert updates.select_release(releases,'0.3.3',33) is None
+
+
 def test_manifest_rejects_wrong_series_downloads_sizes_and_duplicate_orders():
     for key,value in [('series','other'),('version','0.3.3-T'),('version','latest'),('order',True),('order','33'),
             ('platform','linux-x64'),('size',True),('size',updates.MAX_EXE+1),('sha256','bad'),('notes',{'html':'invalid'}),

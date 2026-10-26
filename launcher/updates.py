@@ -34,6 +34,7 @@ class Release:
     size:int
     sha256:str
     notes:str=''
+    supports_updater:bool=False
 
 
 def edition(version=LAUNCHER_VERSION):
@@ -62,7 +63,9 @@ def parse_manifest(data):
         size=item.get('size');digest=item.get('sha256');notes=item.get('notes','')
         if type(size) is not int or not 1<=size<=MAX_EXE or not isinstance(digest,str) or not re.fullmatch('[0-9a-fA-F]{64}',digest):raise ValueError('更新文件校验信息无效')
         if not isinstance(notes,str) or len(notes)>4000 or any(ord(c)<32 and c not in '\n\t\r' for c in notes):raise ValueError('更新说明无效')
-        result.append(Release(series,version,order,target,url,size,digest.lower(),notes))
+        support=item.get('supports_updater',False)
+        if type(support) is not bool:raise ValueError('版本更新能力标记无效')
+        result.append(Release(series,version,order,target,url,size,digest.lower(),notes,support))
     return result
 
 
@@ -72,11 +75,20 @@ def select_release(releases,version=LAUNCHER_VERSION,order=LAUNCHER_UPDATE_ORDER
     return latest if latest and latest.order>order and latest.version!=version else None
 
 
-def check_update(*,proxy=None,version=LAUNCHER_VERSION,order=LAUNCHER_UPDATE_ORDER):
+def fetch_releases(*,proxy=None):
     request=urllib.request.Request(MANIFEST_URL+'?ref=main&fresh='+str(time.time_ns()),headers={
         'Accept':'application/vnd.github.raw+json','Cache-Control':'no-cache, no-store','User-Agent':'OnionMinecraftLauncher-Updater'})
     body=fetch_public(request,limit=MAX_MANIFEST,timeout=12,proxy=proxy)
-    return select_release(parse_manifest(json.loads(body.decode('utf-8-sig'))),version,order)
+    return parse_manifest(json.loads(body.decode('utf-8-sig')))
+
+
+def available_releases(releases,version=LAUNCHER_VERSION):
+    # Manual selection may cross editions; automatic selection never does.
+    return sorted((r for r in releases if r.platform=='windows-x64'),key=lambda r:(r.series==edition(version),r.order),reverse=True)
+
+
+def check_update(*,proxy=None,version=LAUNCHER_VERSION,order=LAUNCHER_UPDATE_ORDER):
+    return select_release(fetch_releases(proxy=proxy),version,order)
 
 
 def can_install():

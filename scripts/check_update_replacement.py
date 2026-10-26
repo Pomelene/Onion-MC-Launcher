@@ -22,7 +22,7 @@ def compile_fixture(target,marker,code):
 with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='replacement-') as temporary:
     for scenario in ('success','tampered','startup-failed'):
         root=Path(temporary)/(scenario+" 中文 [TARGET] 'STAGED' $()")
-        original=root/'Onion.exe';staged=root/'.onion/updates/pending-fixture/update.exe';marker=root/'launched.txt'
+        original=root/"我自己的 Onion [便携版] 'custom'.exe";staged=root/'.onion/updates/pending-fixture/update.exe';marker=root/'launched.txt'
         compile_fixture(original,marker,0);before=original.read_bytes()
         compile_fixture(staged,marker,17 if scenario=='startup-failed' else -1)
         item=replace(release(),size=staged.stat().st_size,sha256=hashlib.sha256(staged.read_bytes()).hexdigest())
@@ -35,6 +35,7 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='replacement-') as tempor
         finished=subprocess.run([str(powershell),'-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',encoded],timeout=30,capture_output=True,creationflags=subprocess.CREATE_NO_WINDOW)
         parent.wait(timeout=5)
         assert settings.read_bytes()==settings_before
+        assert [path.name for path in root.glob('*.exe')]==[original.name]
         state=json.loads((staged.parent/'result.json').read_text())
         if scenario=='success':
             assert finished.returncode==0 and state['result']=='success',(staged.parent/'error.txt').read_text(encoding='utf-8') if (staged.parent/'error.txt').is_file() else finished.stderr.decode(errors='replace')

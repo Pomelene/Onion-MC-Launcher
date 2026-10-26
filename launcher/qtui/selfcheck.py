@@ -178,6 +178,16 @@ def run(output):
             window.navigate(page);application.processEvents()
         from .theme import APPEARANCE_KEYS,effective_accent
         assert APPEARANCE_KEYS<=window.settings_editor.fields.keys()
+        from ..updates import Release,edition
+        from ..paths import LAUNCHER_UPDATE_ORDER
+        from .updates import VersionPicker
+        assert 'check_launcher_updates' in window.settings_editor.fields
+        current=Release(edition(),LAUNCHER_VERSION,LAUNCHER_UPDATE_ORDER,'windows-x64','https://github.com/Pomelene/Onion-MC-Launcher/releases/download/v'+LAUNCHER_VERSION+'/Onion.exe',1,'0'*64,supports_updater=True)
+        older=Release(edition(),'0.3.2-T' if edition()=='thunion' else '0.3.2',32,'windows-x64','https://github.com/Pomelene/Onion-MC-Launcher/releases/download/v0.3.2/Onion.exe',1,'0'*64)
+        version_picker=VersionPicker(window,[current,older]);assert not version_picker.proceed.isEnabled()
+        version_picker.versions.setCurrentIndex(1)
+        assert version_picker.proceed.isEnabled() and '不支持自动升级' in version_picker.warning.text()
+        version_picker.deleteLater()
         wallpaper=QImage(64,64,QImage.Format.Format_RGB32);wallpaper.fill(0xff2277bb)
         from PySide6.QtGui import QPainter,QColor
         painter=QPainter(wallpaper);painter.fillRect(0,0,32,64,QColor('#bb5522'));painter.end()

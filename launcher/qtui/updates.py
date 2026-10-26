@@ -37,16 +37,15 @@ class VersionPicker(UpdateDialog):
         super().__init__(owner);self.setWindowTitle('版本管理');self.setFixedWidth(460)
         body=column(self,24,14);self.versions=ChoiceComboBox();self.versions.setAccessibleName('启动器版本')
         for item in releases:self.versions.addItem(item.version+('（当前）' if item.version==updates.LAUNCHER_VERSION else ''),item)
-        body.addWidget(self.versions);self.notes=label('','muted',True);self.notes.setTextFormat(Qt.TextFormat.PlainText);self.notes.setMaximumHeight(180);body.addWidget(self.notes)
+        body.addWidget(self.versions)
         self.warning=label('0.3.2 及以下版本不支持自动升级，之后需手动下载安装新版。','muted',True);body.addWidget(self.warning)
-        body.addWidget(label('保留当前程序路径、文件名和设置。','muted',True))
         actions=row();actions.addStretch();actions.addWidget(button('取消',self.reject))
         self.proceed=button('安装并重启',self.accept,'primary','download');actions.addWidget(self.proceed);body.addLayout(actions)
         self.versions.currentIndexChanged.connect(self.changed);self.changed()
 
     def changed(self):
         item=self.versions.currentData()
-        self.notes.setText(item.notes if item else '');self.warning.setVisible(bool(item and not item.supports_updater))
+        self.warning.setVisible(bool(item and not item.supports_updater))
         self.proceed.setEnabled(bool(item and item.version!=updates.LAUNCHER_VERSION))
 
     def selected_release(self):return self.versions.currentData()

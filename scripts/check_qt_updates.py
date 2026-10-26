@@ -7,10 +7,11 @@ os.environ['QT_QPA_PLATFORM']='offscreen'
 from PySide6.QtWidgets import QApplication,QDialog,QMessageBox
 from launcher.config import Config
 from launcher.qtui.app import MainWindow
-from launcher.qtui.updates import UpdatePrompt
+from launcher.qtui.updates import UpdatePrompt,VersionPicker
 from launcher.qtui.widgets import configure_fonts
 from launcher.download import DownloadCancelled
-from tests.test_launcher_updates import release
+from tests.test_launcher_updates import release,entry
+from launcher import updates
 
 app=QApplication([]);app.setStyle('Fusion');configure_fonts(app)
 def wait(window):
@@ -46,6 +47,16 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-update-') as folder:
     prompt=UpdatePrompt(window,release());prompt.show();app.processEvents()
     image=QImage(prompt.size(),QImage.Format.Format_ARGB32_Premultiplied);image.fill(0);prompt.render(image)
     assert image.save(str(ROOT/'docs/screens/qt-launcher-update.png'));prompt.close()
+    history=updates.parse_manifest({'schema_version':1,'releases':[entry(updates.LAUNCHER_VERSION,33),entry('0.2.0',1)]})
+    picker=VersionPicker(window,history)
+    assert not picker.proceed.isEnabled()
+    picker.versions.setCurrentIndex(1)
+    assert picker.proceed.isEnabled() and picker.selected_release().version=='0.2.0' and not picker.warning.isHidden()
+    picker.show();app.processEvents();image=QImage(picker.size(),QImage.Format.Format_ARGB32_Premultiplied);image.fill(0);picker.render(image)
+    assert image.save(str(ROOT/'docs/screens/qt-version-history.png'));picker.close()
+    with patch('launcher.qtui.updates.updates.fetch_releases',return_value=[history[1]]),patch.object(VersionPicker,'exec',return_value=QDialog.DialogCode.Accepted),patch.object(controller,'install') as install:
+        controller.manage_versions();wait(window)
+        assert install.call_count==1 and install.call_args.args[0].version=='0.2.0'
     # Source-based UI regression never launches or replaces a real executable.
     staged=root/'fixture.exe';staged.write_bytes(b'fixture only')
     with patch('launcher.qtui.updates.updates.can_install',return_value=True),patch('launcher.qtui.updates.updates.download_update',return_value=staged),patch('launcher.qtui.updates.updates.launch_replacement') as launch,patch.object(QApplication,'quit') as quit_app:

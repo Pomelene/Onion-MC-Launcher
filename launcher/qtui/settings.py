@@ -115,7 +115,7 @@ class SettingsEditor(QWidget):
             card=Card('启动器更新')
             self.check(card,'check_launcher_updates','启动时检查更新','仅提示当前版本系列的新版本')
             from ..paths import LAUNCHER_VERSION
-            setting_row(card.body,'当前版本','',button(LAUNCHER_VERSION+' · 检查更新',lambda:window.updater.check(manual=True),'soft','refresh'))
+            setting_row(card.body,'当前版本','',button(LAUNCHER_VERSION+' · 版本管理',window.updater.manage_versions,'soft','refresh'))
             body.addWidget(card)
             card=Card('账号管理','正版、离线与外置账号在统一的账号窗口中管理。')
             card.body.addWidget(button('管理游戏账号',window.open_accounts,'soft','account'));body.addWidget(card)

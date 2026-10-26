@@ -1,14 +1,17 @@
 """Declarative, bounded service catalog over HTTPS. Remote JSON never runs code."""
 import ipaddress
+import http.client
 import json
 import os
 import re
+import ssl
 import tempfile
 import time
 import urllib.parse
+import urllib.error
 import urllib.request
 from pathlib import Path
-from .network import secure_open,validate_url
+from .network import fetch_public,validate_url
 
 CATALOG_URL='https://api.github.com/repos/Pomelene/OnionService4THUnion/contents/webapp.json'
 CONFIRMATION='本服务面向清华联盟工坊活动，我们是一个非官方非营利组织，确认要继续吗？'
@@ -33,9 +36,10 @@ def read_catalog(path):
     return parse_catalog(json.loads(body.decode('utf-8-sig')))
 
 
-def sync_catalog(path):
+def sync_catalog(path,*,proxy=None):
     """Only replace the last known-good catalog after validation and a full write."""
-    catalog=fetch_catalog();path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
+    catalog=fetch_catalog() if proxy is None else fetch_catalog(proxy=proxy)
+    path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
     temporary=None
     try:
         with tempfile.NamedTemporaryFile(dir=path.parent,prefix='.webapp-',suffix='.tmp',delete=False) as target:
@@ -122,13 +126,18 @@ def verify_download(path,tool):
     if digest!=tool['sha256']:raise ValueError('整合包校验失败，请重新下载')
 
 
-def fetch_catalog():
+def fetch_catalog(*,proxy=None):
     request=urllib.request.Request(CATALOG_URL+'?ref=main&fresh='+str(time.time_ns()),headers={
         'Accept':'application/vnd.github.raw+json','Cache-Control':'no-cache, no-store','User-Agent':'OnionMinecraftLauncher-THUnion'})
     try:
-        with secure_open(request,timeout=20) as response:
-            body=response.read(MAX_BYTES+1)
-        if len(body)>MAX_BYTES:raise ValueError('服务配置文件过大')
+        body=fetch_public(request,limit=MAX_BYTES,timeout=20,proxy=proxy)
         return parse_catalog(json.loads(body.decode('utf-8-sig')))
     except (ValueError,UnicodeError) as error:raise ValueError('社团服务配置无效：'+str(error)) from None
-    except Exception:raise RuntimeError('无法获取最新社团服务目录，请检查网络后重新进入') from None
+    except urllib.error.HTTPError as error:
+        status=error.code;error.close()
+        detail='GitHub 请求频率受限，请稍后重试' if status==429 or (status==403 and error.headers and error.headers.get('X-RateLimit-Remaining')=='0') else 'HTTP '+str(status)
+        raise RuntimeError('无法获取最新社团服务目录：'+detail) from None
+    except (urllib.error.URLError,OSError,http.client.HTTPException) as error:
+        reason=getattr(error,'reason',error)
+        detail='TLS 证书校验失败' if isinstance(reason,ssl.SSLCertVerificationError) else '连接超时' if isinstance(reason,TimeoutError) else '网络连接失败'
+        raise RuntimeError('无法获取最新社团服务目录：'+detail+'，请检查网络和代理设置') from None

@@ -36,9 +36,10 @@ def test_service_catalog_requires_descriptions_and_safe_web_urls():
 
 def test_each_catalog_fetch_requests_fresh_public_document_without_tokens():
     requests=[]
-    def open_request(request,timeout):
-        requests.append(request);return BytesIO(json.dumps(catalog()).encode())
-    with patch('launcher.club_services.secure_open',side_effect=open_request):
+    def open_request(request,**options):
+        assert options=={'limit':MAX_BYTES,'timeout':20,'proxy':None}
+        requests.append(request);return json.dumps(catalog()).encode()
+    with patch('launcher.club_services.fetch_public',side_effect=open_request):
         assert fetch_catalog()['categories'][0]['title']=='社团 Wiki';fetch_catalog()
     assert len(requests)==2 and requests[0].full_url!=requests[1].full_url
     for request in requests:
@@ -47,7 +48,7 @@ def test_each_catalog_fetch_requests_fresh_public_document_without_tokens():
 
 def test_bad_service_payload_is_bounded_and_has_no_command_execution():
     for raw in (b'{' , b'x'*(MAX_BYTES+1),json.dumps({'schema_version':99}).encode()):
-        with patch('launcher.club_services.secure_open',return_value=BytesIO(raw)):
+        with patch('launcher.club_services.fetch_public',return_value=raw):
             try:fetch_catalog()
             except ValueError:pass
             else:raise AssertionError('Invalid payload accepted')
@@ -76,6 +77,27 @@ def test_catalog_cache_preserves_previous_file_when_sync_fails():
         try:read_catalog(path)
         except ValueError:pass
         else:raise AssertionError('Oversized cache accepted')
+
+
+def test_sync_uses_launcher_proxy_and_reports_network_errors_without_secrets():
+    import ssl
+    import urllib.error
+    with tempfile.TemporaryDirectory() as folder:
+        path=Path(folder)/'webapp.json'
+        with patch('launcher.club_services.fetch_public',return_value=json.dumps(catalog()).encode()) as opened:
+            sync_catalog(path,proxy='http://127.0.0.1:7890')
+        assert opened.call_args.kwargs['proxy']=='http://127.0.0.1:7890'
+        before=path.read_bytes()
+        for error,message in ((urllib.error.URLError(TimeoutError()),'连接超时'),
+                              (urllib.error.URLError(ssl.SSLCertVerificationError('fixture-secret')),'TLS 证书校验失败'),
+                              (urllib.error.HTTPError(CATALOG_URL,403,'fixture-secret',{'X-RateLimit-Remaining':'0'},BytesIO()),'请求频率受限'),
+                              (urllib.error.HTTPError(CATALOG_URL,404,'fixture-secret',{},BytesIO()),'HTTP 404')):
+            with patch('launcher.club_services.fetch_public',side_effect=error):
+                try:sync_catalog(path)
+                except RuntimeError as failed:
+                    assert message in str(failed) and 'fixture-secret' not in str(failed)
+                else:raise AssertionError('Network failure accepted')
+            assert path.read_bytes()==before
 
 
 def test_v2_catalog_order_layout_actions_and_download_integrity():

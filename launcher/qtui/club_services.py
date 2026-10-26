@@ -38,6 +38,7 @@ class ServiceSession(QObject):
     def start(self):
         if self.started:return
         self.started=True;self.loading=True;self.preview=self.preview_path.is_file()
+        proxy=self.owner.repo.downloader.proxy
         def done(catalog):
             self.catalog=catalog;self.loading=False;self.error='';self.changed.emit()
         def failed(error):
@@ -45,7 +46,7 @@ class ServiceSession(QObject):
             try:self.catalog=read_catalog(self.preview_path if self.preview else self.path)
             except (OSError,ValueError):self.catalog=None
             self.changed.emit()
-        self.owner.tasks.submit(lambda job:read_catalog(self.preview_path) if self.preview else sync_catalog(self.path),done,failed)
+        self.owner.tasks.submit(lambda job:read_catalog(self.preview_path) if self.preview else sync_catalog(self.path,proxy=proxy),done,failed)
 
     def read_local(self):
         if self.loading:return

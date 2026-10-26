@@ -1,5 +1,5 @@
 """Qt actions adapt existing launcher services without a second implementation."""
-from .lists import FlatTreeWidget as QTreeWidget
+from .lists import FlatTreeWidget as QTreeWidget,DETAIL_ROLE
 
 import json
 import shlex
@@ -166,8 +166,7 @@ class Actions:
 
     def recovery(self):
         dialog=QDialog(self);dialog.setWindowTitle('恢复中心');dialog.resize(860,480);body=column(dialog,24)
-        body.addWidget(label('恢复中心','title'));body.addWidget(label('恢复不会覆盖同名文件，原始位置已存在时会保留回收文件。','muted',True))
-        tree=QTreeWidget();tree.setHeaderLabels(['名称','原位置']);tree.setColumnWidth(0,280);body.addWidget(tree,1)
+        tree=QTreeWidget();tree.entities();body.addWidget(tree,1)
         entries={};repo=self.repo
         def scan(job):
             parents={repo.versions_dir,*(repo.game_dir/name for name in ('mods','saves','resourcepacks','shaderpacks'))}
@@ -182,7 +181,7 @@ class Actions:
             return found
         def loaded(found):
             for index,(target,parent,original) in enumerate(found):
-                item=QTreeWidgetItem([Path(original).name,original]);item.setData(0,Qt.ItemDataRole.UserRole,index);tree.addTopLevelItem(item);entries[index]=(target,parent)
+                item=QTreeWidgetItem([Path(original).name]);item.setData(0,DETAIL_ROLE,original);item.setToolTip(0,original);item.setData(0,Qt.ItemDataRole.UserRole,index);tree.addTopLevelItem(item);entries[index]=(target,parent)
         self.tasks.submit(scan,loaded,self.error)
         def restore():
             item=tree.currentItem()

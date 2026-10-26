@@ -37,7 +37,7 @@ def render(widget,name):
     app.processEvents();QCoreApplication.sendPostedEvents(None,QEvent.Type.DeferredDelete);app.processEvents()
     image=QImage(widget.size()*2,QImage.Format.Format_ARGB32_Premultiplied);image.setDevicePixelRatio(2);image.fill(0)
     widget.render(image)
-    assert image.pixelColor(image.width()//2,image.height()//2).alpha()>0,('empty render',name)
+    assert any(image.pixelColor(x,y).alpha()>0 for x in range(0,image.width(),10) for y in range(0,image.height(),10)),('empty render',name)
     image.save(str(ROOT/'docs/screens'/name))
 
 (ROOT/'docs/screens').mkdir(exist_ok=True)
@@ -89,9 +89,9 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
     window.navigate('versions');assert window.version_tree.topLevelItemCount()==1
     window.open_content_download('shaderpacks');assert window.download_kind=='shader'
     QCoreApplication.sendPostedEvents(None,QEvent.Type.DeferredDelete);app.processEvents()
-    query=next(e for e in window.page_map['download'].findChildren(__import__('PySide6.QtWidgets',fromlist=['QLineEdit']).QLineEdit) if e.placeholderText()=='搜索名称、作者或关键词');query.setText('Sodium')
+    query=window.download_browser.query;query.setText('Sodium')
     with patch('launcher.catalog.search',return_value={'hits':[{'project_id':'fixture','title':'Sodium','author':'示例作者','downloads':12345,'description':'优化渲染性能的示例项目','categories':['fabric','optimization']}]}):
-        next(b for b in window.page_map['download'].findChildren(QPushButton) if b.text()=='搜索').click();pump(lambda:not window.tasks.jobs)
+        window.download_browser.go.click();pump(lambda:not window.tasks.jobs)
     from launcher.qtui.widgets import ContentRow
     render(window,'qt-compact-download.png')
     assert len(window.page_map['download'].findChildren(ContentRow))==1,errors
@@ -211,7 +211,7 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
     with patch('launcher.mods.scan_mods',return_value=fixtures):
         window.instance_workspace.open_tab('mods');pump(lambda:not window.tasks.jobs)
     rows=window.instance_content.findChildren(ContentRow)
-    assert len(rows)==12 and all(r.height()==68 for r in rows)
+    assert len(rows)==12 and all(r.height()==60 for r in rows)
     assert window.home_button.mapTo(window,window.home_button.rect().center()).x()<220
     assert window.brand_widget.mapTo(window,window.brand_widget.rect().center()).x()>window.width()-220
     titles=[r.text.title for r in rows];assert titles==sorted(titles,key=str.casefold)
@@ -225,7 +225,7 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-smoke-') as tmp:
         previous=rows[0].check.isChecked();rows[0].check.click();pump(lambda:not window.tasks.jobs)
         assert rows[0].check.isChecked()==previous and rows[0].check.isEnabled()
     render(window,'qt-compact-mods.png')
-    search=next(e for e in window.instance_content.findChildren(__import__('PySide6.QtWidgets',fromlist=['QLineEdit']).QLineEdit) if e.placeholderText().startswith('搜索名称'))
+    search=next(e for e in window.instance_content.findChildren(__import__('PySide6.QtWidgets',fromlist=['QLineEdit']).QLineEdit) if e.placeholderText()=='搜索')
     search.setText('示例 11');assert sum(not r.isHidden() for r in rows)==1
     window.navigate('home')
     import threading

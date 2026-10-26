@@ -191,10 +191,8 @@ def appearance_style(accent,config=None):
     dark=resolved_mode(config)=='dark';size=int(preference(config,'font_size',14))
     base,hover,selected,border,muted=('#121214','#1b1b1f','#25252b','#303034','#a1a1aa') if dark else ('#ffffff','#fafafa','#f0f0f3','#e5e5e7','#71717a')
     style+='''
-QTreeWidget { background:BASE; border:0; border-radius:0; padding:0; outline:0; selection-background-color:SELECTED; }
-QTreeWidget::item { padding:7px 12px; border:0; border-bottom:1px solid BORDER; }
-QTreeWidget::item:hover { background:HOVER; }
-QTreeWidget::item:selected { background:SELECTED; }
+QTreeWidget { background:transparent; border:0; border-radius:0; padding:0; outline:0; }
+QTreeWidget::item,QTreeWidget::item:hover,QTreeWidget::item:selected { padding:0; border:0; background:transparent; }
 QWidget#listRow { background:BASE; border:0; border-bottom:1px solid BORDER; border-radius:0; }
 QWidget#listRow:hover { background:HOVER; }
 QHeaderView::section { background:transparent; border:0; border-bottom:1px solid BORDER; padding:5px 12px; color:MUTED; font-size:HEADERpx; font-weight:400; }

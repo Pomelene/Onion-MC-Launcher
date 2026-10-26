@@ -1,7 +1,7 @@
 """Select a component version for a fixed, existing instance."""
 from PySide6.QtCore import Qt,QTimer
 from PySide6.QtWidgets import QDialog,QTreeWidgetItem
-from .lists import FlatTreeWidget,DETAIL_ROLE
+from .lists import FlatTreeWidget,META_ROLE
 from .widgets import column,row,label,button
 from ..components import component_info
 
@@ -39,7 +39,7 @@ class ComponentVersions(QDialog):
                 loader=entry.get('loader') or {};value=loader.get('version')
                 if not value:continue
                 item=QTreeWidgetItem([value]);item.setData(0,Qt.ItemDataRole.UserRole,value)
-                item.setData(0,DETAIL_ROLE,('当前 · ' if value==self.current_version else '')+('稳定版' if loader.get('stable') else '测试版'));self.tree.addTopLevelItem(item)
+                item.setData(0,META_ROLE,('当前 · ' if value==self.current_version else '')+('稳定版' if loader.get('stable') else '测试版'));self.tree.addTopLevelItem(item)
                 if value==self.current_version:selected=item
                 if preferred is None and loader.get('stable'):preferred=item
             if self.tree.topLevelItemCount():self.tree.setCurrentItem(selected or preferred or self.tree.topLevelItem(0))

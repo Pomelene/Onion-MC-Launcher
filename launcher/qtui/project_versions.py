@@ -1,5 +1,5 @@
 """Select an explicit compatible catalog release inside the main window."""
-from .lists import FlatTreeWidget as QTreeWidget,DETAIL_ROLE
+from .lists import FlatTreeWidget as QTreeWidget,DETAIL_ROLE,META_ROLE
 from PySide6.QtCore import Qt,QTimer
 from PySide6.QtWidgets import QDialog,QTreeWidgetItem,QWidget
 from .widgets import column,row,label,button,ContentCheck
@@ -10,9 +10,8 @@ class ProjectVersions(QDialog):
     def __init__(self,window,project_id,title,kind,game,loader,vid):
         super().__init__(window);self.launcher=window;self.project_id=project_id;self.kind=kind;self.game=game;self.loader=loader;self.vid=vid;self.entries=[];self.active=True
         from .browser import TITLES
-        self.navigation_title='下载 / '+TITLES[kind]+' / 选择版本'
+        self.navigation_title=title
         self.setWindowTitle('选择版本 · '+title);body=column(self,24,12)
-        body.addWidget(label(title,'heading',True))
         context=' · '.join(value for value in (window.instances.display_name(vid) if vid else '新建实例',game,loader) if value)
         body.addWidget(label(context,'muted',True))
         filter_bar=row();self.compatible=ContentCheck();self.compatible.setAccessibleName('仅显示兼容版本');self.compatible.setChecked(True);filter_bar.addWidget(self.compatible);filter_bar.addWidget(label('仅兼容版本','muted'));filter_bar.addStretch()
@@ -48,7 +47,7 @@ class ProjectVersions(QDialog):
             context=', '.join(version.get('game_versions') or [])+' / '+', '.join(version.get('loaders') or [])
             detail=' · '.join(v for v in (channel,version.get('date_published','')[:10],context.strip(' /') if not self.compatible.isChecked() else '') if v)
             if not compatible:detail+=' · 不兼容'
-            item=QTreeWidgetItem([version.get('version_number') or version.get('name') or '']);item.setData(0,DETAIL_ROLE,detail)
+            item=QTreeWidgetItem([version.get('version_number') or version.get('name') or '']);item.setData(0,DETAIL_ROLE,context.strip(' /') if not self.compatible.isChecked() else None);item.setData(0,META_ROLE,' · '.join(v for v in (channel,version.get('date_published','')[:10]) if v))
             item.setData(0,Qt.ItemDataRole.UserRole,version.get('id'));item.setData(0,Qt.ItemDataRole.UserRole+1,compatible and bool(files))
             item.setToolTip(0,item.text(0)+'\n'+detail+'\n'+context+'\n'+primary.get('filename',''))
             if not compatible:item.setToolTip(0,'不匹配当前目标，无法安装到此实例')
@@ -57,7 +56,7 @@ class ProjectVersions(QDialog):
             if first is None and compatible and files:first=item
         if selected is not None or first is not None:self.tree.setCurrentItem(selected if selected is not None else first)
         count=self.tree.topLevelItemCount()
-        self.status.setText(f'{count} 个版本' if count else '没有兼容版本');self.update_selection()
+        self.status.setText('' if count else '没有兼容版本');self.update_selection()
 
     def update_selection(self):
         item=self.tree.currentItem();self.install_button.setEnabled(bool(not self.loading and item and item.data(0,Qt.ItemDataRole.UserRole+1)))

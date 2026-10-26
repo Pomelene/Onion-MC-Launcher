@@ -4,7 +4,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage,QImageReader,QPixmap
 from PySide6.QtWidgets import QWidget,QStackedWidget,QLineEdit,QFileDialog,QSplitter,QInputDialog,QMessageBox
 from shiboken6 import isValid
-from .widgets import Page,Card,ContentRow,Empty,column,row,label,button,clear,favorite_button
+from .widgets import Page,Card,ContentRow,Empty,column,row,label,button,clear,favorite_button,menu_button
 from .choices import ChoiceComboBox
 from .skin_preview import SkinPreview
 from ..skins import SkinLibrary,upload_skin,skin_bytes
@@ -14,11 +14,11 @@ from .seed_map import SeedMap
 class Wardrobe(QWidget):
     def __init__(self,owner):
         super().__init__();self.owner=owner;self.library=SkinLibrary(owner.root);self.path=None;self.uploading=False
-        body=column(self,0,14);toolbar=row();toolbar.addWidget(label('皮肤库','heading'),1)
+        body=column(self,0,14);toolbar=row()
+        self.query=QLineEdit();self.query.setPlaceholderText('搜索皮肤');self.query.setClearButtonEnabled(True);self.query.textChanged.connect(self.refresh);toolbar.addWidget(self.query,1)
         self.favorites_only=ChoiceComboBox();self.favorites_only.addItems(['全部皮肤','仅收藏']);self.favorites_only.currentIndexChanged.connect(self.refresh);toolbar.addWidget(self.favorites_only)
         toolbar.addWidget(button('导入皮肤',self.import_skin,'soft','plus'));body.addLayout(toolbar)
-        filters=row();self.query=QLineEdit();self.query.setPlaceholderText('搜索皮肤名称');self.query.setClearButtonEnabled(True);self.query.textChanged.connect(self.refresh);filters.addWidget(self.query,1)
-        self.skin_count=label('','muted');filters.addWidget(self.skin_count);body.addLayout(filters)
+        self.skin_count=label('','muted');self.skin_count.hide()
         split=QSplitter();body.addWidget(split,1)
         left=Page();left.setMinimumWidth(240);self.list=left.body;split.addWidget(left)
         right=QWidget();detail=column(right,24,14);self.preview=SkinPreview();detail.addWidget(self.preview,1)
@@ -57,11 +57,9 @@ class Wardrobe(QWidget):
             try:image=QImage.fromData(skin_bytes(path))
             except (OSError,ValueError):image=QImage()
             if not image.isNull():item.image.setPixmap(QPixmap.fromImage(image.copy(8,8,8,8).scaled(32,32)));item.has_artwork=True
-            item.mouseDoubleClickEvent=lambda event,p=path:self.choose(p)
-            item.action('预览',lambda p=path:self.choose(p),'skin')
+            item.mousePressEvent=lambda event,p=path:self.choose(p)
             item.line.addWidget(favorite_button(favorite_states[path],lambda checked=False,p=path:self.toggle_favorite(p)))
-            item.action('重命名',lambda p=path:self.rename_skin(p),'edit')
-            item.action('移入恢复区',lambda p=path:self.remove_skin(p),'trash');self.list.addWidget(item)
+            item.line.addWidget(menu_button(lambda p=path:[('重命名',lambda:self.rename_skin(p)),('移入恢复区',lambda:self.remove_skin(p))]));self.list.addWidget(item)
         if not self.path or self.path not in files:
             if selected and selected[0] in files:self.model.setCurrentIndex(max(0,self.model.findData(selected[1])))
             self.choose(selected[0] if selected and selected[0] in files else files[0])

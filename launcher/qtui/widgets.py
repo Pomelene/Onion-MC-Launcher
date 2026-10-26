@@ -185,6 +185,8 @@ PATHS = {
  'back':[[(5,12),(19,12)],[(10,7),(5,12),(10,17)]],
  'trash':[[(4,6),(20,6)],[(9,6),(9,3),(15,3),(15,6)],[(6,6),(7,21),(17,21),(18,6)],[(10,10),(10,17)],[(14,10),(14,17)]],
  'up':[[(6,15),(12,9),(18,15)]],
+ 'more':[[(5,12),(5.1,12)],[(12,12),(12.1,12)],[(19,12),(19.1,12)]],
+ 'info':[[(12,10),(12,18)],[(12,6),(12.1,6)]],
  'java':[[(5,9),(5,17),(8,20),(15,20),(18,17),(18,9),(5,9)],[(18,10),(22,10),(22,14),(18,14)],[(10,6),(11,3)]],
  'feedback':[[(5,3),(19,3),(21,5),(21,15),(19,17),(9,17),(4,21),(4,17),(3,15),(3,5),(5,3)],[(7,8),(17,8)],[(7,12),(14,12)]],
  'star':[[(12,3),(14.8,8.7),(21,9.6),(16.5,14),(17.6,20.2),(12,17.3),(6.4,20.2),(7.5,14),(3,9.6),(9.2,8.7),(12,3)]],
@@ -218,8 +220,8 @@ def icon(name, color='#bac7cd'):
         path=QPainterPath(QPointF(8,10));path.lineTo(4,10);path.lineTo(3,16);path.lineTo(8,14)
         path.moveTo(14,16);path.lineTo(14,20);path.lineTo(8,21);path.lineTo(10,16)
         path.moveTo(6,18);path.lineTo(3,21);painter.drawPath(path);painter.drawEllipse(QRectF(13,7,4,4))
-    if name in ('search','account','world','history'):
-        rect={'search':(3,3,14,14),'account':(8,3,8,8),'world':(2,2,20,20),'history':(3,3,18,18)}[name]
+    if name in ('search','account','world','history','info'):
+        rect={'search':(3,3,14,14),'account':(8,3,8,8),'world':(2,2,20,20),'history':(3,3,18,18),'info':(3,3,18,18)}[name]
         painter.drawEllipse(QRectF(*rect))
     for points in (PATHS['star'] if name=='star-filled' else PATHS.get(name,[] if name in ('rocket','github') else PATHS['package'])):
         path=QPainterPath(QPointF(*points[0]))
@@ -286,6 +288,20 @@ def favorite_button(checked,callback):
         title='取消收藏' if value else '收藏';item.setToolTip(title);item.setAccessibleName(title)
     item.toggled.connect(state);item.setChecked(bool(checked));state(bool(checked));item.clicked.connect(callback)
     return item
+
+
+def icon_button(title,callback,glyph):
+    control=button('',callback,glyph=glyph);control.setToolTip(title);control.setAccessibleName(title);control.setFixedSize(36,36)
+    return control
+
+
+def menu_button(entries,title='更多'):
+    def show():
+        from .choices import ActionMenu
+        menu=ActionMenu(control)
+        for text,callback in entries():menu.addAction(text,callback)
+        menu.exec(control.mapToGlobal(control.rect().bottomLeft()))
+    control=icon_button(title,show,'more');return control
 
 
 def column(parent=None,margin=0,spacing=12):
@@ -407,10 +423,11 @@ class ContentText(QWidget):
     def paintEvent(self,event):
         p=QPainter(self);font=self.font();font.setPixelSize(text_size(self,14))
         large=QFontMetrics(font).height()+2;small=text_size(self,12)+6
-        top=max(0,(self.height()-large-small-2)/2)
+        top=max(0,(self.height()-large-(small+2 if self.detail else 0))/2)
         p.setFont(font);p.setPen(paint_color(self,'text',text=True))
         p.drawText(QRectF(0,top,self.width(),large),Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(self.title,Qt.TextElideMode.ElideRight,self.width()))
-        font.setPixelSize(text_size(self,12));p.setFont(font);p.setPen(paint_color(self,'muted',text=True))
+        if not self.detail:p.end();return
+        font.setPixelSize(text_size(self,12));font.setWeight(QFont.Weight.Normal);p.setFont(font);p.setPen(paint_color(self,'muted',text=True))
         p.drawText(QRectF(0,top+large+2,self.width(),small),Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(self.detail,Qt.TextElideMode.ElideRight,self.width()));p.end()
 
 
@@ -444,7 +461,7 @@ class ContentRow(QWidget):
         self.text=ContentText(title,detail);self.line.addWidget(self.text,1)
 
     def apply_appearance(self):
-        self.setFixedHeight(row_height(self))
+        self.setFixedHeight(row_height(self,60))
         self.line.setContentsMargins(10,10,10,10)
 
     def showEvent(self,event):
@@ -470,13 +487,10 @@ class ContentRow(QWidget):
         control=button('',callback,role,glyph);control.setStyleSheet('padding:0;');control.setToolTip(title);control.setAccessibleName(title);control.setFixedSize(34,34);self.line.addWidget(control)
 
 
-class Empty(Card):
+class Empty(QWidget):
     def __init__(self,title,description,glyph='package',action='',callback=None):
-        super().__init__();self.body.setContentsMargins(28,34,28,34)
-        image=QLabel();image.setPixmap(icon(glyph).pixmap(38,38));image.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.body.addWidget(image)
-        for text,kind in ((title,'heading'),(description,'muted')):
-            item=label(text,kind,True);item.setAlignment(Qt.AlignmentFlag.AlignCenter);self.body.addWidget(item)
+        super().__init__();self.body=column(self,16,8);self.setToolTip(description)
+        item=label(title,'muted',True);item.setAlignment(Qt.AlignmentFlag.AlignCenter);self.body.addWidget(item)
         if action:
             holder=row();holder.addStretch();holder.addWidget(button(action,callback,'soft'));holder.addStretch();self.body.addLayout(holder)
 

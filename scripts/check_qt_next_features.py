@@ -50,9 +50,9 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='next-ui-') as directory:
     other=InstanceStore(window.instances.path,second,window.config_obj.get('library_legacy_root'));other.update('fixture',name='同名实例',tags=['测试'])
     window.navigate('versions');app.processEvents();window.library_favorites.setCurrentIndex(1);assert window.version_tree.topLevelItemCount()==1
     window.library_tags.setCurrentIndex(window.library_tags.findData('生存'));assert window.version_tree.topLevelItemCount()==1
-    star=window.version_tree.itemWidget(window.version_tree.topLevelItem(0),4);assert star.isChecked();filled=star.icon().pixmap(20,20).toImage()
+    star=window.version_tree.itemWidget(window.version_tree.topLevelItem(0),1);assert star.isChecked();filled=star.icon().pixmap(20,20).toImage()
     click(star);assert window.version_tree.topLevelItemCount()==0 and not window.instances.get('fixture').favorite
-    window.library_favorites.setCurrentIndex(0);star=window.version_tree.itemWidget(window.version_tree.topLevelItem(0),4)
+    window.library_favorites.setCurrentIndex(0);star=window.version_tree.itemWidget(window.version_tree.topLevelItem(0),1)
     assert not star.isChecked() and star.icon().pixmap(20,20).toImage()!=filled
     click(star);assert window.instances.get('fixture').favorite
     window.open_instance_overview();view=window.subpages[-1];quiet(window)

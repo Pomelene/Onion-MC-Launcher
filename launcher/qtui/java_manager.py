@@ -1,28 +1,28 @@
 """Embedded Java inventory with local scanning and inline download progress."""
-from .lists import FlatTreeWidget as QTreeWidget
+from .lists import FlatTreeWidget as QTreeWidget,DETAIL_ROLE,META_ROLE
 
 from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget,QTreeWidgetItem,QFileDialog,QProgressBar
 from shiboken6 import isValid
-from .widgets import column,row,label,button
+from .widgets import column,row,label,button,icon_button
 from .choices import ChoiceComboBox
 
 
 class JavaManager(QWidget):
     def __init__(self,window):
         super().__init__();self.window=window;self.loaded=False;self.scanning=False;self.job=None;self.on_selected=None
-        body=column(self,0,12);top=row();top.addWidget(label('Java 运行时','heading'),1)
-        self.refresh=button('重新检测',self.scan,glyph='refresh');top.addWidget(self.refresh)
+        body=column(self,0,10);top=row();top.addStretch()
+        self.refresh=icon_button('重新检测',self.scan,'refresh');top.addWidget(self.refresh)
         self.browse=button('手动添加',self.browse_java,glyph='folder');top.addWidget(self.browse);body.addLayout(top)
         self.current=label('','muted',True);body.addWidget(self.current)
         self.tree=QTreeWidget();self.tree.setRootIsDecorated(False);self.tree.setUniformRowHeights(True)
-        self.tree.setHeaderLabels(['版本','架构','安装路径']);self.tree.setColumnWidth(0,150);self.tree.setColumnWidth(1,100)
+        self.tree.entities()
         self.tree.setMinimumHeight(280);body.addWidget(self.tree,1)
         actions=row();self.major=ChoiceComboBox()
         for major in (8,17,21,25):self.major.addItem(f'Java {major}',major)
         self.major.setCurrentIndex(2);actions.addWidget(self.major)
-        self.download=button('下载官方运行时',self.download_java,glyph='download');actions.addWidget(self.download)
+        self.download=button('下载',self.download_java,glyph='download');actions.addWidget(self.download)
         actions.addStretch();actions.addWidget(button('自动选择',lambda:self.apply('')))
         self.use=button('使用所选',self.choose,'primary');self.use.setEnabled(False);actions.addWidget(self.use);body.addLayout(actions)
         self.status=label('','muted',True);body.addWidget(self.status)
@@ -45,8 +45,8 @@ class JavaManager(QWidget):
         path=str(info.path)
         for i in range(self.tree.topLevelItemCount()):
             if self.tree.topLevelItem(i).data(0,Qt.ItemDataRole.UserRole)==path:return
-        item=QTreeWidgetItem([f'Java {info.major} · {info.version}' if info.version else f'Java {info.major}',info.architecture or (f'{info.bits} 位' if info.bits else '—'),path])
-        item.setData(0,Qt.ItemDataRole.UserRole,path);item.setToolTip(2,path);self.tree.addTopLevelItem(item)
+        item=QTreeWidgetItem([f'Java {info.major} · {info.version}' if info.version else f'Java {info.major}']);item.setData(0,DETAIL_ROLE,path);item.setData(0,META_ROLE,info.architecture or (f'{info.bits} 位' if info.bits else ''))
+        item.setData(0,Qt.ItemDataRole.UserRole,path);item.setToolTip(0,path);self.tree.addTopLevelItem(item)
         if path==self.window.config_obj.get('java_path'):self.tree.setCurrentItem(item)
 
     def scan(self):
@@ -66,7 +66,7 @@ class JavaManager(QWidget):
             if not isValid(self):return
             self.scanning=False;self.loaded=True;self.refresh.setEnabled(True);self.download.setEnabled(True);self.tree.clear()
             for info in infos:self.add_info(info)
-            self.status.setText(f'找到 {len(infos)} 个运行时' if infos else '未检测到 Java，可手动添加或下载官方运行时')
+            self.status.setText('' if infos else '未找到 Java，请添加或下载')
         def failed(error):
             if isValid(self):self.scanning=False;self.refresh.setEnabled(True);self.download.setEnabled(True);self.status.setText('检测失败：'+str(error))
         self.window.tasks.submit(work,done,failed)
@@ -95,7 +95,7 @@ class JavaManager(QWidget):
         def done(info):
             if not isValid(self):return
             if not info:self.status.setText('该文件不是可用的 Java 运行时');return
-            self.add_info(info);self.status.setText('已添加到运行时列表，选择后点击“使用所选”')
+            self.add_info(info);self.status.setText('')
         self.window.tasks.submit(lambda job:probe_java(Path(path),refresh=True),done,lambda error:self.status.setText(str(error)) if isValid(self) else None)
 
     def download_java(self):

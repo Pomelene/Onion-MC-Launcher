@@ -1,12 +1,12 @@
 """Account dialogs. Credentials stay in backend records, never in UI status strings."""
-from .lists import FlatTreeWidget as QTreeWidget
+from .lists import FlatTreeWidget as QTreeWidget,DETAIL_ROLE,META_ROLE
 
 import time
 from PySide6.QtCore import Qt,QTimer,QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QApplication,QDialog,QWidget,QLineEdit,QFormLayout,
     QTreeWidgetItem,QInputDialog,QMessageBox,QDialogButtonBox)
-from .widgets import label,button,column,row,Card
+from .widgets import label,button,column,row,Card,menu_button,icon
 from ..accounts import AccountRecord,offline_uuid,validate_username
 from ..auth.microsoft import login_with_device_code,verification_url,LoginCancelled
 from ..auth.application import resolve_client_id,valid_client_id
@@ -101,12 +101,12 @@ class AccountsDialog(QDialog):
     def __init__(self,app):
         super().__init__(app);self.app=app;self.tasks=app.tasks;self.config_obj=app.config_obj;self.store=app.accounts
         self.setWindowTitle('账号管理');self.resize(780,540);self.setModal(True);body=column(self,24,16)
-        self.tree=QTreeWidget();self.tree.setHeaderLabels(['玩家','账号类型','状态']);self.tree.setRootIsDecorated(False)
-        self.tree.setColumnWidth(0,260);self.tree.setColumnWidth(1,140);body.addWidget(self.tree,1)
         actions=row();actions.addWidget(button('微软正版登录',self.microsoft,'primary','account'))
-        actions.addWidget(button('添加离线账号',self.offline));actions.addWidget(button('外置登录',self.authlib));actions.addStretch();body.addLayout(actions)
-        actions=row();actions.addWidget(button('设为当前',self.set_current,'soft'));actions.addWidget(button('验证 / 续期',self.refresh))
-        actions.addWidget(button('重新登录',self.relogin));actions.addStretch();actions.addWidget(button('移除账号',self.remove,'danger'));actions.addWidget(button('完成',self.accept));body.addLayout(actions)
+        actions.addWidget(menu_button(lambda:[('添加离线账号',self.offline),('外置登录',self.authlib)],'添加其他账号'));actions.addStretch();body.addLayout(actions)
+        self.tree=QTreeWidget();self.tree.entities();body.addWidget(self.tree,1)
+        actions=row();self.use_button=button('设为当前',self.set_current,'soft');actions.addWidget(self.use_button);actions.addStretch()
+        self.more=menu_button(lambda:[('验证 / 续期',self.refresh),('重新登录',self.relogin),('移除账号',self.remove)]);actions.addWidget(self.more);body.addLayout(actions)
+        self.tree.currentItemChanged.connect(lambda *_:self.selection());self.tree.itemDoubleClicked.connect(lambda *_:self.set_current())
         self.status=label('','muted',True);body.addWidget(self.status);self.reload()
         self.finished.connect(lambda _:app.refresh_account())
 
@@ -115,9 +115,12 @@ class AccountsDialog(QDialog):
         for account in self.store.accounts:
             kind={'microsoft':'Microsoft 正版','authlib':'外置账号'}.get(account.type,'离线账号')
             state='需要重新登录' if account.type!='offline' and not account.access_token or account.type=='microsoft' and not account.refresh_token else '需要续期' if account.is_expired() else '已登录' if account.type!='offline' else '本地身份'
-            name=account.username+(' · 当前' if account.uuid==self.store.current_uuid else '')
-            item=QTreeWidgetItem([name,kind,state]);item.setData(0,Qt.ItemDataRole.UserRole,account.uuid);self.tree.addTopLevelItem(item)
-        if not self.store.accounts:self.status.setText('尚未添加账号。选择“微软正版登录”或先添加一个离线身份。')
+            item=QTreeWidgetItem([account.username]);item.setData(0,DETAIL_ROLE,kind);item.setData(0,META_ROLE,'当前' if account.uuid==self.store.current_uuid else state if state in ('需要重新登录','需要续期') else '');item.setIcon(0,icon('account'));item.setData(0,Qt.ItemDataRole.UserRole,account.uuid);self.tree.addTopLevelItem(item)
+            if account.uuid==self.store.current_uuid:self.tree.setCurrentItem(item)
+        self.status.setText('尚未添加账号' if not self.store.accounts else '');self.selection()
+
+    def selection(self):
+        account=self.selected();self.more.setEnabled(bool(account));self.use_button.setVisible(bool(account and account.uuid!=self.store.current_uuid))
 
     def selected(self):
         item=self.tree.currentItem()

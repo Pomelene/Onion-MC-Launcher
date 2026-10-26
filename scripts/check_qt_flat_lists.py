@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QApplication,QLabel
 from PySide6.QtTest import QTest
 from launcher.qtui.app import MainWindow
 from launcher.qtui.widgets import configure_fonts
-from launcher.qtui.lists import FlatTreeWidget,DETAIL_ROLE
+from launcher.qtui.lists import FlatTreeWidget,META_ROLE
 from launcher.qtui.installer import InstallDialog
 from launcher.qtui.project_versions import ProjectVersions
 from launcher.version import VersionManifest
@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='flat-list-ui-') as tmp:
     with patch.object(window.repo,'fetch_manifest',return_value=manifest):
         install=InstallDialog(window);window.show_subpage(install);idle(window)
     assert isinstance(install.tree,FlatTreeWidget) and install.tree.isHeaderHidden() and install.tree.columnCount()==1
-    assert install.tree.topLevelItemCount()==60 and install.tree.topLevelItem(0).data(0,DETAIL_ROLE)
+    assert install.tree.topLevelItemCount()==60 and install.tree.topLevelItem(0).data(0,META_ROLE)
     assert install.loader_panel.isHidden() and install.build.isHidden()
     assert not any(label.text() in ('安装选项','可用加载器版本','安装 Minecraft','下载位置') for label in install.findChildren(QLabel))
     for mode in ('dark','light'):

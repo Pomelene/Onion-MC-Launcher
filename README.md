@@ -4,7 +4,9 @@
 
 **免费、开源、公益开发的 Minecraft Java 版启动器。**
 
-当前源码版本：[v0.3.2](https://github.com/Pomelene/Onion-MC-Launcher/tree/v0.3.1)。Windows 发布包见 [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases)，下载 ZIP 后解压运行 `OnionMinecraftLauncher.exe`。
+当前源码版本：[v0.3.3](https://github.com/Pomelene/Onion-MC-Launcher/tree/v0.3.3)。Windows 程序见 [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases)，下载对应 EXE 后运行。
+
+**v0.3.3**：新增启动器自动更新与历史版本管理，可在设置中手动升级、回退或切换系列。自动替换保留用户自定义的 EXE 路径和文件名；下载前后校验文件。改进系统代理异常时公开目录请求的直连重试。v0.3.2 及以下不支持自动升级，首次使用此功能需手动安装新版。
 
 **v0.3.2**：改进模组检查与直接更新、崩溃诊断和启动前体检；新增跨文件夹实例总览、收藏与标签、下载任务中心和皮肤收藏。统一列表布局，支持 Fabric / Quilt 原位更换；新建安装只生成一个实例，缓存统一收纳至 `.onion`。
 

@@ -1,4 +1,7 @@
 """Shared remote URL and redirect policy; response bodies are never errors."""
+import http.client
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -38,3 +41,38 @@ class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
 def secure_open(request,timeout=20):
     validate_url(request.full_url,https_only=True)
     return urllib.request.build_opener(SafeRedirectHandler()).open(request,timeout=timeout)
+
+
+def fetch_public(request, *, limit, timeout=20, proxy=None):
+    """Read an anonymous HTTPS GET; retry a broken proxy once over direct TLS.
+
+    Kept separate from secure_open: logins, uploads and credential-bearing
+    requests must never acquire automatic route changes or replay semantics.
+    """
+    validate_url(request.full_url,https_only=True)
+    headers=dict(request.header_items())
+    if request.get_method()!='GET' or request.data is not None or any(
+            key.lower() in ('authorization','proxy-authorization','cookie','x-api-key') for key in headers):
+        raise ValueError('公开请求只能是不含凭据的 GET')
+    proxies={'http':proxy,'https':proxy} if proxy else urllib.request.getproxies()
+    routes=[proxies,{}] if proxies.get('https') else [{}]
+    deadline=time.monotonic()+timeout
+    for index,route in enumerate(routes):
+        remaining=max(.1,deadline-time.monotonic())
+        attempt_timeout=min(remaining,timeout/2) if index==0 and len(routes)>1 else remaining
+        # ProxyHandler mutates Requests (including proxy credentials). Each
+        # attempt starts from the original anonymous URL and headers.
+        fresh=urllib.request.Request(request.full_url,headers=headers,method='GET')
+        opener=urllib.request.build_opener(urllib.request.ProxyHandler(route),SafeRedirectHandler())
+        try:
+            with opener.open(fresh,timeout=attempt_timeout) as response:
+                body=response.read(limit+1)
+            if len(body)>limit:raise ValueError('响应内容超过安全上限')
+            return body
+        except urllib.error.HTTPError as error:
+            # Shared proxy exit IPs can exhaust GitHub's anonymous API quota.
+            rate_limited=error.code==429 or (error.code==403 and error.headers and error.headers.get('X-RateLimit-Remaining')=='0')
+            if index==len(routes)-1 or (error.code not in (407,502,503,504) and not rate_limited):raise
+            error.close()
+        except (urllib.error.URLError,OSError,http.client.HTTPException):
+            if index==len(routes)-1:raise

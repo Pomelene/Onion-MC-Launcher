@@ -4,7 +4,7 @@ from PySide6.QtGui import QPainter,QDesktopServices
 from PySide6.QtWidgets import QWidget,QStackedWidget,QDialog,QApplication
 from shiboken6 import isValid
 from .widgets import Page,Card,ContentRow,Empty,column,row,label,button,clear,NavigationItem
-from .theme import paint_color
+from .theme import paint_color,corner
 from ..club_services import CONFIRMATION,read_catalog,sync_catalog
 
 
@@ -23,7 +23,7 @@ class ServiceConfirmation(QDialog):
     def paintEvent(self,event):
         painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(paint_color(self,'base'))
-        painter.drawRoundedRect(QRectF(self.rect()),12,12)
+        painter.drawRoundedRect(QRectF(self.rect()),corner(self,12),corner(self,12))
 
 
 class ServiceSession(QObject):

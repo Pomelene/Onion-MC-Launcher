@@ -2,10 +2,10 @@
 from collections import OrderedDict
 from datetime import datetime
 from PySide6.QtCore import Qt,QAbstractListModel,QModelIndex,QSize,QTimer,QPoint,QRectF
-from PySide6.QtGui import QPainter,QPen,QFont,QFontMetrics,QColor
+from PySide6.QtGui import QPainter,QPen,QFont,QFontMetrics,QColor,QPainterPath
 from PySide6.QtWidgets import QListView,QAbstractItemView,QStyledItemDelegate,QStyle
 from shiboken6 import isValid
-from .theme import paint_color,config_for,surface_opacity
+from .theme import paint_color,config_for,surface_opacity,corner
 from .widgets import icon,control_accent
 from .choices import ActionMenu
 
@@ -38,15 +38,17 @@ class ScreenshotDelegate(QStyledItemDelegate):
         rect=QRectF(option.rect).adjusted(4,4,-4,-4)
         selected=bool(option.state & QStyle.StateFlag.State_Selected);hover=bool(option.state & QStyle.StateFlag.State_MouseOver)
         background=paint_color(view,'surface');background.setAlpha(round((210 if selected else 155 if hover else 95)*surface_opacity(config_for(view))))
-        painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(background);painter.drawRoundedRect(rect,9,9)
+        radius=corner(view,9)
+        painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(background);painter.drawRoundedRect(rect,radius,radius)
         if selected:
-            painter.setPen(QPen(QColor(control_accent(view)),1.3));painter.setBrush(Qt.BrushStyle.NoBrush);painter.drawRoundedRect(rect.adjusted(1,1,-1,-1),9,9)
+            edge=QColor(control_accent(view));edge.setAlpha(round(180*surface_opacity(config_for(view))))
+            painter.setPen(QPen(edge,1));painter.setBrush(Qt.BrushStyle.NoBrush);painter.drawRoundedRect(rect.adjusted(.5,.5,-.5,-.5),max(0,radius-.5),max(0,radius-.5))
         photo=rect.adjusted(6,6,-6,-47)
         image=view.gallery_model.image(entry)
         if image is not None and not image.isNull():
             size=image.size().scaled(photo.size().toSize(),Qt.AspectRatioMode.KeepAspectRatio)
             target=QRectF(photo.center().x()-size.width()/2,photo.center().y()-size.height()/2,size.width(),size.height())
-            painter.drawImage(target,image)
+            painter.save();clip=QPainterPath();clip.addRoundedRect(target,corner(view,5),corner(view,5));painter.setClipPath(clip);painter.drawImage(target,image);painter.restore()
         else:
             glyph='folder' if entry.directory else 'image';icon(glyph,paint_color(view,'muted')).paint(painter,int(photo.center().x()-16),int(photo.center().y()-16),32,32)
         width=int(rect.width()-18);font=QFont(view.font());font.setPixelSize(12);painter.setFont(font)

@@ -233,7 +233,7 @@ class MotionButton(QPushButton):
                 x=int(rect.right()-QFontMetrics(self.font()).horizontalAdvance(text)-26)
                 self.icon().paint(p,x,int(rect.center().y()-9),18,18)
             p.drawText(rect,Qt.AlignmentFlag.AlignRight|Qt.AlignmentFlag.AlignVCenter,text)
-            if self.hasFocus():
+            if self.hasFocus() and option.state & QStyle.StateFlag.State_KeyboardFocusChange:
                 focus=QColor(color);focus.setAlpha(90);p.setPen(QPen(focus,1));p.setBrush(Qt.BrushStyle.NoBrush)
                 p.drawRoundedRect(QRectF(self.rect()).adjusted(2,2,-2,-2),corner(self,7),corner(self,7))
             p.end();return
@@ -252,6 +252,10 @@ class MotionButton(QPushButton):
             native.setPen(Qt.PenStyle.NoPen)
             hover=paint_color(self,'hover');hover.setAlpha(round(255*.075*self.hover_amount*surface_opacity(config_for(self))));native.setBrush(hover)
             native.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), corner(self,6), corner(self,6))
+        if self.hasFocus() and option.state & QStyle.StateFlag.State_KeyboardFocusChange:
+            focus=QColor(effective_accent(config_for(self)));focus.setAlpha(round(180*surface_opacity(config_for(self))))
+            native.setPen(QPen(focus,1));native.setBrush(Qt.BrushStyle.NoBrush)
+            native.drawRoundedRect(QRectF(self.rect()).adjusted(1.5,1.5,-1.5,-1.5),corner(self,6),corner(self,6))
         native.end()
 
 

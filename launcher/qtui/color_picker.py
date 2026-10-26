@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, Signal, QRectF, QPointF, QSignalBlocker
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QLinearGradient
 from PySide6.QtWidgets import (QWidget, QDialog, QSlider, QLineEdit, QHBoxLayout,
     QVBoxLayout, QGridLayout, QAbstractButton)
-from .theme import paint_color, config_for, surface_opacity
+from .theme import paint_color, config_for, surface_opacity,corner
 from .widgets import label, button, InlineSpinBox
 
 
@@ -19,10 +19,12 @@ class ColorSwatch(QAbstractButton):
     def paintEvent(self,event):
         p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
         r=QRectF(self.rect()).adjusted(3,3,-3,-3)
-        p.setPen(QPen(QColor(255,255,255,50),1));p.setBrush(self.color);p.drawRoundedRect(r,7,7)
+        edge=paint_color(self,'text');edge.setAlpha(40)
+        p.setPen(QPen(edge,1));p.setBrush(self.color);p.drawRoundedRect(r,corner(self,7),corner(self,7))
         if self.selected or self.hasFocus():
             p.setBrush(Qt.BrushStyle.NoBrush);p.setPen(QPen(paint_color(self,'text'),1.5))
-            p.drawRoundedRect(r.adjusted(-2,-2,2,2),9,9)
+            radius=corner(self,7)+2 if corner(self,7) else 0
+            p.drawRoundedRect(r.adjusted(-2,-2,2,2),radius,radius)
         p.end()
 
 
@@ -38,7 +40,7 @@ class SaturationValue(QWidget):
 
     def paintEvent(self,event):
         p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing);r=self.area()
-        clip=QPainterPath();clip.addRoundedRect(r,10,10);p.setClipPath(clip)
+        clip=QPainterPath();clip.addRoundedRect(r,corner(self,10),corner(self,10));p.setClipPath(clip)
         gradient=QLinearGradient(r.topLeft(),r.topRight())
         gradient.setColorAt(0,QColor('white'));gradient.setColorAt(1,QColor.fromHsv(self.hue,255,255))
         p.fillRect(r,gradient)
@@ -77,7 +79,7 @@ class HueSlider(QSlider):
 
     def paintEvent(self,event):
         p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        r=QRectF(self.rect()).adjusted(7,7,-7,-7);g=QLinearGradient(r.topLeft(),r.topRight())
+        r=QRectF(self.rect()).adjusted(10,7,-10,-7);g=QLinearGradient(r.topLeft(),r.topRight())
         for i in range(7):g.setColorAt(i/6,QColor.fromHsv(round(i/6*359),255,255))
         p.setPen(Qt.PenStyle.NoPen);p.setBrush(g);p.drawRoundedRect(r,7,7)
         x=r.left()+r.width()*self.value()/359
@@ -85,7 +87,7 @@ class HueSlider(QSlider):
         p.setPen(QPen(QColor('white'),2));p.drawEllipse(QPointF(x,r.center().y()),8,8);p.end()
 
     def select(self,event):
-        self.setValue(round(max(0.,min(1.,(event.position().x()-7)/max(1,self.width()-14)))*359));event.accept()
+        self.setValue(round(max(0.,min(1.,(event.position().x()-10)/max(1,self.width()-20)))*359));event.accept()
 
     def mousePressEvent(self,event):
         if event.button()==Qt.MouseButton.LeftButton:self.setFocus();self.select(event)
@@ -145,7 +147,7 @@ class ColorPicker(QDialog):
     def paintEvent(self,event):
         p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
         color=paint_color(self,'base');color.setAlpha(round(255*surface_opacity(config_for(self))))
-        p.setPen(Qt.PenStyle.NoPen);p.setBrush(color);p.drawRoundedRect(QRectF(self.rect()),12,12);p.end()
+        p.setPen(Qt.PenStyle.NoPen);p.setBrush(color);p.drawRoundedRect(QRectF(self.rect()),corner(self,12),corner(self,12));p.end()
 
     def set_color(self,color,update_hex=True):
         if not color.isValid():return

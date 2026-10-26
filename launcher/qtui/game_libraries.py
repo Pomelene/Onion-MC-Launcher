@@ -4,7 +4,7 @@ from PySide6.QtCore import Qt,QRectF
 from PySide6.QtGui import QPainter,QColor
 from PySide6.QtWidgets import QWidget,QFileDialog,QInputDialog,QScrollArea
 from .widgets import column,row,label,button,NavigationItem,control_accent
-from .theme import config_for,surface_opacity
+from .theme import config_for,surface_opacity,corner
 from .choices import ActionMenu
 from ..game_libraries import GameLibraries
 from ..storage import directory_key
@@ -16,7 +16,7 @@ class LibraryItem(NavigationItem):
             painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             color=QColor(control_accent(self));color.setAlpha(round(38*surface_opacity(config_for(self))))
             painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(color)
-            painter.drawRoundedRect(QRectF(self.rect()).adjusted(2,3,-2,-3),8,8);painter.end()
+            painter.drawRoundedRect(QRectF(self.rect()).adjusted(2,3,-2,-3),corner(self,8),corner(self,8));painter.end()
         super().paintEvent(event)
 
 

@@ -19,7 +19,7 @@ from .secrets import protect,unprotect,SecretStorageError
 _INT_KEYS = {"font_size", "log_font_size", "corner_radius", "background_blur", "animation_duration", "launcher_window_width", "launcher_window_height", "min_memory", "max_memory", "window_width", "window_height", "schematic_page_size",
              "proxy_port", "max_download_threads", "download_speed_limit",
              "sandbox_budget_mb", "text_transparency", "ui_transparency", "background_transparency"}
-_BOOL_KEYS = {"titlebar_transparent", "launcher_window_maximized", "fullscreen", "demo", "version_isolation",
+_BOOL_KEYS = {"check_launcher_updates", "titlebar_transparent", "launcher_window_maximized", "fullscreen", "demo", "version_isolation",
               "close_after_launch", "keep_launcher_open",
               "allow_newer_java", "foreign_mode", "auto_memory", "show_launch_logs",
               "custom_home_welcome", "bold_text"}
@@ -73,6 +73,7 @@ def _coerce(key: str, value: Any) -> Any:
 
 
 DEFAULTS: dict[str, Any] = {
+    "check_launcher_updates": True,
     "launcher_window_width": 0,  # Launcher size, separate from the game window.
     "launcher_window_height": 0,
     "launcher_window_maximized": False,

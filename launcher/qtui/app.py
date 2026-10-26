@@ -47,6 +47,8 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         restore_window_size(self,self.config_obj)
         QApplication.instance().styleHints().colorSchemeChanged.connect(self._system_mode_changed)
         self.refresh_account();self.navigate('home');QTimer.singleShot(0,self.reload_versions)
+        from .updates import UpdateController
+        self.updater=UpdateController(self)
 
     def _build(self):
         shell=GlassBackdrop();outer=column(shell,0,0);self.setCentralWidget(shell)
@@ -484,4 +486,5 @@ def main():
     except (StorageError,SecretStorageError,OSError) as error:
         QMessageBox.critical(None,'启动器数据无法加载',str(error));return 1
     window.show()
+    QTimer.singleShot(1500,window.updater.startup)
     return application.exec()

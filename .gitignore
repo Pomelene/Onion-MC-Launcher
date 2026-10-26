@@ -43,6 +43,7 @@ settings.json
 !/docs/ui-motion-audit.md
 !/docs/ui-copy-audit.md
 !/docs/next-features.md
+!/docs/launcher-updates.md
 
 # Portable user data and build output must never be published.
 onionmcl.json

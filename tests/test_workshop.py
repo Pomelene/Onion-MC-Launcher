@@ -94,6 +94,36 @@ def test_skin_upload_multipart_and_safe_error():
             assert b'name="variant"\r\n\r\nslim' in request.data and png() in request.data
 
 
+def test_cape_profile_selection_and_offline_rejection():
+    from launcher.skins import cape_profile,set_cape
+    account=AccountRecord('microsoft','Player',offline_uuid('Player'),access_token='test-placeholder',expires_at=10**12)
+    cape_id='e7dfea16-dc83-4a01-9be4-51d8ffe4a9d9'
+    class Response:
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def read(self,n):return json.dumps({'capes':[{'id':cape_id,'state':'ACTIVE'}]}).encode()
+    with patch('launcher.skins.secure_open',return_value=Response()) as opener:
+        assert cape_profile(account)['capes'][0]['id']==cape_id
+        set_cape(account,cape_id);request=opener.call_args.args[0]
+        assert request.get_method()=='PUT' and json.loads(request.data)=={'capeId':cape_id}
+        set_cape(account,None);assert opener.call_args.args[0].get_method()=='DELETE'
+        offline=AccountRecord('offline','Player',offline_uuid('Player'))
+        try:set_cape(offline,None)
+        except ValueError:pass
+        else:raise AssertionError('offline cape sync accepted')
+
+
+def test_cape_texture_restricts_hosts_and_size():
+    from launcher.skins import texture_bytes
+    with patch('launcher.network.fetch_public',return_value=png(64,32)) as fetch:
+        assert texture_bytes('https://textures.minecraft.net/texture/example')==png(64,32)
+        for url in ('http://textures.minecraft.net/texture/x','https://evil.example/x','https://textures.minecraft.net.evil.example/x'):
+            try:texture_bytes(url)
+            except ValueError:pass
+            else:raise AssertionError('unsafe texture URL accepted')
+        assert fetch.call_count==1
+
+
 def test_java_seed_parsing_and_unsupported_version():
     assert parse_seed('hello')==99162322 and parse_seed('-9223372036854775808')==-(1<<63)
     assert parse_seed('😀')==1772899

@@ -8,7 +8,7 @@ from .theme import paint_color
 
 class SkinPreview(QWidget):
     def __init__(self,parent=None):
-        super().__init__(parent);self.image=QImage();self.yaw=-.38;self.pitch=.16;self.drag=None;self.slim=False;self._textures={}
+        super().__init__(parent);self.image=QImage();self.cape=QImage();self.yaw=-.38;self.pitch=.16;self.drag=None;self.slim=False;self._textures={}
         self.setMinimumSize(220,320);self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.setAccessibleName('皮肤三维预览，左右旋转、上下俯仰，双击复位');self.setToolTip('拖动旋转 / 上下俯仰 · 双击复位')
 
@@ -37,10 +37,11 @@ class SkinPreview(QWidget):
     def hideEvent(self,event):
         self.drag=None;self.setCursor(Qt.CursorShape.OpenHandCursor);super().hideEvent(event)
 
-    def texture(self,rect,shade):
-        key=(self.image.cacheKey(),tuple(rect),shade)
+    def texture(self,rect,shade,image=None):
+        image=image if image is not None else self.image
+        key=(image.cacheKey(),tuple(rect),shade)
         if key not in self._textures:
-            texture=self.image.copy(*rect)
+            texture=image.copy(*rect)
             if shade!=1:
                 for yy in range(texture.height()):
                     for xx in range(texture.width()):
@@ -60,7 +61,7 @@ class SkinPreview(QWidget):
             yy=(y-16)*math.cos(pitch)-zz*math.sin(pitch);depth=(y-16)*math.sin(pitch)+zz*math.cos(pitch)
             return QPointF(cx+xx*unit,cy+(yy+16)*unit),depth
         faces=[]
-        def cube(x,y,z,w,h,d,uv,inflate=0,rotate_bottom=False):
+        def cube(x,y,z,w,h,d,uv,inflate=0,rotate_bottom=False,image=None):
             x-=inflate;y-=inflate;z-=inflate;w+=2*inflate;h+=2*inflate;d+=2*inflate
             points=[(x,y,z+d),(x+w,y,z+d),(x+w,y+h,z+d),(x,y+h,z+d),
                     (x,y,z),(x+w,y,z),(x+w,y+h,z),(x,y+h,z)]
@@ -71,7 +72,7 @@ class SkinPreview(QWidget):
             for corners,rect,shade in zip(indices,uv,(1.0,.80,.72,.86,1.0,.60)):
                 projected=[project(points[i]) for i in corners];poly=[item[0] for item in projected]
                 # All faces sorted by camera depth; rear surfaces paint first.
-                texture=self.texture(rect,shade)
+                texture=self.texture(rect,shade,image)
                 faces.append((sum(p[1] for p in projected)/4,poly,texture))
         def uv(u,v,w,h,d):
             return [(u+d,v+d,w,h),(u+2*d+w,v+d,w,h),(u,v+d,d,h),(u+d+w,v+d,d,h),(u+d,v,w,d),(u+d+w,v,w,d)]
@@ -89,6 +90,8 @@ class SkinPreview(QWidget):
             cube(4,8,-2,arm,12,4,uv(48,48,arm,12,4),.18)
             cube(-4,20,-2,4,12,4,uv(0,32,4,12,4),.18)
             cube(0,20,-2,4,12,4,uv(0,48,4,12,4),.18)
+        if not self.cape.isNull():
+            cube(-5,8,-3.2,10,16,1,uv(0,0,10,16,1),image=self.cape)
         for depth,p,texture in sorted(faces,key=lambda face:face[0]):
             if texture.isNull():continue
             tw,th=texture.width(),texture.height();a,b,c=p[0],p[1],p[3]

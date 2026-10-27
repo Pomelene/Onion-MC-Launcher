@@ -130,6 +130,7 @@ def test_update_helper_quotes_special_paths_and_restricts_replacement():
         assert updates._ps(original.resolve()) in script and updates._ps(staged.resolve()) in script
         assert '[System.IO.File]::Replace' in script and 'WaitForExit(120000)' in script
         assert '.ComputeHash($stream)' in script and '@@' not in script
+        assert "$info.EnvironmentVariables['PYINSTALLER_RESET_ENVIRONMENT']='1'" in script
         for path in (root/'update.exe',root/'outside/update.exe'):
             try:updates.replacement_script(original,path,release(),123)
             except ValueError:pass
@@ -163,10 +164,13 @@ def test_blocked_update_helper_does_not_request_launcher_exit():
         original=Path(folder)/'Onion.exe';original.write_bytes(b'original')
         staged=Path(folder)/'.onion/updates/pending-fixture/update.exe';staged.parent.mkdir(parents=True);staged.write_bytes(executable_bytes())
         process=Mock();process.poll.return_value=1
-        with patch('launcher.updates.can_install',return_value=True),patch('launcher.updates.sys.executable',str(original)),patch('launcher.updates.subprocess.Popen',return_value=process):
+        environment_before=dict(os.environ)
+        with patch('launcher.updates.can_install',return_value=True),patch('launcher.updates.sys.executable',str(original)),patch('launcher.updates.subprocess.Popen',return_value=process) as launched:
             try:updates.launch_replacement(original,staged,release())
             except RuntimeError as error:assert '保持运行' in str(error)
             else:raise AssertionError('Blocked update helper was accepted')
+        assert launched.call_args.kwargs['env']=={**environment_before,'PYINSTALLER_RESET_ENVIRONMENT':'1'}
+        assert dict(os.environ)==environment_before
         assert original.read_bytes()==b'original'
 
 

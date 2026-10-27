@@ -42,7 +42,10 @@
 
 ## 验证
 
+更新重启（含失败回退）通过 `PYINSTALLER_RESET_ENVIRONMENT=1` 强制创建独立的单文件运行环境，避免继承已退出程序的临时 Python 目录。旧版更新器不含此修正；若自动更新后出现内置 Python 启动失败，关闭报错后从资源管理器手动启动原路径的 EXE 即可。
+
 - `tests/test_launcher_updates.py`: 系列、排序、远端 JSON、下载校验、取消、路径与缓存回归。
+- `scripts/check_update_frozen_restart.py`: 构建真实 PyInstaller 单文件探针，复现失效的继承环境，并验证更新辅助程序能启动独立的新运行环境。
 - `scripts/check_qt_updates.py`: 静默失败、确认、繁忙延后、设置保存、取消和交接测试。
 - `scripts/check_update_replacement.py`: Windows 上运行临时无窗口测试程序，实际验证原子替换、特殊字符路径、损坏拒绝及启动失败回退；不构建或更新真实启动器。
 

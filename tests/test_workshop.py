@@ -140,6 +140,15 @@ def test_cape_sync_checks_server_result_and_expired_account():
     else:raise AssertionError('missing refreshed account accepted')
 
 
+def test_cape_names_localize_known_aliases_and_keep_unknown_distinct():
+    from launcher.skins import cape_name
+    assert cape_name('Vanilla','')=='原版披风'
+    assert cape_name('MCC 15th Year','')=='MCC 15 周年披风'
+    assert cape_name('Minecon2012','')=='MINECON 2012 披风'
+    assert cape_name('Future Cape','')=='Future Cape'
+    assert cape_name(None,'e7dfea16-dc83-4a01-9be4-51d8ffe4a9d9')=='未命名披风 · e7dfea16'
+
+
 def test_java_seed_parsing_and_unsupported_version():
     assert parse_seed('hello')==99162322 and parse_seed('-9223372036854775808')==-(1<<63)
     assert parse_seed('😀')==1772899

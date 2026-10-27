@@ -1,14 +1,14 @@
 """Select an explicit compatible catalog release inside the main window."""
 from .lists import FlatTreeWidget as QTreeWidget,DETAIL_ROLE,META_ROLE
 from PySide6.QtCore import Qt,QTimer
-from PySide6.QtWidgets import QDialog,QTreeWidgetItem,QWidget
+from PySide6.QtWidgets import QDialog,QTreeWidgetItem,QWidget,QPlainTextEdit
 from .widgets import column,row,label,button,ContentCheck
 from ..catalog import pick_version,versions
 
 
 class ProjectVersions(QDialog):
-    def __init__(self,window,project_id,title,kind,game,loader,vid):
-        super().__init__(window);self.launcher=window;self.project_id=project_id;self.kind=kind;self.game=game;self.loader=loader;self.vid=vid;self.entries=[];self.active=True
+    def __init__(self,window,project_id,title,kind,game,loader,vid,install_callback=None):
+        super().__init__(window);self.launcher=window;self.project_id=project_id;self.kind=kind;self.game=game;self.loader=loader;self.vid=vid;self.entries=[];self.active=True;self.install_callback=install_callback
         from .browser import TITLES
         self.navigation_title=title
         self.setWindowTitle('选择版本 · '+title);body=column(self,24,12)
@@ -17,7 +17,9 @@ class ProjectVersions(QDialog):
         filter_bar=row();self.compatible=ContentCheck();self.compatible.setAccessibleName('仅显示兼容版本');self.compatible.setChecked(True);filter_bar.addWidget(self.compatible);filter_bar.addWidget(label('仅兼容版本','muted'));filter_bar.addStretch()
         self.refresh_button=button('',self.fetch,glyph='refresh');self.refresh_button.setToolTip('刷新版本');self.refresh_button.setAccessibleName('刷新版本');filter_bar.addWidget(self.refresh_button);body.addLayout(filter_bar)
         self.tree=QTreeWidget();self.tree.setColumnCount(1);self.tree.setHeaderHidden(True);body.addWidget(self.tree,1)
+        self.changelog=QPlainTextEdit();self.changelog.setReadOnly(True);self.changelog.setMaximumHeight(160);self.changelog.hide();body.addWidget(self.changelog)
         actions=row();self.status=label('正在获取版本列表…','muted',True);actions.addWidget(self.status,1)
+        self.changelog_button=button('更新日志',self.toggle_changelog);self.changelog_button.hide();actions.addWidget(self.changelog_button)
         self.install_button=button('安装',self.install,'primary','download');self.install_button.setEnabled(False);actions.addWidget(self.install_button);body.addLayout(actions)
         self.compatible.toggled.connect(self.render);self.tree.currentItemChanged.connect(lambda *_:self.update_selection());self.tree.itemDoubleClicked.connect(lambda *_:self.install())
         self.finished.connect(lambda _:setattr(self,'active',False));self.loading=False;QTimer.singleShot(0,self.fetch)
@@ -60,9 +62,20 @@ class ProjectVersions(QDialog):
 
     def update_selection(self):
         item=self.tree.currentItem();self.install_button.setEnabled(bool(not self.loading and item and item.data(0,Qt.ItemDataRole.UserRole+1)))
+        identifier=item.data(0,Qt.ItemDataRole.UserRole) if item else None
+        entry=next((v for v in self.entries if v.get('id')==identifier),{})
+        text=entry.get('changelog') or ''
+        self.changelog.setPlainText(text[:50000] if isinstance(text,str) else '')
+        self.changelog_button.setVisible(bool(text))
+        if not text:self.changelog.hide()
+
+    def toggle_changelog(self):
+        self.changelog.setVisible(self.changelog.isHidden())
 
     def install(self):
         if self.loading or not self.active:return
         item=self.tree.currentItem()
         if not item or not item.data(0,Qt.ItemDataRole.UserRole+1):return
-        if self.launcher.install_project(self.project_id,self.kind,self.game,self.loader,version_id=self.vid,release_id=item.data(0,Qt.ItemDataRole.UserRole)):self.accept()
+        release=item.data(0,Qt.ItemDataRole.UserRole)
+        started=(self.install_callback(release) if self.install_callback else self.launcher.install_project(self.project_id,self.kind,self.game,self.loader,version_id=self.vid,release_id=release))
+        if started:self.accept()

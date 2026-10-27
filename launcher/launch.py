@@ -50,6 +50,9 @@ class LaunchSettings:
     server_address: str = ""
     extra_jvm_args: list[str] = field(default_factory=list)
     extra_game_args: list[str] = field(default_factory=list)
+    process_priority: str = "normal"
+    pre_launch_command: str = ""
+    post_exit_command: str = ""
     launcher_name: str = LAUNCHER_NAME
     launcher_version: str = LAUNCHER_VERSION
     authlib_injector_jar: str = ""   # authlib-injector.jar 本地路径（外置登录时使用）
@@ -260,12 +263,24 @@ def _pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
     if os.name == "nt":
+        # Do not infer that a process is dead from an unavailable/localized
+        # tasklist command: that could clear a live lock and corrupt an instance.
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        kernel.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+        kernel.GetExitCodeProcess.restype = wintypes.BOOL
+        kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+        handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return ctypes.get_last_error() != 87  # ERROR_INVALID_PARAMETER: no such PID
         try:
-            out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
-                                 capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            return (b'","' + str(pid).encode() + b'",') in out.stdout
-        except OSError:
-            return True
+            code = wintypes.DWORD()
+            return not kernel.GetExitCodeProcess(handle, ctypes.byref(code)) or code.value == 259
+        finally:
+            kernel.CloseHandle(handle)
     try:
         os.kill(pid, 0)
         return True
@@ -311,7 +326,7 @@ class InstanceLock:
 def launch(repo: GameRepository, rv: ResolvedVersion, account: Account,
            settings: LaunchSettings, java_path: str,
            on_log: Optional[Callable[[str, bool], None]] = None,
-           on_exit: Optional[Callable[[int], None]] = None) -> ManagedProcess:
+           on_exit: Optional[Callable[[int], None]] = None, cancel=None) -> ManagedProcess:
     """启动游戏并返回受管进程（不等待游戏退出）。"""
     if account.user_type in ('msa','mojang') and account.access_token in ('','0'):
         raise PermissionError('在线账号凭据不可用，请重新登录后启动')
@@ -324,11 +339,6 @@ def launch(repo: GameRepository, rv: ResolvedVersion, account: Account,
     if not lock.acquire():
         raise RuntimeError(f"版本 {rv.id} 已在运行中，请先结束正在进行的游戏")
 
-    def _wrapped_exit(code: int) -> None:
-        lock.release()
-        if on_exit:
-            on_exit(code)
-
     env = os.environ.copy()
     if os.name == "nt":
         env["APPDATA"] = str(repo.game_dir.parent)
@@ -337,12 +347,42 @@ def launch(repo: GameRepository, rv: ResolvedVersion, account: Account,
     env["INST_MC_DIR"] = str(run_dir)
     env["INST_JAVA"] = java_path
 
+    def command_args(value):
+        import shlex
+        return value if os.name=='nt' else shlex.split(value)
+
+    def _wrapped_exit(code: int) -> None:
+        lock.release()
+        if settings.post_exit_command.strip():
+            try:
+                subprocess.Popen(command_args(settings.post_exit_command),cwd=str(run_dir),env=env,
+                                 stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                                 creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0) if os.name=='nt' else 0)
+            except (OSError,ValueError) as error:
+                if on_log:on_log('游戏退出后命令启动失败：'+str(error),True)
+        if on_exit:on_exit(code)
+
     flags = 0
     if os.name == "nt":
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        flags |= {"below": 0x00004000, "above": 0x00008000}.get(settings.process_priority, 0)
 
     proc = None
     try:
+        if settings.pre_launch_command.strip():
+            from .download import DownloadCancelled
+            before=subprocess.Popen(command_args(settings.pre_launch_command),cwd=str(run_dir),env=env,
+                                    stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                                    creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0) if os.name=='nt' else 0)
+            while True:
+                try:code=before.wait(timeout=.1);break
+                except subprocess.TimeoutExpired:
+                    if cancel is not None and cancel.is_set():
+                        before.terminate();before.wait(timeout=10);raise DownloadCancelled('启动已取消')
+            if code:raise RuntimeError(f'启动前命令失败（退出码 {code}）')
+        if cancel is not None and cancel.is_set():
+            from .download import DownloadCancelled
+            raise DownloadCancelled('启动已取消')
         proc = subprocess.Popen(
             command,
             cwd=str(run_dir),

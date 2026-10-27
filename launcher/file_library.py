@@ -99,3 +99,41 @@ def rename_entry(root, path, name):
 def remove_entry(root, path):
     source = contained(Path(path), root)
     return recycle(source, source.parent)
+
+
+def remove_entries(root, paths):
+    """Recycle a selection and undo earlier moves if a later one fails."""
+    from .safety import restore_recycled
+    sources=[contained(Path(path),root) for path in paths]
+    if len(set(sources))!=len(sources):raise ValueError('文件选择重复')
+    moved=[]
+    try:
+        for source in sources:moved.append((recycle(source,source.parent),source.parent))
+    except Exception as error:
+        failures=[]
+        for stored,parent in reversed(moved):
+            try:restore_recycled(stored,parent)
+            except Exception as rollback:failures.append(str(rollback))
+        if failures:raise RuntimeError(f'{error}；部分文件未能恢复：'+ '；'.join(failures)) from error
+        raise
+    return moved
+
+
+def export_pictures(root, paths, destination):
+    destination=Path(destination)
+    if not destination.is_dir():raise ValueError('目标文件夹不存在')
+    sources=[contained(Path(path),root) for path in paths]
+    if any(not path.is_file() or path.suffix.lower() not in PICTURES for path in sources):raise ValueError('只能复制截图文件')
+    if len({p.name.casefold() for p in sources})!=len(sources):raise ValueError('选择的截图文件名重复')
+    targets=[destination/path.name for path in sources]
+    if any(path.exists() for path in targets):raise FileExistsError('目标文件夹中已有同名截图')
+    created=[]
+    try:
+        for source,target in zip(sources,targets):
+            with source.open('rb') as inp,target.open('xb') as out:
+                created.append(target);shutil.copyfileobj(inp,out)
+            shutil.copystat(source,target)
+    except Exception:
+        for target in created:target.unlink(missing_ok=True)
+        raise
+    return len(created)

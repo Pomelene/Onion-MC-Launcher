@@ -219,6 +219,43 @@ def backup_world(world: WorldInfo, backups_dir: Path) -> Path:
     return target
 
 
+def export_world(world: WorldInfo, destination: Path, cancel=None) -> Path:
+    """Export a world as a ZIP, publishing only after a complete copy."""
+    import stat
+    import tempfile
+    import zipfile
+    from .safety import contained
+
+    source = Path(world.dir)
+    destination = Path(destination)
+    if destination.resolve().is_relative_to(source.resolve()):
+        raise ValueError('导出文件不能位于世界目录内部')
+    contained(source / 'level.dat', source)
+    if not (source / 'level.dat').is_file():
+        raise ValueError('世界缺少 level.dat')
+    fd, temp_name = tempfile.mkstemp(prefix='.onion-world-', suffix='.zip', dir=destination.parent)
+    os.close(fd)
+    temporary = Path(temp_name)
+    try:
+        with zipfile.ZipFile(temporary, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
+            for root, dirs, files in os.walk(source, followlinks=False):
+                for name in dirs + files:
+                    path = Path(root) / name
+                    info = path.lstat()
+                    if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400):
+                        raise ValueError(f'世界包含无法安全导出的链接：{path}')
+                for name in files:
+                    if cancel is not None and cancel.is_set():raise RuntimeError('导出已取消')
+                    path = Path(root) / name
+                    if name == 'session.lock':continue
+                    archive.write(path, path.relative_to(source.parent))
+        if cancel is not None and cancel.is_set():raise RuntimeError('导出已取消')
+        os.replace(temporary, destination)
+        return destination
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def delete_world(world: WorldInfo) -> None:
     from .safety import recycle
     recycle(world.dir, world.dir.parent)

@@ -99,7 +99,7 @@ def scan_mods(mods_dir: Path) -> list[ModInfo]:
     for p in sorted(mods_dir.iterdir()):
         if not p.is_file():
             continue
-        if p.suffix.lower() in (".jar", ".zip") or p.name.endswith(".jar.disabled"):
+        if p.suffix.lower() in (".jar", ".zip") or p.name.lower().endswith((".jar.disabled", ".zip.disabled")):
             result.append(read_mod_info(p))
     return result
 
@@ -119,6 +119,28 @@ def set_mod_enabled(info: ModInfo, enabled: bool) -> ModInfo:
         info.path.rename(target)
         return read_mod_info(target)
     return info
+
+
+def set_mods_enabled(items: list[ModInfo], enabled: bool, cancel=None) -> int:
+    """Change a selection after checking conflicts; undo completed renames on failure."""
+    chosen = [info for info in items if info.enabled != enabled]
+    for info in chosen:
+        target = info.path.with_name(info.path.name[:-len('.disabled')] if enabled else info.path.name+'.disabled')
+        if not info.path.is_file():raise FileNotFoundError(info.path)
+        if target.exists():raise FileExistsError(f'目标文件已存在：{target.name}')
+    changed = []
+    try:
+        for info in chosen:
+            if cancel is not None and cancel.is_set():raise RuntimeError('操作已取消')
+            changed.append(set_mod_enabled(info, enabled))
+    except Exception as error:
+        failures=[]
+        for updated in reversed(changed):
+            try:set_mod_enabled(updated,not enabled)
+            except Exception as rollback_error:failures.append(str(rollback_error))
+        if failures:raise RuntimeError(f'{error}；部分更改未能撤销：'+ '；'.join(failures)) from error
+        raise
+    return len(changed)
 
 
 def delete_mod(info: ModInfo) -> None:

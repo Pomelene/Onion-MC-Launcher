@@ -3,7 +3,7 @@ from collections import OrderedDict
 from datetime import datetime
 from PySide6.QtCore import Qt,QAbstractListModel,QModelIndex,QSize,QTimer,QPoint,QRectF
 from PySide6.QtGui import QPainter,QPen,QFont,QFontMetrics,QColor,QPainterPath
-from PySide6.QtWidgets import QListView,QAbstractItemView,QStyledItemDelegate,QStyle
+from PySide6.QtWidgets import QListView,QAbstractItemView,QStyledItemDelegate,QStyle,QFileDialog,QMessageBox
 from shiboken6 import isValid
 from .theme import paint_color,config_for,surface_opacity,corner
 from .widgets import icon,control_accent
@@ -68,7 +68,7 @@ class ScreenshotGallery(QListView):
         self.setWrapping(True);self.setResizeMode(QListView.ResizeMode.Adjust);self.setMovement(QListView.Movement.Static)
         self.setGridSize(QSize(224,181));self.setUniformItemSizes(True);self.setSpacing(0)
         self.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel);self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection);self.setMouseTracking(True)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection);self.setMouseTracking(True)
         self.setMinimumHeight(360);self.setStyleSheet('QListView { background: transparent; border: none; outline: none; }')
         self.setItemDelegate(ScreenshotDelegate(self));self.setAccessibleName('截图图库，按时间倒序连续显示')
         self.timer=QTimer(self);self.timer.setSingleShot(True);self.timer.setInterval(30);self.timer.timeout.connect(self.load_visible)
@@ -132,12 +132,35 @@ class ScreenshotGallery(QListView):
     def context(self,point):
         index=self.indexAt(point)
         if not index.isValid():return
-        self.setCurrentIndex(index);entry=index.data(Qt.ItemDataRole.UserRole);menu=ActionMenu(self)
+        if not self.selectionModel().isSelected(index):
+            self.selectionModel().clearSelection();self.setCurrentIndex(index)
+        entry=index.data(Qt.ItemDataRole.UserRole);selected=[i.data(Qt.ItemDataRole.UserRole) for i in self.selectionModel().selectedIndexes()]
+        menu=ActionMenu(self)
+        if len(selected)>1 and all(not e.directory for e in selected):
+            menu.addAction('复制所选截图',lambda:self.export_selected(selected))
+            menu.addAction('移入恢复区',lambda:self.remove_selected(selected))
+            menu.exec(self.viewport().mapToGlobal(point));return
         menu.addAction('打开文件夹' if entry.directory else '查看原图',lambda:self.open_index(index))
         menu.addAction('打开所在目录',lambda:self.browser.owner.open_folder(entry.path.parent))
         menu.addAction('重命名',lambda:self.browser.rename(entry.path))
         menu.addAction('移入恢复区',lambda:self.browser.remove(entry.path));menu.exec(self.viewport().mapToGlobal(point))
+
+    def export_selected(self,entries):
+        folder=QFileDialog.getExistingDirectory(self,'选择目标文件夹')
+        if not folder:return
+        from ..file_library import export_pictures
+        self.browser.mutate(lambda:export_pictures(self.browser.root,[e.path for e in entries],folder),
+                            lambda count:self.browser.owner.status.setText(f'已复制 {count} 张截图'))
+
+    def remove_selected(self,entries):
+        if QMessageBox.question(self,'移入恢复区',f'将 {len(entries)} 张截图移入恢复区？')!=QMessageBox.StandardButton.Yes:return
+        from ..file_library import remove_entries
+        self.browser.mutate(lambda:remove_entries(self.browser.root,[e.path for e in entries]),
+                            lambda moved:self.browser.owner.status.setText(f'已移入 {len(moved)} 张截图'))
     def keyPressEvent(self,event):
         if event.key()==Qt.Key.Key_Delete and self.currentIndex().isValid():
-            self.browser.remove(self.currentIndex().data(Qt.ItemDataRole.UserRole).path);return
+            entries=[index.data(Qt.ItemDataRole.UserRole) for index in self.selectionModel().selectedIndexes()]
+            if len(entries)>1 and all(not e.directory for e in entries):self.remove_selected(entries)
+            else:self.browser.remove(self.currentIndex().data(Qt.ItemDataRole.UserRole).path)
+            return
         super().keyPressEvent(event)

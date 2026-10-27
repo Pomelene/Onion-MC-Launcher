@@ -10,7 +10,7 @@ from .download import DownloadJob
 MODRINTH_API = "https://api.modrinth.com/v2"
 
 #: 支持的项目类型
-KINDS = {"mod": "模组", "resourcepack": "资源包", "shader": "光影", "modpack": "整合包"}
+KINDS = {"mod": "模组", "resourcepack": "资源包", "shader": "光影", "modpack": "整合包", "datapack":"数据包"}
 
 
 def search(downloader, kind: str, query: str, game_version: str = "",
@@ -19,7 +19,8 @@ def search(downloader, kind: str, query: str, game_version: str = "",
     from .catalog_search import SORTS,search_terms
     if kind not in KINDS:raise ValueError('不支持的项目类型')
     if sort not in {value for _,value in SORTS}:raise ValueError('不支持的排序方式')
-    facets = [[f"project_type:{kind}"]]
+    facets = [[f"project_type:{'mod' if kind=='datapack' else kind}"]]
+    if kind=='datapack':facets.append(['categories:datapack'])
     if game_version:
         facets.append([f"versions:{game_version}"])
     if loader:

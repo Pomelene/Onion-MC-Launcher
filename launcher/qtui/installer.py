@@ -23,7 +23,7 @@ class InstallDialog(QDialog):
         fields=row(spacing=10);body.addLayout(fields)
         self.version=QLineEdit(self);self.version.hide()
         self.loader=ChoiceComboBox();self.loader.setMinimumWidth(150)
-        for title,key in [('原版 Minecraft','vanilla'),('Fabric','fabric'),('Forge','forge'),('NeoForge','neoforge'),('Quilt','quilt'),('OptiFine','optifine')]:self.loader.addItem(title,key)
+        for title,key in [('原版 Minecraft','vanilla'),('Fabric','fabric'),('Legacy Fabric','legacyfabric'),('Forge','forge'),('NeoForge','neoforge'),('Quilt','quilt'),('OptiFine','optifine')]:self.loader.addItem(title,key)
         self.loader.setAccessibleName('加载器');fields.addWidget(self.loader)
         self.instance_name=QLineEdit();self.instance_name.setPlaceholderText('实例名称');self.instance_name.setAccessibleName('实例名称');fields.addWidget(self.instance_name,1);self.custom_name=False
         self.instance_name.textEdited.connect(lambda _:setattr(self,'custom_name',True))
@@ -119,7 +119,7 @@ class InstallDialog(QDialog):
             self.loader_status.setText('' if kind=='vanilla' else '请先选择游戏版本');self.loader_status.setVisible(kind!='vanilla');self.loader_panel.setVisible(kind!='vanilla');self.install_button.setEnabled(kind=='vanilla' and bool(game));return
         self.install_button.setEnabled(False);self.loader_status.setText('正在获取版本…');self.loader_status.show();repo=self.launcher.repo
         def work(job):
-            if kind in ('fabric','quilt'):
+            if kind in ('fabric','legacyfabric','quilt'):
                 from ..install.fabric import list_loaders
                 return [(e['loader']['version'],'稳定版' if e['loader'].get('stable') else '预览版') for e in list_loaders(repo.downloader,kind,game) if (e.get('loader') or {}).get('version')]
             if kind in ('forge','neoforge'):

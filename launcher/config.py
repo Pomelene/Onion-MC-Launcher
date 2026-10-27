@@ -29,6 +29,7 @@ _FLOAT_KEYS = {"ui_scale"}
 def _coerce(key: str, value: Any) -> Any:
     """把从 settings.json 读到的值强制为期望类型；失败返回 None 表示丢弃。"""
     if key=='color_mode':return value if value in ('dark','light','auto') else 'dark'
+    if key=='process_priority':return value if value in ('normal','below','above') else 'normal'
     if key=='accent_source':return value if value in ('custom','wallpaper') else 'custom'
     if key=='color_style':return value if value in ('fidelity','tonal_spot','vibrant','neutral','fruit_salad','rainbow') else 'fidelity'
     if key=='font_antialiasing':return value if value in ('auto','gray','subpixel') else 'auto'
@@ -104,6 +105,9 @@ DEFAULTS: dict[str, Any] = {
     "microsoft_client_id": "",     # 微软登录用的 Azure 应用 client_id
     "jvm_args": "",                # 附加 JVM 参数（空格分隔）
     "game_args": "",               # 附加游戏参数（空格分隔）
+    "process_priority": "normal", # Windows 游戏进程优先级
+    "pre_launch_command": "",
+    "post_exit_command": "",
     "theme": "light",
     "theme_preset": "bridge",
     "accent_color": "#cebafa",      # 可点击设置文字的高亮色

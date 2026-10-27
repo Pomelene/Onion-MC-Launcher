@@ -4,7 +4,9 @@
 
 **A free, open-source, community-oriented launcher for Minecraft: Java Edition.**
 
-Current source version: [v0.3.3](https://github.com/Pomelene/Onion-MC-Launcher/tree/v0.3.3). Download and run the corresponding Windows EXE from [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases).
+Current source version: [v0.4.0](https://github.com/Pomelene/Onion-MC-Launcher/tree/v0.4.0). Download and run the corresponding Windows EXE from [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases).
+
+**v0.4.0**: Add instance copies and custom icons, bulk mod toggling, world export, world data-pack management and downloads, screenshot multiselection, optional pre-launch and post-exit commands, and game process priority. Modpack export supports content selection and editable name/version; common MultiMC / Prism packs and new Legacy Fabric instances can be installed. View version changelogs and use rounded, solid list backgrounds for readability over detailed wallpapers. Fix Windows process detection to protect running instances. MultiMC packs with custom patches or unsupported components are explicitly rejected; this is not complete format compatibility. Online Legacy Fabric and data-pack operations depend on upstream service support.
 
 **v0.3.3**: Add launcher updates and release history management, including manual upgrades, downgrades, and edition switching. Verified replacement preserves the executable's custom filename and directory. Recover public catalog requests from failed system proxies. Versions v0.3.2 and earlier do not support automatic upgrades; install this version manually once to enable future updates.
 
@@ -26,7 +28,7 @@ The source is available under the [MIT License](LICENSE). The project's communit
 
 ## Features
 
-### Next version development (not released)
+### Instance and content management
 
 - A single Check and update button in the existing mod list scans and updates in the background. Downloads are verified before old files are renamed with an `.old` suffix; no additional mod inspection or update pages.
 - Local preflight checks and evidence-based diagnostics from game logs, crash reports and JVM error logs.
@@ -34,7 +36,7 @@ The source is available under the [MIT License](LICENSE). The project's communit
 - A download task center with live status, received bytes, cancellation, background operation and safe in-session retries; the latest 100 local task records are retained.
 - Skin favorites, favorite-first ordering and filtering; content-based identity survives renaming.
 
-Dependency checks cover recognized metadata and supported version predicates, not the loader's entire resolver. Users choose dependency projects and versions; new installations resolve required dependencies automatically. Launcher self-update checking is outside this work.
+Dependency checks cover recognized metadata and supported version predicates, not the loader's entire resolver. Users choose dependency projects and versions; new installations resolve required dependencies automatically.
 
 - Qt interface, instance selection, background downloads, cancellation and logs.
 - Installation workflows for vanilla Minecraft, Fabric, Quilt, Forge, NeoForge and OptiFine.

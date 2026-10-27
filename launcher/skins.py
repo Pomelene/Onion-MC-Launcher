@@ -14,6 +14,34 @@ SKIN_URL = 'https://api.minecraftservices.com/minecraft/profile/skins'
 PROFILE_URL = 'https://api.minecraftservices.com/minecraft/profile'
 CAPE_URL = PROFILE_URL + '/capes/active'
 
+_CAPE_NAMES = {
+    'migrator':'迁移者披风', 'vanilla':'原版披风', 'mapmaker':'地图制作者披风',
+    'moderator':'版主披风', 'translator':'翻译者披风', 'translator-chinese':'中文翻译者披风',
+    'cherry blossom':'樱花披风', '15th anniversary':'15 周年披风',
+    'purple heart':'紫心披风', "follower's":'追随者披风',
+    'mcc 15th year':'MCC 15 周年披风', 'minecraft experience':'Minecraft Experience 披风',
+    'mojang office':'Mojang 办公室披风', 'home':'家园披风', 'menace':'恶霸披风',
+    'yearn':'渴望披风', 'common':'普通披风', 'pan':'平底锅披风',
+    "founder's":'创始人披风', 'copper':'铜披风', 'zombie horse':'僵尸马披风',
+    'builder':'建造者披风', 'crafter':'合成者披风', 'hero':'英雄披风',
+    'twisted':'扭曲披风', 'aurora':'极光披风', 'cobalt':'Cobalt 披风',
+}
+
+
+def cape_name(alias,cape_id):
+    """Use known profile aliases; keep unknown names instead of guessing."""
+    import re
+    name=' '.join(alias.split())[:80] if isinstance(alias,str) else ''
+    known=_CAPE_NAMES.get(name.casefold())
+    if known:return known
+    match=re.fullmatch(r'minecon\s*(2011|2012|2013|2015|2016)',name,re.IGNORECASE)
+    if match:return 'MINECON '+match.group(1)+' 披风'
+    if name:return name
+    # UUID is an identifier, not a guessed name; keep unnamed entries distinct.
+    try:short=uuid.UUID(str(cape_id)).hex[:8]
+    except (ValueError,TypeError,AttributeError):short='未知'
+    return '未命名披风 · '+short
+
 
 def _profile_request(account, url, method='GET', body=None):
     if not account or account.type!='microsoft' or not account.access_token or account.is_expired():

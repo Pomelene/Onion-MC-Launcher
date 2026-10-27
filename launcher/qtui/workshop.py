@@ -7,7 +7,7 @@ from shiboken6 import isValid
 from .widgets import Page,Card,ContentRow,Empty,column,row,label,button,clear,favorite_button,menu_button
 from .choices import ChoiceComboBox
 from .skin_preview import SkinPreview
-from ..skins import SkinLibrary,upload_skin,skin_bytes,cape_profile,sync_cape,texture_bytes
+from ..skins import SkinLibrary,upload_skin,skin_bytes,cape_profile,sync_cape,texture_bytes,cape_name
 from .seed_map import SeedMap
 
 
@@ -121,7 +121,7 @@ class Wardrobe(QWidget):
             from concurrent.futures import ThreadPoolExecutor
             for item in profile.get('capes',[])[:64]:
                 if isinstance(item,dict) and isinstance(item.get('id'),str):
-                    capes.append({'id':item['id'],'name':str(item.get('alias') or '披风')[:80], 'active':item.get('state')=='ACTIVE','url':item.get('url')})
+                    capes.append({'id':item['id'],'name':cape_name(item.get('alias'),item['id']), 'active':item.get('state')=='ACTIVE','url':item.get('url')})
             skins=profile.get('skins',[]);active=next((s for s in skins if isinstance(s,dict) and s.get('state')=='ACTIVE'),{}) if isinstance(skins,list) else {}
             with ThreadPoolExecutor(max_workers=6) as pool:
                 images=list(pool.map(texture,[item['url'] for item in capes]+[active.get('url')]))

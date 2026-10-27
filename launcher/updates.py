@@ -163,6 +163,9 @@ function Start-Launcher {
     $info.FileName=$target
     $info.WorkingDirectory=@@WORKDIR@@
     $info.UseShellExecute=$false
+    # A restarted onefile app must unpack a fresh Python runtime. The old
+    # bootloader removes its temporary runtime when the original app exits.
+    $info.EnvironmentVariables['PYINSTALLER_RESET_ENVIRONMENT']='1'
     $info.WindowStyle=[System.Diagnostics.ProcessWindowStyle]::Normal
     return [System.Diagnostics.Process]::Start($info)
 }
@@ -230,6 +233,7 @@ def launch_replacement(executable,staged,release):
     encoded=base64.b64encode(script.encode('utf-16-le')).decode('ascii')
     ready=Path(staged).parent/'ready.json';ready.unlink(missing_ok=True)
     process=subprocess.Popen([str(powershell),'-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',encoded],
+        env={**os.environ,'PYINSTALLER_RESET_ENVIRONMENT':'1'},
         cwd=Path(executable).resolve().parent,creationflags=subprocess.CREATE_NO_WINDOW|subprocess.CREATE_NEW_PROCESS_GROUP,
         stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     # Never close the launcher if Windows blocked or failed to start its helper.

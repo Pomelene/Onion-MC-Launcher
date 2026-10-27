@@ -20,7 +20,7 @@ def install_instance(repo,game,kind,loader_version,target_id,request_id=None,on_
         profile=target/f'{target_id}.json'
         if profile.is_file() and json.loads(profile.read_text(encoding='utf-8')).get('onionInstallRequest')==request_id:return target_id
         raise FileExistsError('实例目录已存在：'+target_id)
-    if kind not in ('vanilla','fabric','quilt','forge','neoforge','optifine'):raise ValueError('不支持的加载器')
+    if kind not in ('vanilla','fabric','legacyfabric','quilt','forge','neoforge','optifine'):raise ValueError('不支持的加载器')
     def check():
         if cancel is not None and cancel.is_set():raise DownloadCancelled('安装已取消')
     check();cache=repo.assert_writable(repo.game_dir/'.onion/install');cache.mkdir(parents=True,exist_ok=True)
@@ -31,7 +31,7 @@ def install_instance(repo,game,kind,loader_version,target_id,request_id=None,on_
         staged=GameRepository(config);staged.versions_dir=Path(temporary)/'versions';staged.resolver=VersionResolver(staged.versions_dir);staged._manifest=repo._manifest
         # Copy runtime metadata and client files only, never mods/saves/options.
         seeds=[game]
-        if kind in ('fabric','quilt') and loader_version:seeds.append(f'{kind}-loader-{loader_version}-{game}')
+        if kind in ('fabric','legacyfabric','quilt') and loader_version:seeds.append(f'{kind}-loader-{loader_version}-{game}')
         seen=set()
         while seeds:
             ident=seeds.pop()
@@ -48,7 +48,7 @@ def install_instance(repo,game,kind,loader_version,target_id,request_id=None,on_
                 if parent and parent!=ident:seeds.append(parent)
         with staged.downloader.cancellable(cancel,getattr(getattr(repo.downloader,'_local',None),'on_bytes',None)):
             if kind=='vanilla':result=game
-            elif kind in ('fabric','quilt'):
+            elif kind in ('fabric','legacyfabric','quilt'):
                 from .fabric import install_loader
                 result=install_loader(staged,game,loader_version or None,kind,on_stage)
             elif kind in ('forge','neoforge'):

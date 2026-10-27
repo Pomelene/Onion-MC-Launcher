@@ -196,6 +196,9 @@ class SettingsEditor(QWidget):
         body=tab('高级参数','settings');card=Card('启动参数','通常保持默认即可。额外参数会传递给 Java 或游戏。')
         self.edit(card,'jvm_args','JVM 参数','支持用引号包裹含空格的参数','留空使用默认参数')
         self.edit(card,'game_args','游戏参数','附加到游戏启动命令','留空使用默认参数')
+        self.combo(card,'process_priority','游戏进程优先级','仅影响 Windows 游戏进程',[('默认','normal'),('较低','below'),('较高','above')])
+        self.edit(card,'pre_launch_command','启动前命令','直接运行程序；成功退出后启动游戏','留空不执行')
+        self.edit(card,'post_exit_command','游戏退出后命令','直接运行程序；不经过命令行 shell','留空不执行')
         if not version_id:self.check(card,'demo','试玩模式','仅在需要 Minecraft 试玩时开启')
         body.addWidget(card)
         nav.addStretch();self.select_tab(0)
@@ -286,7 +289,7 @@ class SettingsEditor(QWidget):
 
     def edit(self,card,key,title,description,placeholder,browse=None):
         field=QLineEdit(str(self.initial(key) or ''));field.setPlaceholderText(placeholder)
-        if browse or key in ('jvm_args','game_args','server_address','home_welcome_large','home_welcome_small'):field.setProperty('wideEditor',True)
+        if browse or key in ('jvm_args','game_args','server_address','pre_launch_command','post_exit_command','home_welcome_large','home_welcome_small'):field.setProperty('wideEditor',True)
         self.add(card,key,title,description,field)
         if browse:
             def choose():
@@ -393,6 +396,7 @@ class SettingsEditor(QWidget):
             try:
                 if isinstance(field,QCheckBox):field.setChecked(bool(value))
                 elif isinstance(field,QSpinBox):field.setValue(int(value or 0))
+                elif isinstance(field,QComboBox):field.setCurrentIndex(max(0,field.findData(value)))
                 else:field.setText(str(value or ''))
             finally:field.blockSignals(previous)
         self.update_memory_controls()

@@ -58,6 +58,7 @@ class FlatListDelegate(QStyledItemDelegate):
 class FlatTreeWidget(QTreeWidget):
     def __init__(self,parent=None):
         super().__init__(parent)
+        self.setProperty('listSurface',True)
         self.setFrameShape(QFrame.Shape.NoFrame);self.setRootIsDecorated(False);self.setIndentation(0)
         self.setHeaderHidden(True);self.setUniformRowHeights(False);self.setAlternatingRowColors(False);self.setMouseTracking(True)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)

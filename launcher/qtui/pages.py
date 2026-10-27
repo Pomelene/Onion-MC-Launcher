@@ -4,7 +4,7 @@ from .lists import FlatTreeWidget as QTreeWidget,DETAIL_ROLE,META_ROLE
 from pathlib import Path
 from .choices import ChoiceComboBox,ActionMenu
 from PySide6.QtCore import Qt,QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices,QIcon
 from PySide6.QtWidgets import (QWidget,QLineEdit,QComboBox,QFormLayout,QCheckBox,QSpinBox,QHeaderView,
     QTabWidget,QFileDialog,QMessageBox,QDialog,QTreeWidgetItem,QMenu)
 from .widgets import Page,Card,Empty,HomeCanvas,ContentRow,WelcomeLine,label,button,column,row,clear,icon,favorite_button,icon_button,menu_button
@@ -54,7 +54,7 @@ class Pages:
     def build_versions(self):
         body=self.page('versions')
         toolbar=row();query=QLineEdit();self.library_search=query;query.setPlaceholderText('搜索实例');query.setClearButtonEnabled(True);query.setText(getattr(self,'library_query',''));toolbar.addWidget(query,1)
-        kinds=ChoiceComboBox();kinds.addItems(['全部类型','原版','Fabric','Forge','NeoForge','Quilt','OptiFine']);kinds.setCurrentIndex(getattr(self,'library_kind',0))
+        kinds=ChoiceComboBox();kinds.addItems(['全部类型','原版','Fabric','Forge','NeoForge','Quilt','OptiFine','Legacy Fabric']);kinds.setCurrentIndex(getattr(self,'library_kind',0))
         sort=ChoiceComboBox();sort.addItems(['名称排序','最近游玩','游玩时长']);sort.setCurrentIndex(getattr(self,'library_sort',0))
         kinds.setMaximumWidth(110);sort.setMaximumWidth(125)
         toolbar.addWidget(button('安装',self.install_dialog,'primary','plus'));toolbar.addWidget(menu_button(lambda:[('导入整合包',self.import_modpack),('新建实例',self.create_instance),('恢复已移除文件',self.recovery)]));body.addLayout(toolbar)
@@ -78,6 +78,9 @@ class Pages:
                 except Exception:game=''
                 detail=' · '.join(v for v in (game,self.kinds.get(vid,'原版'),meta.group,*meta.tags) if v)
                 item=QTreeWidgetItem([meta.display_name,'','']);item.setData(0,DETAIL_ROLE,detail);item.setData(0,Qt.ItemDataRole.UserRole,vid);item.setToolTip(0,vid+'\n'+detail+'\n'+meta.last_played_text())
+                if meta.icon:
+                    icon_path=Path(meta.icon);icon_path=icon_path if icon_path.is_absolute() else self.root/icon_path
+                    item.setIcon(0,QIcon(str(icon_path)))
                 tree.addTopLevelItem(item)
                 def mark(checked,version=vid):
                     try:self.instances.update(version,favorite=checked)
@@ -105,7 +108,7 @@ class Pages:
                 value,ok=QInputDialog.getText(self,'实例标签','多个标签用逗号分隔',text=', '.join(self.instances.get(vid).tags))
                 if ok:self.instances.update(vid,tags=value);self.build_versions()
             menu.addAction('取消收藏' if self.instances.get(vid).favorite else '收藏实例',favorite);menu.addAction('编辑标签',tags);menu.addSeparator()
-            for title,callback in [('选择并返回首页',select_home),('重命名实例',lambda:self.rename_instance(vid)),('管理实例',lambda:self.instance_settings(vid)),('启动游戏',lambda:self.launch_version_id(vid)),('打开目录',lambda:self.open_folder(self.repo.run_dir(vid))),('导出整合包',lambda:self.export_modpack(vid)),('移入恢复中心',lambda:self.delete_version(vid))]:menu.addAction(title,callback)
+            for title,callback in [('选择并返回首页',select_home),('重命名实例',lambda:self.rename_instance(vid)),('复制实例',lambda:self.clone_instance(vid)),('选择图标',lambda:self.set_instance_icon(vid)),('恢复默认图标',lambda:self.reset_instance_icon(vid)),('管理实例',lambda:self.instance_settings(vid)),('启动游戏',lambda:self.launch_version_id(vid)),('打开目录',lambda:self.open_folder(self.repo.run_dir(vid))),('导出整合包',lambda:self.export_modpack(vid)),('移入恢复中心',lambda:self.delete_version(vid))]:menu.addAction(title,callback)
             menu.exec(tree.viewport().mapToGlobal(point))
         tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);tree.customContextMenuRequested.connect(context)
         query.textChanged.connect(render);kinds.currentIndexChanged.connect(render);sort.currentIndexChanged.connect(render);favorites.currentIndexChanged.connect(render);tags.currentIndexChanged.connect(render);render()
@@ -208,8 +211,21 @@ class Pages:
         visible_rows=[]
         def filter_rows():
             text=query.text().strip().casefold()
-            for widget,content in visible_rows:widget.setVisible(text in content)
+            for widget,content,_state in visible_rows:widget.setVisible(text in content)
         query.textChanged.connect(filter_rows)
+        def batch(enabled):
+            selected=[state[0] for widget,_content,state in visible_rows if not widget.isHidden() and state[0].enabled!=enabled]
+            if not selected:self.status.setText('没有需要修改的模组');return
+            verb='启用' if enabled else '停用'
+            if QMessageBox.question(self,'批量'+verb,f'{verb}当前搜索结果中的 {len(selected)} 个模组？')!=QMessageBox.StandardButton.Yes:return
+            repo=self.repo
+            def work(job):
+                from ..mods import set_mods_enabled
+                repo.assert_idle(vid)
+                for info in selected:repo.assert_writable(info.path)
+                return set_mods_enabled(selected,enabled,job.cancel)
+            self.task('批量'+verb+'模组',work,lambda count:(self.status.setText(f'已{verb} {count} 个模组'),refresh()),task_repo=repo,task_instance=vid)
+        if content_kind=='mods':tabs.addWidget(menu_button(lambda:[('启用搜索结果',lambda:batch(True)),('停用搜索结果',lambda:batch(False))],'批量操作'))
         def refresh():
             key=kind.currentData();path=self.repo.run_dir(vid)/key;clear(results);results.addWidget(label('正在读取内容…','muted'))
             def scan(job):
@@ -232,7 +248,7 @@ class Pages:
                     item.set_artwork(artwork)
                     item.action('打开所在目录',lambda s=state:self.open_folder(s[0].path.parent),'folder')
                     item.action('移入恢复中心',lambda s=state:self.remove_content(s[0].path,vid,refresh),'trash','danger')
-                    results.addWidget(item);visible_rows.append((item,(title+' '+detail+' '+getattr(info,'mod_id','')+' '+info.path.name).casefold()))
+                    results.addWidget(item);visible_rows.append((item,(title+' '+detail+' '+getattr(info,'mod_id','')+' '+info.path.name).casefold(),state))
                 filter_rows()
             self.tasks.submit(scan,done,self.error)
         tabs.insertWidget(0,button('刷新',refresh,glyph='history'));kind.currentIndexChanged.connect(refresh);refresh()
@@ -275,6 +291,7 @@ class Pages:
             for world in worlds:
                 card=Card(world.name,f'{world.version}  ·  {world.game_mode}  ·  {world.last_played_text()}');line=row();line.addStretch()
                 line.addWidget(button('打开目录',lambda w=world:self.open_folder(w.dir),glyph='folder'));line.addWidget(button('备份',lambda w=world:self.backup_world(w,vid),'soft'))
+                line.addWidget(menu_button(lambda w=world:[('数据包管理',lambda:self.manage_datapacks(w,vid)),('导出世界',lambda:self.export_world(w,vid))]))
                 line.addWidget(button('移除',lambda w=world:self.remove_content(w.dir,vid,lambda:self.navigate('worlds',force=True)),'danger'));card.body.addLayout(line);results.addWidget(card)
         self.tasks.submit(lambda job:list_worlds(self.repo.saves_dir(vid)),done,self.error)
 
@@ -282,6 +299,18 @@ class Pages:
         from ..worlds import backup_world
         def work(job):self.repo.assert_idle(vid);return backup_world(world,self.repo.game_dir/'backups/worlds')
         self.task('备份世界',work,lambda path:self.status.setText('已备份 · '+str(path)))
+
+    def manage_datapacks(self,world,vid):
+        from .datapacks import WorldDataPacks
+        self.show_subpage(WorldDataPacks(self,vid,world))
+
+    def export_world(self,world,vid):
+        path,_=QFileDialog.getSaveFileName(self,'导出世界',world.folder+'.zip','ZIP 存档 (*.zip)')
+        if not path:return
+        from ..worlds import export_world
+        repo=self.repo
+        def work(job):repo.assert_idle(vid);return export_world(world,Path(path),job.cancel)
+        self.task('导出世界',work,lambda result:self.status.setText('已导出 · '+str(result)),task_repo=repo,task_instance=vid)
 
     def restore_world(self):
         vid=self.selected_version

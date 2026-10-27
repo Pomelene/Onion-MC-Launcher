@@ -196,15 +196,20 @@ def appearance_style(accent,config=None):
     # Data surfaces use neutral chrome; the accent identifies focus and selection.
     dark=resolved_mode(config)=='dark';size=int(preference(config,'font_size',14))
     base,hover,selected,border,muted=('#121214','#1b1b1f','#25252b','#303034','#a1a1aa') if dark else ('#ffffff','#fafafa','#f0f0f3','#e5e5e7','#71717a')
+    radius=max(0,min(24,int(preference(config,'corner_radius',10))))
+    # Keep viewport rectangles (including selection and embedded action buttons)
+    # inside the rounded silhouette without jagged native region masks.
+    inset=max(4,(radius*3+9)//10+1)
     style+='''
 QTreeWidget { background:transparent; border:0; border-radius:0; padding:0; outline:0; }
+QTreeWidget[listSurface="true"] { background:BASE; border:0; border-radius:RADIUSpx; padding:INSETpx; }
 QTreeWidget::item,QTreeWidget::item:hover,QTreeWidget::item:selected { padding:0; border:0; background:transparent; }
 QWidget#listRow { background:BASE; border:0; border-radius:0; }
 QWidget#listRow:hover { background:HOVER; }
 QHeaderView::section { background:transparent; border:0; border-bottom:1px solid BORDER; padding:5px 12px; color:MUTED; font-size:HEADERpx; font-weight:400; }
 QTreeWidget#instancePickerList { background:transparent; border:0; }
 QTreeWidget#instancePickerList::item,QTreeWidget#instancePickerList::item:selected,QTreeWidget#instancePickerList::item:hover { padding:0; border:0; background:transparent; }
-'''.replace('BASE',base).replace('HOVER',hover).replace('SELECTED',selected).replace('BORDER',border).replace('MUTED',muted).replace('HEADER',str(round(12*size/14)))
+'''.replace('BASE',base).replace('HOVER',hover).replace('SELECTED',selected).replace('BORDER',border).replace('MUTED',muted).replace('HEADER',str(round(12*size/14))).replace('RADIUS',str(radius)).replace('INSET',str(inset))
     text_opacity=opacity(preference(config,'text_transparency',0),70)
     if text_opacity<1:
         def text_alpha(match):

@@ -32,7 +32,7 @@ def normalize_tags(value):
 
 
 def default_instance_name(version: str, loader: str = 'vanilla') -> str:
-    names={'vanilla':'原版','fabric':'Fabric','forge':'Forge','neoforge':'NeoForge','quilt':'Quilt','optifine':'OptiFine'}
+    names={'vanilla':'原版','fabric':'Fabric','legacyfabric':'Legacy Fabric','forge':'Forge','neoforge':'NeoForge','quilt':'Quilt','optifine':'OptiFine'}
     return f"{version}-{names.get(loader.lower(),loader)}"
 
 

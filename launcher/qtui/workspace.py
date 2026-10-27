@@ -2,7 +2,8 @@
 from .lists import FlatTreeWidget as QTreeWidget
 
 from PySide6.QtCore import Qt,QPoint,QRectF,QSize,QEvent
-from PySide6.QtGui import QColor,QPainter,QPen,QFont,QFontMetrics
+from PySide6.QtGui import QColor,QPainter,QPen,QFont,QFontMetrics,QIcon
+from pathlib import Path
 from PySide6.QtWidgets import QWidget,QDialog,QLineEdit,QTreeWidgetItem,QStackedWidget,QFormLayout,QMessageBox,QStyledItemDelegate,QStyle
 from .widgets import Page,Card,ContentRow,column,row,label,button,clear,icon,control_accent
 from .theme import paint_color,surface_opacity,config_for,contrasting_accent,appearance_values,effective_accent,corner,text_size,row_height,preference
@@ -23,7 +24,11 @@ class InstanceChoiceDelegate(QStyledItemDelegate):
             painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(fill);painter.drawRoundedRect(rect,corner(picker,10),corner(picker,10))
         badge=QRectF(rect.left()+12,rect.center().y()-18,36,36)
         tint=QColor(accent);tint.setAlpha(round(25*factor));painter.setBrush(tint);painter.setPen(Qt.PenStyle.NoPen);painter.drawRoundedRect(badge,9,9)
-        icon('package',paint_color(picker,'icon')).paint(painter,int(badge.x()+8),int(badge.y()+8),20,20)
+        custom=picker.launcher.instances.get(vid).icon
+        path=Path(custom) if custom else None
+        if path and not path.is_absolute():path=picker.launcher.root/path
+        artwork=QIcon(str(path)) if path else QIcon()
+        (artwork if not artwork.isNull() else icon('package',paint_color(picker,'icon'))).paint(painter,int(badge.x()+6),int(badge.y()+6),24,24)
         x=rect.left()+60;width=max(0,int(rect.width()-x+rect.left()-36))
         bold=appearance_values(config_for(picker))['bold_text']
         font=QFont(picker.font());font.setPixelSize(text_size(picker,14));font.setWeight(QFont.Weight.DemiBold if current or bold else QFont.Weight.Normal)
@@ -59,7 +64,7 @@ class InstancePicker(QDialog):
             path=self.library_choice.itemData(index)
             if path:self.accept();launcher.switch_game_library(path)
         self.library_choice.currentIndexChanged.connect(switch_library)
-        self.tree=QTreeWidget();self.tree.setObjectName('instancePickerList');self.tree.setHeaderHidden(True);self.tree.setRootIsDecorated(False);self.tree.setColumnCount(1)
+        self.tree=QTreeWidget();self.tree.setProperty('listSurface',False);self.tree.setObjectName('instancePickerList');self.tree.setHeaderHidden(True);self.tree.setRootIsDecorated(False);self.tree.setColumnCount(1)
         self.tree.setUniformRowHeights(True);self.tree.setMouseTracking(True);self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.tree.setItemDelegate(InstanceChoiceDelegate(self));body.addWidget(self.tree,1)
         self.empty=label('没有匹配的实例','muted');self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter);body.addWidget(self.empty)
@@ -145,7 +150,7 @@ class InstanceWorkspace(QWidget):
         try:game,current,version=component_info(w.repo,self.vid)
         except (OSError,ValueError,VersionError) as error:page.body.addWidget(label(str(error),'muted',True));return
         page.body.setSpacing(0);page.body.addWidget(ContentRow('Minecraft',game,'package'))
-        for key,title in [('fabric','Fabric'),('quilt','Quilt'),('forge','Forge'),('neoforge','NeoForge'),('optifine','OptiFine')]:
+        for key,title in [('fabric','Fabric'),('legacyfabric','Legacy Fabric'),('quilt','Quilt'),('forge','Forge'),('neoforge','NeoForge'),('optifine','OptiFine')]:
             supported=key in ('fabric','quilt') and (not current or current==key)
             detail=version if current==key else '与 '+current.title()+' 不兼容' if current else '未安装'
             if not supported and (not current or current==key):detail+=' · 暂不支持原位安装'

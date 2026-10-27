@@ -6,7 +6,9 @@
 
 本分支为 `for_thunion`，版本号在公众版后增加 `-T`。工具坊新增“社团服务”：每次启动仅首次进入时确认并同步 [OnionService4THUnion/webapp.json](https://github.com/Pomelene/OnionService4THUnion/blob/main/webapp.json)，后续读取本地缓存。子目录先说明 Wiki、在线地图等网址的用途，点击“打开”后在启动器内嵌网页中浏览。清华联盟工坊是非官方、非营利组织。
 
-当前源码版本：[v0.3.3-T · THUnion 特供版](https://github.com/Pomelene/Onion-MC-Launcher/tree/for_thunion)。Windows 程序见 [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases)，下载对应 EXE 后运行。
+当前源码版本：[v0.4.0-T · THUnion 特供版](https://github.com/Pomelene/Onion-MC-Launcher/tree/for_thunion)。Windows 程序见 [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases)，下载对应 EXE 后运行。
+
+**v0.4.0-T**：新增实例复制与自定义图标、模组批量启停、世界导出、数据包管理与下载、截图多选复制及移除、可选的启动前和退出后命令、游戏进程优先级。整合包导出支持选择内容及名称和版本；支持常见 MultiMC / Prism 整合包导入和 Legacy Fabric 新实例安装。版本列表可查看更新日志；列表新增跟随主题的纯色圆角底板，改善复杂壁纸下的可读性。修复 Windows 进程状态检测，保护运行中的实例。包含自定义补丁或不支持组件的 MultiMC 包会明确提示，不能视为完整格式兼容；Legacy Fabric 和数据包在线服务仍取决于上游支持。
 
 **v0.3.3-T**：新增启动器自动更新与历史版本管理，可在设置中手动升级、回退或切换系列。自动替换保留用户自定义的 EXE 路径和文件名；下载前后校验文件。修复系统代理下社团服务同步失败时无法直连重试的问题。v0.3.2 及以下不支持自动升级，首次使用此功能需手动安装新版。
 
@@ -26,7 +28,7 @@
 
 ## 功能概览
 
-### 下一版开发（尚未发布）
+### 实例与内容管理
 
 - 原模组列表提供“检查并更新”，后台扫描并更新，下载校验成功再将旧文件改名为 `.old`；不增加检查或更新子页面。
 - 启动前本地环境体检；结合游戏日志、崩溃报告和 JVM 错误日志的证据式诊断。
@@ -34,7 +36,7 @@
 - 下载任务列表：实时状态、已接收数据、取消、后台运行及本次会话内安全任务重试；保留最近 100 条本地记录。
 - 皮肤收藏、优先排序与仅收藏筛选；收藏随皮肤内容保存，重命名后保留。
 
-依赖检查只覆盖可识别的元数据和版本范围，不代替加载器的完整解析。依赖搜索由用户选择项目和版本；新安装自动处理必需依赖。启动器自动更新检查未纳入本次开发。
+依赖检查只覆盖可识别的元数据和版本范围，不代替加载器的完整解析。依赖搜索由用户选择项目和版本；新安装自动处理必需依赖。
 
 - Qt 界面、实例选择、后台下载任务、取消及日志显示。
 - 原版及 Fabric、Quilt、Forge、NeoForge、OptiFine 安装流程。

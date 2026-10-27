@@ -302,7 +302,7 @@ class GameRepository:
             if any(lib.name.lower().startswith("optifine:") for lib in resolved.libraries):
                 return "OptiFine"
             name, _version = _detect_loader(self, version_id)
-            return {"fabric": "Fabric", "quilt": "Quilt", "forge": "Forge",
+            return {"fabric": "Fabric", "legacyfabric":"Legacy Fabric", "quilt": "Quilt", "forge": "Forge",
                     "neoforge": "NeoForge"}.get(name, "原版")
         except (OSError, ValueError):
             return "未知"
@@ -535,6 +535,71 @@ class GameRepository:
         write_text(target / f"{name}.json", json.dumps(
             {"id": name, "inheritsFrom": base_id, "type": "release"}, ensure_ascii=False, indent=2))
         (target / ".isolate").write_text("1", encoding="utf-8")
+        return name
+
+    def clone_instance(self, source_id: str, name: str, cancel=None, progress=None) -> str:
+        """Copy one instance into a new isolated directory without changing its source."""
+        import stat
+        import tempfile
+
+        source = self.version_dir(source_id)
+        target = self.assert_writable(self.version_dir(name))
+        self.assert_idle(source_id)
+        self.resolver.resolve(source_id)
+        if target.exists():
+            raise FileExistsError(f"实例已存在：{name}")
+        run = self.run_dir(source_id)
+        shared = run.resolve() != source.resolve()
+        if shared:
+            for other in self.list_installed():
+                if other != source_id and self.run_dir(other).resolve() == run.resolve():
+                    self.assert_idle(other)
+        shared_names = ('mods', 'config', 'saves', 'resourcepacks', 'shaderpacks',
+                        'screenshots', 'schematics', 'options.txt', 'servers.dat',
+                        'servers.dat_old', 'optionsof.txt', 'optionsshaders.txt')
+
+        def copy_safe(src, dst):
+            if cancel is not None and cancel.is_set():
+                raise RuntimeError('复制已取消')
+            info = src.lstat()
+            if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400):
+                raise ValueError(f'实例包含无法安全复制的链接：{src}')
+            if src.is_dir():
+                dst.mkdir()
+                for item in src.iterdir():
+                    if item.name not in ('.instance.lock', '.craftbridge-trash', '.craftbridge-backups'):
+                        copy_safe(item, dst / item.name)
+            elif src.is_file():
+                shutil.copy2(src, dst)
+            else:
+                raise ValueError(f'无法复制特殊文件：{src}')
+
+        with tempfile.TemporaryDirectory(prefix='.onion-clone-', dir=self.versions_dir) as tmp:
+            staging = Path(tmp) / 'instance'
+            staging.mkdir()
+            for item in source.iterdir():
+                if item.name in ('.instance.lock', '.craftbridge-trash', '.craftbridge-backups') or item.name.startswith('natives-'):
+                    continue
+                new_name = name + item.name[len(source_id):] if item.name in (source_id+'.json', source_id+'.jar') else item.name
+                if progress: progress('正在复制 · ' + item.name)
+                copy_safe(item, staging / new_name)
+            if shared:
+                for entry in shared_names:
+                    src, dst = run / entry, staging / entry
+                    if src.exists() and not dst.exists():
+                        if progress: progress('正在复制 · ' + entry)
+                        copy_safe(src, dst)
+            manifest = staging / (name + '.json')
+            raw = json.loads(manifest.read_text(encoding='utf-8-sig'))
+            raw['id'] = name
+            if raw.get('jar') == source_id and (staging / (name + '.jar')).is_file():
+                raw['jar'] = name
+            manifest.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding='utf-8')
+            (staging / '.isolate').write_text('1', encoding='utf-8')
+            if cancel is not None and cancel.is_set():
+                raise RuntimeError('复制已取消')
+            # Windows rename refuses an existing destination; never overwrite an instance.
+            staging.rename(target)
         return name
 
     # ------------------------------------------------------------------ 校验/删除

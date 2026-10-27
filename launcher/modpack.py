@@ -31,6 +31,40 @@ class ModpackInfo:
     game_version: str
     loader: str = ""          # fabric | quilt | forge | neoforge
     loader_version: str = ""
+    archive_root: str = ""
+
+
+def _multimc_info(zf, path):
+    matches=[item.filename for item in zf.infolist() if item.filename.rsplit('/',1)[-1]=='mmc-pack.json']
+    if not matches:return None
+    if len(matches)!=1:raise DownloadError('整合包包含多个 MultiMC 实例')
+    root=matches[0][:-len('mmc-pack.json')]
+    if any(item.filename.startswith(root+prefix) and not item.is_dir() for item in zf.infolist() for prefix in ('patches/','libraries/','jars/')):
+        raise DownloadError('该整合包包含自定义组件或库，暂不能安全导入')
+    data=_read_json(zf,matches[0])
+    if not isinstance(data,dict) or not isinstance(data.get('components'),list):raise DownloadError('MultiMC 组件信息无效')
+    known={'net.minecraft':'minecraft','net.fabricmc.fabric-loader':'fabric','org.quiltmc.quilt-loader':'quilt',
+           'net.minecraftforge':'forge','net.neoforged':'neoforge'}
+    runtime={'org.lwjgl','org.lwjgl3','net.fabricmc.intermediary','org.quiltmc.hashed'}
+    found={}
+    for entry in data['components']:
+        if not isinstance(entry,dict):raise DownloadError('MultiMC 组件信息无效')
+        if entry.get('disabled') is True:continue
+        uid=entry.get('uid');version=entry.get('version')
+        if uid in runtime:continue
+        if uid not in known:raise DownloadError('暂不支持整合包组件：'+str(uid))
+        kind=known[uid]
+        if not isinstance(version,str) or not version or kind in found:raise DownloadError('整合包组件版本无效或重复')
+        found[kind]=version
+    loaders=[key for key in found if key!='minecraft']
+    if 'minecraft' not in found or len(loaders)>1:raise DownloadError('缺少游戏版本或包含多个不兼容加载器')
+    loader=loaders[0] if loaders else ''
+    name=path.stem
+    try:
+        cfg=read_member(zf,root+'instance.cfg',limit=256*1024).decode('utf-8-sig','replace')
+        name=next((line.split('=',1)[1].strip() for line in cfg.splitlines() if line.lower().startswith('name=') and line.split('=',1)[1].strip()),name)
+    except KeyError:pass
+    return ModpackInfo('multimc',name,'1.0',found['minecraft'],loader,found.get(loader,''),root)
 
 
 def _read_json(zf: zipfile.ZipFile, name: str) -> Optional[dict]:
@@ -77,10 +111,12 @@ def read_modpack_info(path: Path) -> ModpackInfo:
                 loader=kind,
                 loader_version=version,
             )
+        multimc=_multimc_info(zf,path)
+        if multimc is not None:return multimc
     raise DownloadError("无法识别的整合包格式（需要 modrinth.index.json 或 manifest.json）")
 
 
-def _safe_extract(zf: zipfile.ZipFile, folder: str, target: Path, cancel_event=None) -> int:
+def _safe_extract(zf: zipfile.ZipFile, folder: str, target: Path, cancel_event=None, *, strict=False, reserved=()) -> int:
     """把 zip 中 folder/ 前缀的内容解压到 target，防路径穿越。"""
     validate_archive(zf)
     count = 0
@@ -88,10 +124,12 @@ def _safe_extract(zf: zipfile.ZipFile, folder: str, target: Path, cancel_event=N
         if info.filename.endswith("/") or not info.filename.startswith(folder + "/"):
             continue
         rel = info.filename[len(folder) + 1:]
+        if rel.split('/',1)[0].casefold() in reserved:raise DownloadError('整合包内容与实例内部文件冲突：'+rel)
         from .safety import child
         try:
             dest = child(target, rel)
         except (ValueError, PermissionError):
+            if strict:raise DownloadError('整合包包含无效的游戏文件路径：'+rel) from None
             continue
         dest.parent.mkdir(parents=True, exist_ok=True)
         copy_member(zf,info,dest,cancel_event=cancel_event)
@@ -259,6 +297,13 @@ def _import_modpack(repo, archive: Path, on_stage=None, on_progress=None, target
             stage("解压整合包覆盖文件")
             _safe_extract(zf, "overrides", instance,cancel_event)
             _safe_extract(zf, "client-overrides", instance,cancel_event)
+        elif info.kind=='multimc':
+            stage('解压实例内容')
+            candidates=[info.archive_root+'.minecraft',info.archive_root+'minecraft']
+            present=[folder for folder in candidates if any(i.filename.startswith(folder+'/') for i in zf.infolist())]
+            if len(present)>1:raise DownloadError('整合包包含多个游戏目录')
+            reserved={pack_id.casefold()+'.json',pack_id.casefold()+'.jar','.isolate','.instance.lock','.onion','versions','libraries','assets'}
+            if present:files_installed+=_safe_extract(zf,present[0],instance,cancel_event,strict=True,reserved=reserved)
         else:
             stage("解压整合包覆盖文件")
             _safe_extract(zf, "overrides", instance,cancel_event)
@@ -351,6 +396,8 @@ def _base_version(repo, version_id: str) -> str:
 def _detect_loader(repo, version_id: str) -> tuple[str, str]:
     """Prefer actual library coordinates, including inherited profiles."""
     try:
+        marker=repo.resolver.load_raw(version_id).get('onionLoaderComponent') or {}
+        if isinstance(marker,dict) and marker.get('kind')=='legacyfabric':return 'legacyfabric',str(marker.get('version') or '')
         for lib in repo.resolver.resolve(version_id).libraries:
             parts = lib.name.split(":")
             if len(parts) < 3:
@@ -396,31 +443,17 @@ def _sha1(path: Path) -> str:
         return ""
 
 
-def export_mrpack(repo, version_id: str, out_path: Path, name: str = "") -> Path:
+def export_mrpack(repo, version_id: str, out_path: Path, name: str = "", *,
+                  pack_version: str = '1.0', selected=None, cancel=None, progress=None) -> Path:
     """把某个版本的 mods / config 等打包为 .mrpack，返回输出路径。
 
-    为兼容外部工具，mods 同时写入 overrides/mods（保证可导入）并列出哈希；
-    本启动器导入时若 overrides 中已有文件则无需联网下载。
+    本地文件放入 overrides，避免生成没有下载地址的不合规范文件条目。
     """
     base = _base_version(repo, version_id)
     loader, loader_ver = _detect_loader(repo, version_id)
+    if loader=='legacyfabric':raise ValueError('Modrinth 整合包格式不能表达 Legacy Fabric，请使用实例复制')
     run_dir = repo.run_dir(version_id)
     mods_dir = run_dir / "mods"
-
-    files = []
-    if mods_dir.is_dir():
-        for p in sorted(mods_dir.glob("*.jar")) + sorted(mods_dir.glob("*.zip")):
-            try:
-                size = p.stat().st_size
-            except OSError:
-                continue
-            files.append({
-                "path": f"mods/{p.name}",
-                "hashes": {"sha1": _sha1(p), "sha512": _sha512(p)},
-                "env": {"client": "required", "server": "required"},
-                "downloads": [],
-                "fileSize": size,
-            })
 
     deps = {"minecraft": base}
     if loader:
@@ -429,37 +462,44 @@ def export_mrpack(repo, version_id: str, out_path: Path, name: str = "") -> Path
     index = {
         "formatVersion": 1,
         "game": "minecraft",
-        "versionId": "1.0",
+        "versionId": pack_version.strip() or '1.0',
         "name": name or version_id,
         "summary": "由 Onion Minecraft Launcher 导出",
-        "files": files,
+        # Local-only content belongs in overrides; empty download URLs are not
+        # valid Modrinth file entries and break third-party launchers.
+        "files": [],
         "dependencies": deps,
     }
 
-    override_dirs = ("config", "resourcepacks", "shaderpacks", "kubejs",
-                     "scripts", "options.txt", "servers.dat", "optionsof.txt",
-                     "optionsshaders.txt")
+    allowed = ("mods", "config", "resourcepacks", "shaderpacks", "kubejs",
+               "scripts", "options.txt", "servers.dat", "optionsof.txt", "optionsshaders.txt", "saves")
+    override_dirs = allowed[:-1] if selected is None else tuple(selected)
+    if any(item not in allowed for item in override_dirs):raise ValueError('不支持的导出内容')
     out_path = Path(out_path)
     if out_path.resolve().is_relative_to(run_dir.resolve()):
         raise ValueError("请将整合包导出到实例目录之外")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     import uuid
     temporary = out_path.with_name(out_path.name + "." + uuid.uuid4().hex + ".tmp")
-    with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("modrinth.index.json", json.dumps(index, ensure_ascii=False))
-        for sub in override_dirs:
-            p = run_dir / sub
-            if p.is_dir():
-                for f in p.rglob("*"):
+    from .safety import backup_file,contained
+    from .download import DownloadCancelled
+    try:
+        with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+            zf.writestr("modrinth.index.json", json.dumps(index, ensure_ascii=False))
+            for sub in override_dirs:
+                p = run_dir / sub
+                if not p.exists():continue
+                contained(p,run_dir)
+                paths=p.rglob('*') if p.is_dir() else [p]
+                for f in paths:
+                    if cancel is not None and cancel.is_set():raise DownloadCancelled('导出已取消')
+                    contained(f,run_dir)
                     if f.is_file():
-                        zf.write(f, f"overrides/{f.relative_to(run_dir)}")
-            elif p.is_file():
-                zf.write(p, f"overrides/{sub}")
-        # 模组同步写入 overrides，保证离线可导入
-        if mods_dir.is_dir():
-            for p in sorted(mods_dir.glob("*.jar")) + sorted(mods_dir.glob("*.zip")):
-                zf.write(p, f"overrides/mods/{p.name}")
-    from .safety import backup_file
-    backup_file(out_path)
-    temporary.replace(out_path)
+                        if progress:progress('正在打包 · '+str(f.relative_to(run_dir)))
+                        zf.write(f, 'overrides/'+f.relative_to(run_dir).as_posix())
+        if cancel is not None and cancel.is_set():raise DownloadCancelled('导出已取消')
+        backup_file(out_path)
+        temporary.replace(out_path)
+    finally:
+        temporary.unlink(missing_ok=True)
     return out_path

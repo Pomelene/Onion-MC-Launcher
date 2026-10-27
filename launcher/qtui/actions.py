@@ -6,7 +6,7 @@ import shlex
 import time
 from pathlib import Path
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QDialog,QFormLayout,QLineEdit,QComboBox,QInputDialog,
+from PySide6.QtWidgets import (QDialog,QFormLayout,QLineEdit,QComboBox,QInputDialog,QCheckBox,
     QFileDialog,QMessageBox,QTreeWidgetItem)
 from .widgets import column,row,label,button,Card
 from ..paths import LAUNCHER_VERSION,LAUNCHER_NAME
@@ -79,7 +79,7 @@ class Actions:
                 injector=str(ensure_injector(repo.downloader,repo.cache_path('authlib-injector.jar')))
             settings=LaunchSettings(java_path=str(java.path),min_memory=overrides['min_memory'],max_memory=overrides['max_memory'],
                 width=overrides['width'],height=overrides['height'],fullscreen=overrides['fullscreen'],demo=bool(self.config_obj.get('demo')),
-                server_address=overrides['server_address'],extra_jvm_args=shlex.split(overrides['jvm_args']),extra_game_args=shlex.split(overrides['game_args']),
+                server_address=overrides['server_address'],extra_jvm_args=shlex.split(overrides['jvm_args']),extra_game_args=shlex.split(overrides['game_args']),process_priority=overrides['process_priority'],pre_launch_command=overrides['pre_launch_command'],post_exit_command=overrides['post_exit_command'],
                 launcher_name=LAUNCHER_NAME,launcher_version=LAUNCHER_VERSION,authlib_injector_jar=injector)
             if local_skin:settings.extra_jvm_args.append('-Dauthlibinjector.side=client')
             account=Account(fresh.username,fresh.uuid,fresh.access_token or '0',fresh.user_type,authlib_url,fresh.client_id,fresh.xuid)
@@ -87,7 +87,7 @@ class Actions:
                 if fresh.access_token and fresh.access_token!='0':text=text.replace(fresh.access_token,'[已隐藏令牌]')
                 self.game_log.emit(text,is_error)
             job.emit('正在创建游戏进程')
-            process=launch(repo,rv,account,settings,str(java.path),on_log=logged,on_exit=lambda code:self.game_exit.emit(code))
+            process=launch(repo,rv,account,settings,str(java.path),on_log=logged,on_exit=lambda code:self.game_exit.emit(code),cancel=job.cancel)
             if job.cancel.is_set():process.stop();self.stop_offline_skin();raise RuntimeError('启动已取消')
             return process
         def done(process):
@@ -140,6 +140,46 @@ class Actions:
         actions=row();actions.addStretch();actions.addWidget(button('取消',dialog.reject));actions.addWidget(button('保存',save,'primary'));body.addLayout(actions);body.addStretch()
         self.show_subpage(dialog);field.selectAll();field.setFocus()
 
+    def clone_instance(self,vid):
+        name,ok=QInputDialog.getText(self,'复制实例','新实例名称',text=self.instances.display_name(vid)+'-副本')
+        if not ok or not name.strip():return
+        repo=self.repo;store=self.instances;settings=self.version_settings;meta=store.get(vid)
+        overrides=settings.get(vid)
+        def work(job):return repo.clone_instance(vid,name.strip(),job.cancel,job.emit)
+        def done(new_id):
+            store.update(new_id,name=name.strip(),group=meta.group,notes=meta.notes,icon=meta.icon,tags=list(meta.tags))
+            if overrides:settings.set(new_id,{**overrides,'isolate':True})
+            if self.repo is repo:self.installed(new_id)
+            else:self.status.setText('实例已复制 · '+new_id)
+        self.task('复制实例',work,done,task_repo=repo,task_instance=vid)
+
+    def set_instance_icon(self,vid):
+        path,_=QFileDialog.getOpenFileName(self,'选择实例图标','','图片 (*.png *.jpg *.jpeg *.webp)')
+        if not path:return
+        try:
+            from hashlib import sha256
+            from PySide6.QtGui import QImageReader
+            source=Path(path)
+            if source.stat().st_size>5*1024*1024:raise ValueError('图片不能超过 5 MiB')
+            reader=QImageReader(str(source));size=reader.size()
+            if not size.isValid() or size.width()>4096 or size.height()>4096:raise ValueError('图片无效或尺寸过大')
+            reader.setScaledSize(size.scaled(256,256,Qt.AspectRatioMode.KeepAspectRatio));image=reader.read()
+            if image.isNull():raise ValueError('无法读取图片')
+            image=image.scaled(256,256,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation)
+            digest=sha256(source.read_bytes()).hexdigest()
+            folder=self.root/'.onion'/'instance-icons';folder.mkdir(parents=True,exist_ok=True)
+            output=folder/(digest+'.png')
+            if not output.exists() and not image.save(str(output),'PNG'):raise OSError('无法保存图标')
+            self.instances.update(vid,icon=str(Path('.onion')/'instance-icons'/output.name))
+            if self.current_page=='versions':self.build_versions()
+            self.status.setText('实例图标已更新')
+        except Exception as error:self.error(error)
+
+    def reset_instance_icon(self,vid):
+        self.instances.update(vid,icon='')
+        if self.current_page=='versions':self.build_versions()
+        self.status.setText('已恢复默认图标')
+
     def import_modpack(self):
         path,_=QFileDialog.getOpenFileName(self,'导入整合包','','整合包 (*.mrpack *.zip)')
         if not path:return
@@ -147,10 +187,26 @@ class Actions:
         self.task('导入整合包',lambda job:import_modpack(self.repo,Path(path),job.emit,lambda a,b:job.emit((a,b))),self.installed)
 
     def export_modpack(self,vid):
-        path,_=QFileDialog.getSaveFileName(self,'导出 Modrinth 整合包',vid+'.mrpack','整合包 (*.mrpack)')
-        if path:
+        dialog=QDialog(self);dialog.setWindowTitle('导出整合包');dialog.navigation_title='导出整合包'
+        body=column(dialog,24,12);fields=row();name=QLineEdit(self.instances.display_name(vid));name.setPlaceholderText('整合包名称')
+        version=QLineEdit('1.0');version.setPlaceholderText('版本号');version.setMaximumWidth(180);fields.addWidget(name,1);fields.addWidget(version);body.addLayout(fields)
+        choices={}
+        for title,keys,default in [('模组',('mods',),True),('配置',('config',),True),('资源包',('resourcepacks',),True),('光影',('shaderpacks',),True),('脚本',('kubejs','scripts'),True),('游戏设置',('options.txt','optionsof.txt','optionsshaders.txt'),True),('服务器列表',('servers.dat',),False),('世界存档',('saves',),False)]:
+            box=QCheckBox(title);box.setChecked(default);choices[box]=keys;body.addWidget(box)
+        body.addStretch();actions=row();actions.addStretch();actions.addWidget(button('取消',dialog.reject))
+        repo=self.repo
+        def export():
+            pack_name=name.text().strip();pack_version=version.text().strip()
+            if not pack_name or not pack_version:self.status.setText('请输入整合包名称和版本号');return
+            path,_=QFileDialog.getSaveFileName(dialog,'导出 Modrinth 整合包',pack_name+'.mrpack','整合包 (*.mrpack)')
+            if not path:return
             from ..modpack import export_mrpack
-            self.task('导出整合包',lambda job:export_mrpack(self.repo,vid,Path(path)),lambda out:self.status.setText('已导出 · '+str(out)))
+            selected=[item for box,items in choices.items() if box.isChecked() for item in items]
+            def work(job):
+                repo.assert_idle(vid)
+                return export_mrpack(repo,vid,Path(path),pack_name,pack_version=pack_version,selected=selected,cancel=job.cancel,progress=job.emit)
+            if self.task('导出整合包',work,lambda out:self.status.setText('已导出 · '+str(out)),task_repo=repo,task_instance=vid):dialog.accept()
+        actions.addWidget(button('导出',export,'primary','download'));body.addLayout(actions);self.show_subpage(dialog)
 
     def verify_version(self,vid):
         self.task('校验游戏文件',lambda job:self.repo.verify(vid),
@@ -169,8 +225,18 @@ class Actions:
         tree=QTreeWidget();tree.entities();body.addWidget(tree,1)
         entries={};repo=self.repo
         def scan(job):
-            parents={repo.versions_dir,*(repo.game_dir/name for name in ('mods','saves','resourcepacks','shaderpacks'))}
-            for vid in repo.list_installed():parents.update(repo.run_dir(vid)/name for name in ('mods','saves','resourcepacks','shaderpacks'))
+            import os
+            parents={repo.versions_dir,*(repo.game_dir/name for name in ('mods','saves','resourcepacks','shaderpacks','screenshots','schematics'))}
+            for vid in repo.list_installed():parents.update(repo.run_dir(vid)/name for name in ('mods','saves','resourcepacks','shaderpacks','screenshots','schematics'))
+            for saves in tuple(parent for parent in parents if parent.name=='saves' and parent.is_dir()):
+                for world in saves.iterdir():
+                    if world.is_dir() and not world.is_symlink() and not world.is_junction():parents.add(world/'datapacks')
+            for root in tuple(parent for parent in parents if parent.name in ('screenshots','schematics') and parent.is_dir()):
+                for index,(folder,dirs,_) in enumerate(os.walk(root,followlinks=False)):
+                    if index>=20000:break
+                    current=Path(folder)
+                    if '.craftbridge-trash' in dirs:parents.add(current)
+                    dirs[:]=[d for d in dirs if not d.startswith('.') and not (current/d).is_symlink() and not (current/d).is_junction()]
             found=[]
             for parent in parents:
                 for record in (parent/'.craftbridge-trash').glob('*.recovery.json'):

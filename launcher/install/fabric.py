@@ -16,10 +16,13 @@ from ..safety import write_text
 
 FABRIC_META = "https://meta.fabricmc.net/v2"
 QUILT_META = "https://meta.quiltmc.org/v3"
+LEGACY_FABRIC_META = "https://meta.legacyfabric.net/v2"
 
 
 def meta_base(kind: str) -> str:
-    return QUILT_META if kind == "quilt" else FABRIC_META
+    bases={'fabric':FABRIC_META,'quilt':QUILT_META,'legacyfabric':LEGACY_FABRIC_META}
+    if kind not in bases:raise ValueError('不支持的加载器')
+    return bases[kind]
 
 
 def list_loaders(downloader, kind: str, game_version: str) -> list[dict]:
@@ -69,8 +72,13 @@ def install_loader(repo, game_version: str, loader_version: Optional[str] = None
     url = f"{meta_base(kind)}/versions/loader/{quote(game_version,safe='')}/{quote(loader_ver,safe='')}/profile/json"
     profile = repo.downloader.fetch_json(url)
 
+    if not isinstance(profile,dict) or not isinstance(profile.get('mainClass'),str) or not isinstance(profile.get('libraries'),list):
+        raise DownloadError('加载器配置无效')
+    if profile.get('inheritsFrom',game_version)!=game_version:raise DownloadError('加载器配置的游戏版本不匹配')
+
     profile["id"] = version_id
     profile.setdefault("inheritsFrom", game_version)
+    if kind=='legacyfabric':profile['onionLoaderComponent']={'kind':kind,'version':loader_ver}
 
     target_dir = repo.version_dir(version_id)
     repo.assert_writable(target_dir)

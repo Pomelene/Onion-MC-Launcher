@@ -11,6 +11,51 @@ from .safety import contained, component, write_text
 
 MAX_SKIN_BYTES = 1024 * 1024
 SKIN_URL = 'https://api.minecraftservices.com/minecraft/profile/skins'
+PROFILE_URL = 'https://api.minecraftservices.com/minecraft/profile'
+CAPE_URL = PROFILE_URL + '/capes/active'
+
+
+def _profile_request(account, url, method='GET', body=None):
+    if account.type!='microsoft' or not account.access_token or account.is_expired():
+        raise ValueError('披风同步需要有效的微软正版登录')
+    headers={'Authorization':'Bearer '+account.access_token,'Accept':'application/json','User-Agent':'OnionMinecraftLauncher'}
+    if body is not None:headers['Content-Type']='application/json'
+    request=urllib.request.Request(url,data=body,method=method,headers=headers)
+    try:
+        with secure_open(request,timeout=30) as response:
+            data=response.read(1048577)
+        if len(data)>1048576:raise ValueError('账户资料过大')
+        return json.loads(data) if data else {}
+    except urllib.error.HTTPError as error:
+        status=error.code;error.close();raise RuntimeError(f'披风服务请求失败（HTTP {status}）') from None
+    except (urllib.error.URLError,OSError):raise RuntimeError('无法连接披风服务，请稍后重试') from None
+
+
+def cape_profile(account):
+    profile=_profile_request(account,PROFILE_URL)
+    if not isinstance(profile,dict) or not isinstance(profile.get('capes',[]),list):raise ValueError('账户披风资料无效')
+    return profile
+
+
+def set_cape(account,cape_id):
+    if cape_id is not None:
+        cape_id=str(uuid.UUID(cape_id))
+        return _profile_request(account,CAPE_URL,'PUT',json.dumps({'capeId':cape_id}).encode())
+    return _profile_request(account,CAPE_URL,'DELETE')
+
+
+def texture_bytes(url):
+    from urllib.parse import urlsplit
+    from .network import fetch_public
+    if not isinstance(url,str):raise ValueError('纹理地址无效')
+    parts=urlsplit(url)
+    if parts.scheme!='https' or parts.hostname!='textures.minecraft.net' or parts.port not in (None,443) or parts.username or parts.password:
+        raise ValueError('纹理地址无效')
+    data=fetch_public(urllib.request.Request(url,headers={'User-Agent':'OnionMinecraftLauncher'}),limit=MAX_SKIN_BYTES)
+    if len(data)<24 or data[:8]!=b'\x89PNG\r\n\x1a\n' or data[12:16]!=b'IHDR':raise ValueError('纹理格式无效')
+    width,height=struct.unpack('>II',data[16:24])
+    if width>1024 or height>1024 or width<64 or height<32:raise ValueError('纹理尺寸无效')
+    return data
 
 
 def skin_bytes(path):

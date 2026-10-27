@@ -7,13 +7,14 @@ from shiboken6 import isValid
 from .widgets import Page,Card,ContentRow,Empty,column,row,label,button,clear,favorite_button,menu_button
 from .choices import ChoiceComboBox
 from .skin_preview import SkinPreview
-from ..skins import SkinLibrary,upload_skin,skin_bytes
+from ..skins import SkinLibrary,upload_skin,skin_bytes,cape_profile,set_cape,texture_bytes
 from .seed_map import SeedMap
 
 
 class Wardrobe(QWidget):
     def __init__(self,owner):
         super().__init__();self.owner=owner;self.library=SkinLibrary(owner.root);self.path=None;self.uploading=False
+        self.cape_account=None;self.capes={};self.cape_busy=False;self.cape_generation=0;self.official_skin=None
         body=column(self,0,14);toolbar=row()
         self.query=QLineEdit();self.query.setPlaceholderText('搜索皮肤');self.query.setClearButtonEnabled(True);self.query.textChanged.connect(self.refresh);toolbar.addWidget(self.query,1)
         self.favorites_only=ChoiceComboBox();self.favorites_only.addItems(['全部皮肤','仅收藏']);self.favorites_only.currentIndexChanged.connect(self.refresh);toolbar.addWidget(self.favorites_only)
@@ -25,6 +26,10 @@ class Wardrobe(QWidget):
         self.filename=label('选择皮肤','heading',True);detail.addWidget(self.filename)
         self.model=ChoiceComboBox();self.model.addItem('经典模型 · 4 像素手臂','classic');self.model.addItem('纤细模型 · 3 像素手臂','slim');detail.addWidget(self.model)
         self.account=label('','muted');detail.addWidget(self.account)
+        cape_row=row();self.cape_choice=ChoiceComboBox();self.cape_choice.addItem('无披风',None);cape_row.addWidget(self.cape_choice,1)
+        self.cape_apply=button('应用披风',self.apply_cape,'soft');cape_row.addWidget(self.cape_apply)
+        self.cape_reload=button('刷新披风',self.load_capes,'soft','refresh');cape_row.addWidget(self.cape_reload);detail.addLayout(cape_row)
+        self.cape_choice.currentIndexChanged.connect(self.preview_cape)
         actions=row();self.apply=button('应用到离线账户',self.apply_local,'primary','skin');actions.addWidget(self.apply)
         self.upload=button('上传并同步正版皮肤',self.upload_current,'primary','upload');actions.addWidget(self.upload);detail.addLayout(actions)
         self.status=label('','muted',True);detail.addWidget(self.status);split.addWidget(right);split.setSizes([400,560])
@@ -34,6 +39,13 @@ class Wardrobe(QWidget):
     def refresh(self):
         clear(self.list);account=self.owner.accounts.current()
         self.account.setText(account.username if account else '请先添加账户')
+        online=bool(account and account.type=='microsoft')
+        for control in (self.cape_choice,self.cape_apply,self.cape_reload):control.setVisible(online)
+        identity=account.uuid if online else None
+        if identity!=self.cape_account:
+            self.cape_account=identity;self.cape_generation+=1;self.capes={};self.official_skin=None;self.preview.cape=QImage();self.cape_busy=False
+            self.cape_choice.blockSignals(True);self.cape_choice.clear();self.cape_choice.addItem('无披风',None);self.cape_choice.blockSignals(False)
+            if identity:self.load_capes()
         self.upload.setVisible(bool(account and account.type=='microsoft'))
         self.apply.setVisible(not account or account.type=='offline')
         self.reset.setVisible(bool(account and account.type=='offline'))
@@ -51,7 +63,7 @@ class Wardrobe(QWidget):
         selected=self.library.selected(account.uuid) if account else None
         if not files:
             self.list.addWidget(Empty('尚无收藏' if self.favorites_only.currentIndex() else '导入你的第一张皮肤','支持经典和纤细模型的 PNG 皮肤','skin'))
-            self.path=None;self.apply.setEnabled(False);self.upload.setEnabled(False);self.preview.image=QImage();self.preview.update();self.filename.setText('选择皮肤');return
+            self.path=None;self.apply.setEnabled(False);self.upload.setEnabled(False);self.preview.image=self.official_skin or QImage();self.preview.update();self.filename.setText('选择皮肤');return
         for path in files:
             active=bool(selected and path==selected[0]);item=ContentRow(self.display_name(path),('当前账户使用中' if active else ''),'skin')
             try:image=QImage.fromData(skin_bytes(path))
@@ -83,6 +95,62 @@ class Wardrobe(QWidget):
         if self.path:
             try:self.preview.load(self.path,self.model.currentData()=='slim')
             except Exception as error:self.status.setText(str(error))
+
+    def preview_cape(self):
+        item=self.capes.get(self.cape_choice.currentData())
+        self.preview.cape=QImage.fromData(item['texture']) if item and item.get('texture') else QImage()
+        if not self.preview.cape.isNull() and self.preview.cape.width()!=64:self.preview.cape=self.preview.cape.scaled(64,32,Qt.AspectRatioMode.IgnoreAspectRatio,Qt.TransformationMode.FastTransformation)
+        self.preview._textures.clear();self.preview.update()
+
+    def load_capes(self):
+        account=self.owner.accounts.current()
+        if not account or account.type!='microsoft' or self.cape_busy:return
+        self.cape_generation+=1;generation=self.cape_generation;identity=account.uuid;self.cape_busy=True
+        self.cape_reload.setEnabled(False);self.cape_apply.setEnabled(False);self.status.setText('正在同步披风…')
+        def texture(url):
+            # Mojang profile URLs may use HTTP; upgrade only its texture host.
+            if isinstance(url,str) and url.startswith('http://textures.minecraft.net/'):url='https://'+url[7:]
+            try:return texture_bytes(url)
+            except Exception:return None
+        def work(job):
+            fresh=self.owner.accounts.ensure_fresh(account);profile=cape_profile(fresh);capes=[]
+            for item in profile.get('capes',[])[:64]:
+                if isinstance(item,dict) and isinstance(item.get('id'),str):
+                    capes.append({'id':item['id'],'name':str(item.get('alias') or '披风')[:80], 'active':item.get('state')=='ACTIVE','texture':texture(item.get('url'))})
+            skins=profile.get('skins',[]);active=next((s for s in skins if isinstance(s,dict) and s.get('state')=='ACTIVE'),{}) if isinstance(skins,list) else {}
+            return capes,texture(active.get('url')),active.get('variant')=='SLIM'
+        def done(result):
+            if not isValid(self) or generation!=self.cape_generation or identity!=self.cape_account:return
+            self.cape_busy=False;self.cape_reload.setEnabled(True);self.cape_apply.setEnabled(True)
+            capes,skin,slim=result;self.capes={item['id']:item for item in capes}
+            self.cape_choice.blockSignals(True);self.cape_choice.clear();self.cape_choice.addItem('无披风',None);selected=0
+            for item in capes:
+                self.cape_choice.addItem(item['name'],item['id'])
+                if item['active']:selected=self.cape_choice.count()-1
+            self.cape_choice.setCurrentIndex(selected);self.cape_choice.blockSignals(False)
+            image=QImage.fromData(skin or b'')
+            if not image.isNull() and image.width()==64 and image.height() in (32,64):
+                self.official_skin=image
+                if not self.path:self.preview.image=image;self.preview.slim=slim
+            self.preview_cape();self.status.setText('')
+        def failed(error):
+            if isValid(self) and generation==self.cape_generation and identity==self.cape_account:
+                self.cape_busy=False;self.cape_reload.setEnabled(True);self.cape_apply.setEnabled(False);self.status.setText(str(error))
+        self.owner.tasks.submit(work,done,failed)
+
+    def apply_cape(self):
+        account=self.owner.accounts.current()
+        if not account or account.type!='microsoft' or self.cape_busy:return
+        cape_id=self.cape_choice.currentData();identity=account.uuid;generation=self.cape_generation;self.cape_busy=True
+        self.cape_apply.setEnabled(False);self.cape_reload.setEnabled(False);self.status.setText('正在应用披风…')
+        def work(job):set_cape(self.owner.accounts.ensure_fresh(account),cape_id)
+        def done(result):
+            if isValid(self) and generation==self.cape_generation and identity==self.cape_account:
+                self.cape_busy=False;self.cape_reload.setEnabled(True);self.cape_apply.setEnabled(True);self.status.setText('披风已同步')
+        def failed(error):
+            if isValid(self) and generation==self.cape_generation and identity==self.cape_account:
+                self.cape_busy=False;self.cape_reload.setEnabled(True);self.cape_apply.setEnabled(True);self.status.setText(str(error))
+        self.owner.tasks.submit(work,done,failed)
 
     def import_skin(self):
         paths,_=QFileDialog.getOpenFileNames(self,'导入皮肤','','Minecraft 皮肤 (*.png)')

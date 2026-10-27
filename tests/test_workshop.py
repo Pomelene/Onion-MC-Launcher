@@ -124,6 +124,22 @@ def test_cape_texture_restricts_hosts_and_size():
         assert fetch.call_count==1
 
 
+def test_cape_sync_checks_server_result_and_expired_account():
+    from launcher.skins import sync_cape,cape_profile
+    account=AccountRecord('microsoft','Player',offline_uuid('Player'),access_token='test-placeholder',expires_at=10**12)
+    cape='e7dfea16-dc83-4a01-9be4-51d8ffe4a9d9'
+    with patch('launcher.skins.set_cape',return_value={'capes':[{'id':cape,'state':'ACTIVE'}]}):
+        assert sync_cape(account,cape)['capes'][0]['state']=='ACTIVE'
+        try:sync_cape(account,None)
+        except RuntimeError:pass
+        else:raise AssertionError('unconfirmed cape change was reported successful')
+    with patch('launcher.skins.set_cape',return_value={}),patch('launcher.skins.cape_profile',return_value={'capes':[]}) as profile:
+        sync_cape(account,None);profile.assert_called_once_with(account)
+    try:cape_profile(None)
+    except ValueError:pass
+    else:raise AssertionError('missing refreshed account accepted')
+
+
 def test_java_seed_parsing_and_unsupported_version():
     assert parse_seed('hello')==99162322 and parse_seed('-9223372036854775808')==-(1<<63)
     assert parse_seed('😀')==1772899

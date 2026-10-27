@@ -2,12 +2,12 @@
 from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage,QImageReader,QPixmap
-from PySide6.QtWidgets import QWidget,QStackedWidget,QLineEdit,QFileDialog,QSplitter,QInputDialog,QMessageBox
+from PySide6.QtWidgets import QWidget,QStackedWidget,QLineEdit,QFileDialog,QSplitter,QInputDialog,QMessageBox,QCheckBox
 from shiboken6 import isValid
 from .widgets import Page,Card,ContentRow,Empty,column,row,label,button,clear,favorite_button,menu_button
 from .choices import ChoiceComboBox
 from .skin_preview import SkinPreview
-from ..skins import SkinLibrary,upload_skin,skin_bytes,cape_profile,set_cape,texture_bytes
+from ..skins import SkinLibrary,upload_skin,skin_bytes,cape_profile,sync_cape,texture_bytes
 from .seed_map import SeedMap
 
 
@@ -26,6 +26,7 @@ class Wardrobe(QWidget):
         self.filename=label('选择皮肤','heading',True);detail.addWidget(self.filename)
         self.model=ChoiceComboBox();self.model.addItem('经典模型 · 4 像素手臂','classic');self.model.addItem('纤细模型 · 3 像素手臂','slim');detail.addWidget(self.model)
         self.account=label('','muted');detail.addWidget(self.account)
+        self.render_cape=QCheckBox('预览时渲染披风');self.render_cape.setChecked(True);self.render_cape.toggled.connect(self.toggle_cape_preview);detail.addWidget(self.render_cape)
         cape_row=row();self.cape_choice=ChoiceComboBox();self.cape_choice.addItem('无披风',None);cape_row.addWidget(self.cape_choice,1)
         self.cape_apply=button('应用披风',self.apply_cape,'soft');cape_row.addWidget(self.cape_apply)
         self.cape_reload=button('刷新披风',self.load_capes,'soft','refresh');cape_row.addWidget(self.cape_reload);detail.addLayout(cape_row)
@@ -102,6 +103,9 @@ class Wardrobe(QWidget):
         if not self.preview.cape.isNull() and self.preview.cape.width()!=64:self.preview.cape=self.preview.cape.scaled(64,32,Qt.AspectRatioMode.IgnoreAspectRatio,Qt.TransformationMode.FastTransformation)
         self.preview._textures.clear();self.preview.update()
 
+    def toggle_cape_preview(self,enabled):
+        self.preview.show_cape=enabled;self.preview.update()
+
     def load_capes(self):
         account=self.owner.accounts.current()
         if not account or account.type!='microsoft' or self.cape_busy:return
@@ -114,11 +118,15 @@ class Wardrobe(QWidget):
             except Exception:return None
         def work(job):
             fresh=self.owner.accounts.ensure_fresh(account);profile=cape_profile(fresh);capes=[]
+            from concurrent.futures import ThreadPoolExecutor
             for item in profile.get('capes',[])[:64]:
                 if isinstance(item,dict) and isinstance(item.get('id'),str):
-                    capes.append({'id':item['id'],'name':str(item.get('alias') or '披风')[:80], 'active':item.get('state')=='ACTIVE','texture':texture(item.get('url'))})
+                    capes.append({'id':item['id'],'name':str(item.get('alias') or '披风')[:80], 'active':item.get('state')=='ACTIVE','url':item.get('url')})
             skins=profile.get('skins',[]);active=next((s for s in skins if isinstance(s,dict) and s.get('state')=='ACTIVE'),{}) if isinstance(skins,list) else {}
-            return capes,texture(active.get('url')),active.get('variant')=='SLIM'
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                images=list(pool.map(texture,[item['url'] for item in capes]+[active.get('url')]))
+            for item,data in zip(capes,images):item['texture']=data
+            return capes,images[-1],active.get('variant')=='SLIM'
         def done(result):
             if not isValid(self) or generation!=self.cape_generation or identity!=self.cape_account:return
             self.cape_busy=False;self.cape_reload.setEnabled(True);self.cape_apply.setEnabled(True)
@@ -132,7 +140,7 @@ class Wardrobe(QWidget):
             if not image.isNull() and image.width()==64 and image.height() in (32,64):
                 self.official_skin=image
                 if not self.path:self.preview.image=image;self.preview.slim=slim
-            self.preview_cape();self.status.setText('')
+            self.preview_cape();self.status.setText('部分纹理加载失败，可点击刷新重试' if any(not item['texture'] for item in capes) else '')
         def failed(error):
             if isValid(self) and generation==self.cape_generation and identity==self.cape_account:
                 self.cape_busy=False;self.cape_reload.setEnabled(True);self.cape_apply.setEnabled(False);self.status.setText(str(error))
@@ -143,7 +151,7 @@ class Wardrobe(QWidget):
         if not account or account.type!='microsoft' or self.cape_busy:return
         cape_id=self.cape_choice.currentData();identity=account.uuid;generation=self.cape_generation;self.cape_busy=True
         self.cape_apply.setEnabled(False);self.cape_reload.setEnabled(False);self.status.setText('正在应用披风…')
-        def work(job):set_cape(self.owner.accounts.ensure_fresh(account),cape_id)
+        def work(job):return sync_cape(self.owner.accounts.ensure_fresh(account),cape_id)
         def done(result):
             if isValid(self) and generation==self.cape_generation and identity==self.cape_account:
                 self.cape_busy=False;self.cape_reload.setEnabled(True);self.cape_apply.setEnabled(True);self.status.setText('披风已同步')

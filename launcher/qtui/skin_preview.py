@@ -8,7 +8,7 @@ from .theme import paint_color
 
 class SkinPreview(QWidget):
     def __init__(self,parent=None):
-        super().__init__(parent);self.image=QImage();self.cape=QImage();self.yaw=-.38;self.pitch=.16;self.drag=None;self.slim=False;self._textures={}
+        super().__init__(parent);self.image=QImage();self.cape=QImage();self.show_cape=True;self.yaw=-.38;self.pitch=.16;self.drag=None;self.slim=False;self._textures={}
         self.setMinimumSize(220,320);self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.setAccessibleName('皮肤三维预览，左右旋转、上下俯仰，双击复位');self.setToolTip('拖动旋转 / 上下俯仰 · 双击复位')
 
@@ -61,10 +61,11 @@ class SkinPreview(QWidget):
             yy=(y-16)*math.cos(pitch)-zz*math.sin(pitch);depth=(y-16)*math.sin(pitch)+zz*math.cos(pitch)
             return QPointF(cx+xx*unit,cy+(yy+16)*unit),depth
         faces=[]
-        def cube(x,y,z,w,h,d,uv,inflate=0,rotate_bottom=False,image=None):
+        def cube(x,y,z,w,h,d,uv,inflate=0,rotate_bottom=False,image=None,tilt=0):
             x-=inflate;y-=inflate;z-=inflate;w+=2*inflate;h+=2*inflate;d+=2*inflate
             points=[(x,y,z+d),(x+w,y,z+d),(x+w,y+h,z+d),(x,y+h,z+d),
                     (x,y,z),(x+w,y,z),(x+w,y+h,z),(x,y+h,z)]
+            if tilt:points=[(px,py,pz-(py-y)*tilt) for px,py,pz in points]
             indices=[(0,1,2,3),(5,4,7,6),(4,0,3,7),(1,5,6,2),(4,5,1,0),(3,2,6,7)]
             if rotate_bottom:
                 # Rotate the head underside UVs 180 degrees, including its overlay.
@@ -90,8 +91,11 @@ class SkinPreview(QWidget):
             cube(4,8,-2,arm,12,4,uv(48,48,arm,12,4),.18)
             cube(-4,20,-2,4,12,4,uv(0,32,4,12,4),.18)
             cube(0,20,-2,4,12,4,uv(0,48,4,12,4),.18)
-        if not self.cape.isNull():
-            cube(-5,8,-3.2,10,16,1,uv(0,0,10,16,1),image=self.cape)
+        if self.show_cape and not self.cape.isNull():
+            cape_uv=uv(0,0,10,16,1)
+            cape_uv[0],cape_uv[1]=cape_uv[1],cape_uv[0]
+            cape_uv[2],cape_uv[3]=cape_uv[3],cape_uv[2]
+            cube(-5,8,-3.2,10,16,1,cape_uv,image=self.cape,tilt=.1763)
         for depth,p,texture in sorted(faces,key=lambda face:face[0]):
             if texture.isNull():continue
             tw,th=texture.width(),texture.height();a,b,c=p[0],p[1],p[3]

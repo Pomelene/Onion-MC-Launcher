@@ -16,7 +16,7 @@ CAPE_URL = PROFILE_URL + '/capes/active'
 
 
 def _profile_request(account, url, method='GET', body=None):
-    if account.type!='microsoft' or not account.access_token or account.is_expired():
+    if not account or account.type!='microsoft' or not account.access_token or account.is_expired():
         raise ValueError('披风同步需要有效的微软正版登录')
     headers={'Authorization':'Bearer '+account.access_token,'Accept':'application/json','User-Agent':'OnionMinecraftLauncher'}
     if body is not None:headers['Content-Type']='application/json'
@@ -42,6 +42,16 @@ def set_cape(account,cape_id):
         cape_id=str(uuid.UUID(cape_id))
         return _profile_request(account,CAPE_URL,'PUT',json.dumps({'capeId':cape_id}).encode())
     return _profile_request(account,CAPE_URL,'DELETE')
+
+
+def sync_cape(account,cape_id):
+    result=set_cape(account,cape_id)
+    if not isinstance(result,dict) or not isinstance(result.get('capes'),list):result=cape_profile(account)
+    active=[str(item.get('id','')).replace('-','').lower() for item in result.get('capes',[]) if isinstance(item,dict) and item.get('state')=='ACTIVE']
+    expected=str(cape_id).replace('-','').lower() if cape_id else None
+    if (expected and active!=[expected]) or (not expected and active):
+        raise RuntimeError('披风操作已提交，但服务器返回的状态与选择不一致，请刷新后重试')
+    return result
 
 
 def texture_bytes(url):

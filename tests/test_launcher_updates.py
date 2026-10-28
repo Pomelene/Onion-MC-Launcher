@@ -32,8 +32,9 @@ def release():return updates.parse_manifest({'schema_version':1,'releases':[entr
 
 def test_update_filename_refreshes_only_explicit_version_tokens():
     cases={'Onion-v0.4.0.exe':'Onion-v0.5.0-T.exe','自定义 v0.3.0.1-T 测试.EXE':'自定义 v0.5.0-T 测试.EXE',
-           'v0.4.0-T.exe':'v0.5.0-T.exe','我的启动器.exe':'我的启动器.exe','Onion-0.4.0.exe':'Onion-0.4.0.exe',
-           'savev0.4.0.exe':'savev0.4.0.exe','v0.1.2.3.4.exe':'v0.1.2.3.4.exe'}
+           'v0.4.0-T.exe':'v0.5.0-T.exe','我的启动器.exe':'我的启动器.exe','Onion-0.4.0.exe':'Onion-0.5.0-T.exe',
+           'Onion0.3.0.1-T.exe':'Onion0.5.0-T.exe','Onionv0.4.0.exe':'Onionv0.5.0-T.exe',
+           '0.3.0.1.exe':'0.5.0-T.exe','v0.1.2.3.4.exe':'v0.1.2.3.4.exe','0.1.2.3.4.exe':'0.1.2.3.4.exe'}
     for original,expected in cases.items():
         assert updates.updated_executable_path(Path('folder')/original,'0.5.0-T')==Path('folder')/expected
     assert updates.updated_executable_path('v0.5.0-T.exe','0.3.0.1').name=='v0.3.0.1.exe'

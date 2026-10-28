@@ -144,11 +144,11 @@ def _ps(value):
 
 
 def updated_executable_path(executable,version):
-    """Refresh an explicit v-prefixed version token, preserving custom naming."""
+    """Refresh filename version tokens, preserving an optional v prefix."""
     if not re.fullmatch(r'\d+(?:\.\d+){2,3}(?:-T)?',version):raise ValueError('更新版本号无效')
     path=Path(executable)
-    name=re.sub(r'(?<![A-Za-z0-9])v\d+(?:\.\d+){2,3}(?:-T)?(?![A-Za-z0-9.]|-[Tt])',
-                lambda match:'v'+version,path.stem)
+    name=re.sub(r'(?<![0-9.])(?P<prefix>v?)\d+(?:\.\d+){2,3}(?:-T)?(?![A-Za-z0-9.]|-[Tt])',
+                lambda match:match['prefix']+version,path.stem)
     return path.with_name(name+path.suffix)
 
 

@@ -11,9 +11,9 @@ from pathlib import Path
 #: 启动器显示名称（作为 ${launcher_name} 传给游戏）
 LAUNCHER_NAME = "Onion Minecraft Launcher"
 #: 启动器版本（作为 ${launcher_version} 传给游戏）
-LAUNCHER_VERSION = "0.4.0-T"
+LAUNCHER_VERSION = "0.5.0-T"
 # Monotonic release order within each edition; increment for each new release.
-LAUNCHER_UPDATE_ORDER = 40
+LAUNCHER_UPDATE_ORDER = 50
 #: 常见 Java 安装根目录（Windows 优先，用于自动发现）
 COMMON_JAVA_ROOTS = [
     r"C:\Program Files\Java",

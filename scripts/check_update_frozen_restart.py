@@ -17,10 +17,10 @@ sys.path.insert(0,str(ROOT))
 from launcher.updates import replacement_script,updated_executable_path,_ps
 from tests.test_launcher_updates import release
 
-def check_launcher(path,versioned=False):
+def check_launcher(path,versioned=False,filename=None):
     """Replace and restart a disposable copy of an actual release executable."""
     with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='launcher-update-') as temporary:
-        root=Path(temporary);exe=root/("自定义 [Onion] '重命名' v0.3.0.1-T.exe" if versioned else "自定义 [Onion] '重命名'.exe");staged=root/'.onion/updates/pending-check/update.exe'
+        root=Path(temporary);exe=root/(filename or ("自定义 [Onion] '重命名' v0.3.0.1-T.exe" if versioned else "自定义 [Onion] '重命名'.exe"));staged=root/'.onion/updates/pending-check/update.exe'
         staged.parent.mkdir(parents=True);shutil.copy2(path,exe);shutil.copy2(path,staged)
         settings=root/'onionmcl.json';settings.write_text('{"preserve":"fixture"}');original=settings.read_bytes()
         report=root/'startup.json'

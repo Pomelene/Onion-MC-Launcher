@@ -143,6 +143,15 @@ def _ps(value):
     return "'"+str(value).replace("'","''")+"'"
 
 
+def updated_executable_path(executable,version):
+    """Refresh an explicit v-prefixed version token, preserving custom naming."""
+    if not re.fullmatch(r'\d+(?:\.\d+){2,3}(?:-T)?',version):raise ValueError('更新版本号无效')
+    path=Path(executable)
+    name=re.sub(r'(?<![A-Za-z0-9])v\d+(?:\.\d+){2,3}(?:-T)?(?![A-Za-z0-9.]|-[Tt])',
+                lambda match:'v'+version,path.stem)
+    return path.with_name(name+path.suffix)
+
+
 def replacement_script(executable,staged,release,pid):
     executable=Path(executable).resolve();staged=Path(staged).resolve()
     update_root=executable.parent/'.onion/updates'
@@ -151,6 +160,8 @@ def replacement_script(executable,staged,release,pid):
     # No paths or commands from the remote JSON are evaluated by PowerShell.
     template='''$ErrorActionPreference='Stop'
 $target=@@TARGET@@
+$original=$target
+$destination=@@DESTINATION@@
 $staged=@@STAGED@@
 $backup=@@BACKUP@@
 $failed=@@FAILED@@
@@ -175,6 +186,7 @@ try {
     try { $parentProcess=[System.Diagnostics.Process]::GetProcessById(@@PARENT_PID@@) } catch {}
     if ($null -ne $parentProcess -and -not $parentProcess.WaitForExit(120000)) { throw 'Launcher did not exit' }
     $parentExited=$true
+    if ($destination -ne $target -and [System.IO.File]::Exists($destination)) { throw 'Updated launcher filename already exists' }
     $stream=[System.IO.File]::OpenRead($staged)
     $algorithm=[System.Security.Cryptography.SHA256]::Create()
     try { $digest=[System.BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-','') }
@@ -184,13 +196,20 @@ try {
         try { [System.IO.File]::Replace($staged,$target,$backup); $replaced=$true; break }
         catch { if ($attempt -eq 39) { throw }; [System.Threading.Thread]::Sleep(250) }
     }
+    if ($destination -ne $target) {
+        [System.IO.File]::Move($target,$destination)
+        $target=$destination
+    }
     $child=Start-Launcher
     if ($child.WaitForExit(3000) -and $child.ExitCode -ne 0) { throw 'Updated launcher failed to start' }
     [System.IO.File]::WriteAllText($status,'{"result":"success"}')
 } catch {
     [System.IO.File]::WriteAllText([System.IO.Path]::Combine([System.IO.Path]::GetDirectoryName($status),'error.txt'),$_.Exception.ToString())
     if ($replaced -and [System.IO.File]::Exists($backup)) {
-        try { [System.IO.File]::Replace($backup,$target,$failed) }
+        try {
+            [System.IO.File]::Replace($backup,$target,$failed)
+            if ($target -ne $original) { [System.IO.File]::Move($target,$original); $target=$original }
+        }
         catch { [System.IO.File]::WriteAllText([System.IO.Path]::Combine([System.IO.Path]::GetDirectoryName($status),'rollback-error.txt'),$_.Exception.ToString()) }
     }
     [System.IO.File]::WriteAllText($status,'{"result":"failed"}')
@@ -199,7 +218,7 @@ try {
 }
 '''
     fields={'PARENT_PID':str(pid),'EXPECTED_SIZE':str(release.size),'EXPECTED_HASH':_ps(release.sha256),
-        'TARGET':_ps(executable),'STAGED':_ps(staged),'BACKUP':_ps(staged.parent/'previous.exe'),
+        'TARGET':_ps(executable),'DESTINATION':_ps(updated_executable_path(executable,release.version)),'STAGED':_ps(staged),'BACKUP':_ps(staged.parent/'previous.exe'),
         'FAILED':_ps(staged.parent/'failed.exe'),
         'READY':_ps(staged.parent/'ready.json'),
         'STATUS':_ps(staged.parent/'result.json'),'WORKDIR':_ps(executable.parent)}

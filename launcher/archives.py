@@ -62,6 +62,7 @@ def copy_member(archive,info,destination,*,cancel_event=None,limit=1024**3,diges
                     if done>limit or done>info.file_size:raise ValueError('解压内容超过安全上限')
                     output.write(block)
                     if digest is not None:digest.update(block)
+            if done!=info.file_size:raise ValueError('解压内容长度与声明不符')
         if cancel_event is not None and cancel_event.is_set():raise DownloadCancelled('已取消解压')
         from .storage import _replace
         _replace(temporary,destination)

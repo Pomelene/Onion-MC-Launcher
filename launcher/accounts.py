@@ -129,7 +129,8 @@ class AccountStore:
                 temporary=Path(output.name)
                 json.dump(data,output,ensure_ascii=False,indent=2)
                 output.flush()
-            temporary.replace(self.path)
+            from .storage import _replace
+            _replace(temporary,self.path)
         finally:
             if temporary is not None:temporary.unlink(missing_ok=True)
 

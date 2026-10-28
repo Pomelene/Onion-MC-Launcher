@@ -96,7 +96,13 @@ def _replace(temporary, target):
                 raise OSError(error, '无法原子保存启动器数据')
             time.sleep(min(.02 * 2**attempt, .4))
     else:
-        os.replace(temporary, target)
+        for attempt in range(7):
+            try:
+                os.replace(temporary,target)
+                return
+            except OSError as error:
+                if os.name!='nt' or getattr(error,'winerror',None) not in (5,32,33) or attempt==6:raise
+                time.sleep(min(.02*2**attempt,.4))
 
 
 def _write(path, document):

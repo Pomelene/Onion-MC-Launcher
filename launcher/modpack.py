@@ -217,7 +217,16 @@ def import_modpack(repo, archive: Path, on_stage=None, on_progress=None) -> str:
         if cancel is not None and cancel.is_set():raise DownloadError('整合包导入已取消')
         repo.versions_dir.mkdir(parents=True,exist_ok=True)
         if target.exists():raise FileExistsError('整合包目标目录已存在，请重试')
-        source.rename(target)
+        import time
+        for attempt in range(7):
+            if cancel is not None and cancel.is_set():raise DownloadError('整合包导入已取消')
+            try:
+                source.rename(target);break
+            except OSError as error:
+                if getattr(error,'winerror',None) not in (5,32,33) or attempt==6:raise
+                if cancel is not None:
+                    if cancel.wait(min(.02*2**attempt,.4)):raise DownloadError('整合包导入已取消')
+                else:time.sleep(min(.02*2**attempt,.4))
     repo.invalidate_library_cache()
     if on_stage:on_stage(f'整合包导入完成：{pack_id}')
     return pack_id

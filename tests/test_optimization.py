@@ -316,3 +316,18 @@ def test_download_cancellation_at_response_close_preserves_original():
             except DownloadCancelled:pass
             else:raise AssertionError('cancelled download replaced existing file')
         assert path.read_bytes()==b'old!'
+
+
+def test_zip_member_with_valid_crc_but_wrong_length_is_not_published():
+    import struct,zipfile
+    from launcher.archives import copy_member
+    source=io.BytesIO()
+    with zipfile.ZipFile(source,'w') as archive:archive.writestr('file',b'abc')
+    body=bytearray(source.getvalue());central=body.index(b'PK\x01\x02')
+    struct.pack_into('<I',body,central+24,4);struct.pack_into('<I',body,22,4)
+    with tempfile.TemporaryDirectory() as folder,zipfile.ZipFile(io.BytesIO(body)) as archive:
+        path=Path(folder)/'file';path.write_bytes(b'original')
+        try:copy_member(archive,archive.getinfo('file'),path)
+        except ValueError:pass
+        else:raise AssertionError('ZIP member shorter than its declaration was accepted')
+        assert path.read_bytes()==b'original' and sorted(p.name for p in path.parent.iterdir())==['file']

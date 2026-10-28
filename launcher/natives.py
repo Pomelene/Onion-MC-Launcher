@@ -7,11 +7,23 @@
 
 import os
 import zipfile
+import hashlib
+from collections import OrderedDict
+from threading import Lock
 from pathlib import Path
 from typing import Iterable, Optional
 
 from .libraries import Library
 from .archives import validate_archive,copy_member
+
+_DIGESTS=OrderedDict()
+_DIGEST_LOCK=Lock()
+
+
+def _sha256(path):
+    try:
+        with path.open('rb') as source:return hashlib.file_digest(source,'sha256').hexdigest()
+    except OSError:return None
 
 
 def _is_excluded(entry_name: str, excludes: Iterable[str]) -> bool:
@@ -29,8 +41,13 @@ def extract_native(library: Library, source_jar: Path, dest_dir: Path) -> int:
     dest_dir.mkdir(parents=True, exist_ok=True)
     excludes = library.exclude_entries()
     count = 0
+    stamp=source_jar.stat()
+    identity=(stamp.st_dev,stamp.st_ino,stamp.st_size,stamp.st_mtime_ns,stamp.st_ctime_ns)
+    source_digest=_sha256(source_jar)
     with zipfile.ZipFile(source_jar) as zf:
         validate_archive(zf)
+        stamp=source_jar.stat()
+        if identity!=(stamp.st_dev,stamp.st_ino,stamp.st_size,stamp.st_mtime_ns,stamp.st_ctime_ns):source_digest=None
         for info in zf.infolist():
             name = info.filename
             if name.endswith("/"):
@@ -45,8 +62,20 @@ def extract_native(library: Library, source_jar: Path, dest_dir: Path) -> int:
             except (ValueError, PermissionError):
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            copy_member(zf,info,target)
+            key=(source_digest,name)
+            with _DIGEST_LOCK:expected=_DIGESTS.get(key) if source_digest else None
+            if expected and target.is_file() and target.stat().st_size==info.file_size and _sha256(target)==expected:
+                continue
+            digest=hashlib.sha256()
+            copy_member(zf,info,target,digest=digest)
             count += 1
+            if source_digest:
+                stamp=source_jar.stat()
+                if identity!=(stamp.st_dev,stamp.st_ino,stamp.st_size,stamp.st_mtime_ns,stamp.st_ctime_ns):
+                    source_digest=None;continue
+                with _DIGEST_LOCK:
+                    _DIGESTS[key]=digest.hexdigest();_DIGESTS.move_to_end(key)
+                    while len(_DIGESTS)>1024:_DIGESTS.popitem(last=False)
     return count
 
 

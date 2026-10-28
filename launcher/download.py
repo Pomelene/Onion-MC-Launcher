@@ -11,16 +11,17 @@
 
 import hashlib
 import json
+import io
 import threading
 import time
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable, Optional
-from .network import validate_url,SafeRedirectHandler
+from .network import validate_url,SafeRedirectHandler,https_handler
 from .paths import LAUNCHER_VERSION
 
 DEFAULT_TIMEOUT = 30
@@ -42,11 +43,8 @@ class DownloadCancelled(DownloadError):
 def sha1_of(path: Path) -> Optional[str]:
     """计算文件 SHA-1；文件不存在或读取失败返回 None。"""
     try:
-        h = hashlib.sha1()
         with open(path, "rb") as f:
-            for chunk in iter(lambda: f.read(1 << 16), b""):
-                h.update(chunk)
-        return h.hexdigest()
+            return hashlib.file_digest(f, 'sha1').hexdigest()
     except OSError:
         return None
 
@@ -64,6 +62,8 @@ class DownloadJob:
     error: str = ""
     fallback_urls: tuple[str, ...] = ()
     sha256: Optional[str] = None
+    force: bool = False
+    max_size: int = 8*1024**3
 
     def __str__(self) -> str:
         return self.name or self.path.name
@@ -106,7 +106,7 @@ class Downloader:
         return getattr(self._local, "cancel_event", None)
 
     def _opener(self) -> urllib.request.OpenerDirector:
-        handlers: list = [urllib.request.HTTPHandler(), urllib.request.HTTPSHandler(),SafeRedirectHandler()]
+        handlers: list = [urllib.request.HTTPHandler(), https_handler(),SafeRedirectHandler()]
         if self.proxy:
             handlers.append(urllib.request.ProxyHandler(
                 {"http": self.proxy, "https": self.proxy}))
@@ -116,7 +116,7 @@ class Downloader:
 
     # ---------- 简单请求 ----------
 
-    def fetch(self, url: str, binary: bool = False, headers: Optional[dict] = None):
+    def fetch(self, url: str, binary: bool = False, headers: Optional[dict] = None, *, data=None, method=None):
         """GET 请求并返回 bytes（binary=True）或解码后的 str。失败自动重试。
 
         headers 用于需要鉴权的接口（如 CurseForge 的 x-api-key）。
@@ -126,17 +126,25 @@ class Downloader:
         if headers:
             request_headers.update(headers)
         last: Optional[Exception] = None
+        request_data=data
         for _ in range(self.retries):
             event = self._cancel_event()
             if event is not None and event.is_set():
                 raise DownloadCancelled("已取消请求")
             try:
-                req = urllib.request.Request(url, headers=request_headers)
+                req = urllib.request.Request(url, headers=request_headers,data=request_data,method=method)
                 with self._opener().open(req, timeout=self.timeout) as resp:
-                    data = resp.read(32*1024**2+1)
-                    self._transferred(len(data))
-                    if len(data)>32*1024**2:raise DownloadError('响应内容超过安全上限')
-                return data if binary else data.decode("utf-8")
+                    reader=getattr(resp,'read1',resp.read);output=io.BytesIO();received=0
+                    while True:
+                        if event is not None and event.is_set():raise DownloadCancelled('已取消请求')
+                        block=reader(min(256*1024,32*1024**2+1-received))
+                        if not block:break
+                        received+=len(block)
+                        if received>32*1024**2:raise DownloadError('响应内容超过安全上限')
+                        output.write(block);self._transferred(len(block))
+                    content=output.getvalue()
+                return content if binary else content.decode("utf-8")
+            except DownloadCancelled:raise
             except Exception as e:  # noqa: BLE001
                 last = e
                 if isinstance(e,urllib.error.HTTPError) and e.code==404:break
@@ -144,6 +152,11 @@ class Downloader:
 
     def fetch_json(self, url: str, headers: Optional[dict] = None):
         return json.loads(self.fetch(url, headers=headers))
+
+    def post_json(self,url,payload):
+        body=json.dumps(payload,separators=(',',':')).encode('utf-8')
+        if len(body)>1024*1024:raise ValueError('请求内容超过安全上限')
+        return json.loads(self.fetch(url,headers={'Content-Type':'application/json','Accept':'application/json'},data=body,method='POST'))
 
     # ---------- 单文件下载 ----------
 
@@ -179,17 +192,20 @@ class Downloader:
         if self.write_guard:
             self.write_guard(path)
             self.write_guard(path.with_name(path.name + ".part"))
-        if job.size is not None and (not isinstance(job.size,int) or isinstance(job.size,bool) or job.size<0 or job.size>8*1024**3):
+        if type(job.max_size) is not int or not 0<job.max_size<=8*1024**3:raise DownloadError('下载大小限制无效')
+        if job.size is not None and (not isinstance(job.size,int) or isinstance(job.size,bool) or job.size<0 or job.size>job.max_size):
             raise DownloadError('下载文件大小超出安全范围')
         for expected,length in ((job.sha1,40),(job.sha256,64)):
             if expected and (len(expected)!=length or any(c not in '0123456789abcdefABCDEF' for c in expected)):
                 raise DownloadError('下载摘要格式无效')
-        if job.size is not None and path.exists() and path.stat().st_size == job.size and not job.sha1 and not job.sha256:
+        if not job.force and job.size is not None and path.exists() and path.stat().st_size == job.size and not job.sha1 and not job.sha256:
             return True
-        if (job.sha1 or job.sha256) and self._hash_valid(path,job):
+        if not job.force and (job.sha1 or job.sha256) and (not path.exists() or path.stat().st_size<=job.max_size) and self._hash_valid(path,job):
             return True
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(path.name + ".part")
+        if job.force:tmp.unlink(missing_ok=True)
+        if tmp.exists() and tmp.stat().st_size>job.max_size:tmp.unlink()
         last: Optional[Exception] = None
         for attempt in range(self.retries):
             try:
@@ -204,23 +220,38 @@ class Downloader:
                     resume = (status == 206 and offset > 0)
                     total = int(resp.headers.get("Content-Length") or 0)
                     done = offset if resume else 0
-                    if resume and total:
-                        total += offset
+                    if status==206:
+                        import re
+                        match=re.fullmatch(r'bytes (\d+)-(\d+)/(\d+)',resp.headers.get('Content-Range',''))
+                        if not resume or not match or int(match[1])!=offset or int(match[2])<offset or int(match[2])+1!=int(match[3]) or (job.size is not None and int(match[3])!=job.size) or (total and total!=int(match[2])-offset+1):
+                            tmp.unlink(missing_ok=True)
+                            raise DownloadError('服务器返回的续传范围无效')
+                        total=int(match[3])
+                    if total>(job.size if job.size is not None else job.max_size):raise DownloadError('下载内容超过声明大小或安全上限')
+                    digests={name:hashlib.new(name) for name,expected in (('sha1',job.sha1),('sha256',job.sha256)) if expected}
+                    if resume and digests:
+                        with tmp.open('rb') as existing:
+                            for block in iter(lambda:existing.read(256*1024),b''):
+                                self._check_cancel(job)
+                                for digest in digests.values():digest.update(block)
                     with open(tmp, "ab" if resume else "wb") as f:
+                        reader=getattr(resp,'read1',resp.read)
                         while True:
                             self._check_cancel(job)
-                            chunk = resp.read(1 << 16)
+                            chunk = reader(256*1024)
                             if not chunk:
                                 break
-                            if done+len(chunk)>(job.size if job.size is not None else 8*1024**3):
+                            if done+len(chunk)>(job.size if job.size is not None else job.max_size):
                                 raise DownloadError('下载内容超过声明大小或安全上限')
                             f.write(chunk)
+                            for digest in digests.values():digest.update(chunk)
                             self._transferred(len(chunk))
                             done += len(chunk)
                             if progress and total:
                                 progress(done, total)
                             self._throttle(len(chunk), job.cancel_event)
-                if (job.sha1 or job.sha256) and not self._hash_valid(tmp,job):
+                if total and done!=total:raise DownloadError('下载连接提前结束')
+                if any(digest.hexdigest()!=getattr(job,name).lower() for name,digest in digests.items()):
                     tmp.unlink(missing_ok=True)
                     raise DownloadError('文件摘要校验失败')
                 if job.size is not None and tmp.stat().st_size != job.size:
@@ -234,7 +265,11 @@ class Downloader:
                 raise
             except Exception as e:  # noqa: BLE001
                 last = e
-                time.sleep(0.5 * (attempt + 1))
+                if attempt+1<self.retries:
+                    delay=.5*(attempt+1)
+                    if job.cancel_event is not None:
+                        if job.cancel_event.wait(delay):raise DownloadCancelled('已取消下载')
+                    else:time.sleep(delay)
         remaining = tuple(u for u in job.fallback_urls if u != job.url)
         if remaining:
             tmp.unlink(missing_ok=True)
@@ -244,13 +279,13 @@ class Downloader:
     @staticmethod
     def _hash_valid(path,job):
         if not path.is_file():return False
-        for name,expected in (('sha1',job.sha1),('sha256',job.sha256)):
-            if not expected:continue
-            digest=hashlib.new(name)
-            with path.open('rb') as source:
-                for block in iter(lambda:source.read(65536),b''):digest.update(block)
-            if digest.hexdigest()!=expected.lower():return False
-        return job.size is None or path.stat().st_size==job.size
+        if job.size is not None and path.stat().st_size!=job.size:return False
+        digests={name:hashlib.new(name) for name,expected in (('sha1',job.sha1),('sha256',job.sha256)) if expected}
+        with path.open('rb') as source:
+            for block in iter(lambda:source.read(256*1024),b''):
+                if job.cancel_event is not None and job.cancel_event.is_set():raise DownloadCancelled('已取消校验')
+                for digest in digests.values():digest.update(block)
+        return all(digest.hexdigest()==getattr(job,name).lower() for name,digest in digests.items())
 
     # ---------- 批量并发下载 ----------
 
@@ -275,36 +310,29 @@ class Downloader:
             nonlocal done
             if cancel_event is not None and job.cancel_event is None:
                 job.cancel_event = cancel_event
+            success=False
             try:
                 with self.cancellable(cancel_event,on_bytes):
                     self.download_one(job)
-                with lock:
-                    done += 1
-                    ok.append(job)
-                    if on_progress:
-                        on_progress(done, total)
-                    if on_done:
-                        on_done(job, True)
+                success=True
             except DownloadCancelled:
-                with lock:
-                    done += 1
-                    failed.append(job)
-                    if on_progress:
-                        on_progress(done, total)
-                    if on_done:
-                        on_done(job, False)
+                pass
             except Exception as e:  # noqa: BLE001
-                with lock:
-                    job.error = str(e)
-                    done += 1
-                    failed.append(job)
-                    if on_progress:
-                        on_progress(done, total)
-                    if on_done:
-                        on_done(job, False)
+                job.error=str(e)
+            with lock:
+                done+=1
+                (ok if success else failed).append(job)
+                if on_progress:on_progress(done,total)
+                if on_done:on_done(job,success)
 
         with ThreadPoolExecutor(max_workers=self.threads) as pool:
-            futures = [pool.submit(worker, j) for j in jobs]
-            for f in as_completed(futures):
-                f.result()
+            pending=set();iterator=iter(jobs)
+            while True:
+                while len(pending)<self.threads*2:
+                    job=next(iterator,None)
+                    if job is None:break
+                    pending.add(pool.submit(worker,job))
+                if not pending:break
+                finished,pending=wait(pending,return_when=FIRST_COMPLETED)
+                for future in finished:future.result()
         return ok, failed

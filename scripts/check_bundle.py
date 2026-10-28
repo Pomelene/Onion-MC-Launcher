@@ -5,6 +5,7 @@ Requires the development PyInstaller dependency, never shipped in the launcher.
 """
 import argparse
 import json
+import io,hashlib,lzma
 from collections import defaultdict
 from pathlib import Path
 from PyInstaller.archive.readers import CArchiveReader
@@ -24,14 +25,29 @@ def category(name):
 
 def inspect(path):
     path=Path(path);archive=CArchiveReader(str(path));files=[];groups=defaultdict(lambda:{'packed':0,'raw':0,'count':0})
+    deferred=[]
+    if 'qt-payload/manifest.json' in archive.toc or 'qt-payload\\manifest.json' in archive.toc:
+        key=next(name for name in archive.toc if name.replace('\\','/')=='qt-payload/manifest.json')
+        groups_payload=json.loads(archive.extract(key))
+        for group in groups_payload:
+            total=sum(item['size'] for item in group['files'])
+            deferred.extend({**item,'source':group['source'],'share':item['size']/total} for item in group['files'])
+    packed_sources={item['source'] for item in deferred}
     for name,entry in archive.toc.items():
         _,packed,raw,_,kind=entry;group=category(name)
         normalized=name.replace('\\','/')
+        if normalized in packed_sources:continue
         files.append({'file':normalized,'packed':packed,'raw':raw,'type':kind,'category':group})
         groups[group]['packed']+=packed;groups[group]['raw']+=raw;groups[group]['count']+=1
+    for item in deferred:
+        name=item['path'];key=next(key for key in archive.toc if key.replace('\\','/')==item['source'])
+        packed=round(archive.toc[key][1]*item['share']);group=category(name)
+        files.append({'file':name,'packed':packed,'raw':item['size'],'type':'b','category':group,'deferred':True,'packed_attribution':'proportional solid group share'})
+        groups[group]['packed']+=packed;groups[group]['raw']+=item['size'];groups[group]['count']+=1
     pyz=archive.open_embedded_archive(next(k for k,v in archive.toc.items() if v[-1]=='z'))
     return {'exe':path.name,'exe_bytes':path.stat().st_size,'unpacked_archive_bytes':sum(f['raw'] for f in files),
-        'groups':dict(groups),'files':sorted(files,key=lambda x:x['packed'],reverse=True),'modules':sorted(pyz.toc)}
+        'groups':dict(groups),'files':sorted(files,key=lambda x:x['packed'],reverse=True),'modules':sorted(pyz.toc),
+        'deferred_payloads':len(deferred)}
 
 
 def validate_slim(report):
@@ -54,6 +70,25 @@ def validate_slim(report):
     assert any(Path(name).name.startswith('libcrypto-') for name in files)
 
 
+def verify_deferred_payloads(path,baseline=None):
+    archive=CArchiveReader(str(path));keys={key.replace('\\','/'):key for key in archive.toc}
+    if 'qt-payload/manifest.json' not in keys:return 0
+    groups=json.loads(archive.extract(keys['qt-payload/manifest.json']))
+    original=CArchiveReader(str(baseline)) if baseline else None
+    original_keys={key.replace('\\','/'):key for key in original.toc} if original else {}
+    checked=0
+    for group in groups:
+        with lzma.open(io.BytesIO(archive.extract(keys[group['source']])),'rb') as stream:
+            for item in group['files']:
+                body=stream.read(item['size'])
+                assert len(body)==item['size'] and hashlib.sha256(body).hexdigest()==item['sha256'],'Deferred payload integrity mismatch: '+item['path']
+                if original and item['path'] in original_keys:
+                    assert body==original.extract(original_keys[item['path']]),'Preserved dependency changed: '+item['path']
+                checked+=1
+            assert not stream.read(1),'Unexpected deferred payload suffix'
+    return checked
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('exe',type=Path);parser.add_argument('--baseline',type=Path)
@@ -61,6 +96,7 @@ def main():
     parser.add_argument('--require-slim',action='store_true');args=parser.parse_args()
     report=inspect(args.exe)
     if args.require_slim:validate_slim(report)
+    if report['deferred_payloads']:report['verified_deferred_files']=verify_deferred_payloads(args.exe,args.baseline)
     if args.max_bytes:assert report['exe_bytes']<=args.max_bytes,'Bundle exceeded size budget'
     if args.baseline:
         before=inspect(args.baseline);report['baseline']={k:before[k] for k in ('exe','exe_bytes','unpacked_archive_bytes','groups')}

@@ -41,6 +41,8 @@ def identify(downloader,folder,job=None):
     found={};unknown=[]
     folder=Path(folder)
     paths=sorted(p for p in folder.iterdir() if p.suffix.lower() in ('.jar','.zip') and p.is_file()) if folder.exists() else []
+    if callable(getattr(downloader,'post_json',None)):
+        return _identify_batch(downloader,paths,job)
     def identify_file(path):
         _cancel(job)
         try:
@@ -53,6 +55,45 @@ def identify(downloader,folder,job=None):
         except Exception as error:return path,None,('未在 Modrinth 收录' if getattr(error,'http_status',None)==404 else str(error)[:120] or type(error).__name__),''
     for path,data,error,digest in ordered_parallel(identify_file,paths,workers=_workers(downloader),cancel=job.cancel if job else None,progress=_progress(job,'识别模组'),slots=_REQUEST_SLOTS):
         if error:unknown.append(path.name+' · '+error);continue
+        pid=data['project_id']
+        if pid in found:unknown.append(path.name+' · 同一项目存在多个启用版本，请先处理重复模组');continue
+        found[pid]={'path':path,'version':data,'sha1':digest}
+    return found,unknown
+
+
+def _post(downloader,url,payload,job):
+    _cancel(job)
+    context=downloader.cancellable(job.cancel,getattr(job,'transferred',None)) if job and hasattr(downloader,'cancellable') else nullcontext()
+    with context:
+        data=downloader.post_json(url,payload);_cancel(job);return data
+
+
+def _identify_batch(downloader,paths,job):
+    def fingerprint(path):
+        _cancel(job)
+        try:
+            if path.is_symlink():raise ValueError('跳过链接文件')
+            digest=mod_sha1(path)
+            if not digest:raise OSError('无法读取模组文件')
+            _cancel(job);return path,digest,''
+        except DownloadCancelled:raise
+        except Exception as error:return path,'',str(error)[:120]
+    fingerprints=ordered_parallel(fingerprint,paths,workers=_workers(downloader),cancel=job.cancel if job else None,progress=_progress(job,'读取模组'))
+    hashes=list(dict.fromkeys(digest for path,digest,error in fingerprints if not error));versions={};errors={}
+    for start in range(0,len(hashes),200):
+        chunk=hashes[start:start+200]
+        try:
+            response=_post(downloader,f'{MODRINTH_API}/version_files',{'hashes':chunk,'algorithm':'sha1'},job)
+            if not isinstance(response,dict):raise ValueError('模组服务响应格式无效')
+            versions.update({digest:item for digest,item in response.items() if digest in chunk})
+        except DownloadCancelled:raise
+        except Exception as error:
+            for digest in chunk:errors[digest]=str(error)[:120]
+    found={};unknown=[]
+    for path,digest,error in fingerprints:
+        data=versions.get(digest)
+        if error or digest in errors or not isinstance(data,dict) or not data.get('project_id'):
+            unknown.append(path.name+' · '+(error or errors.get(digest) or '未在 Modrinth 收录'));continue
         pid=data['project_id']
         if pid in found:unknown.append(path.name+' · 同一项目存在多个启用版本，请先处理重复模组');continue
         found[pid]={'path':path,'version':data,'sha1':digest}
@@ -81,6 +122,20 @@ def compatible(version,game,loader):
 
 def updates(downloader,folder,game,loader,job=None,allow_preview=False):
     installed,unknown=identify(downloader,folder,job);result=[]
+    if installed and callable(getattr(downloader,'post_json',None)):
+        entries=list(installed.values())
+        for start in range(0,len(entries),200):
+            chunk=entries[start:start+200]
+            payload={'hashes':list(dict.fromkeys(item['sha1'] for item in chunk)),'algorithm':'sha1','loaders':[loader] if loader else [],'game_versions':[game] if game else [],'version_types':['release','beta','alpha'] if allow_preview else ['release']}
+            versions=_post(downloader,f'{MODRINTH_API}/version_files/update',payload,job)
+            if not isinstance(versions,dict):raise ValueError('更新服务响应格式无效')
+            for item in chunk:
+                latest=versions.get(item['sha1']);current=item['version'];date=current.get('date_published','')
+                if (isinstance(latest,dict) and latest.get('project_id')==current['project_id'] and compatible(latest,game,loader)
+                        and (allow_preview or latest.get('version_type')=='release') and latest.get('files') and date
+                        and latest.get('date_published','')>date and latest.get('id')!=current.get('id')):
+                    result.append({'path':item['path'],'current':current,'latest':latest,'old_sha1':item['sha1']})
+        return result,unknown
     def latest(entry):
         pid,item=entry
         _cancel(job)

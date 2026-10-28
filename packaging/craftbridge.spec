@@ -14,6 +14,7 @@
 """
 
 from pathlib import Path
+import os,runpy
 
 ROOT = Path(SPECPATH).resolve().parent  # SPECPATH 是 spec 所在目录（packaging/）
 
@@ -27,7 +28,7 @@ a = Analysis(
     hiddenimports=["PySide6.QtWidgets"],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[str(ROOT / 'packaging/qt_unpack.py')],
     excludes=["tests", "scripts", "pytest", "numpy", "matplotlib", "pandas", "tkinter", "launcher.ui", "PIL", "unittest"],
     noarchive=False,
     optimize=0,
@@ -37,6 +38,8 @@ a = Analysis(
 # raster renderer. Keep all language files and Qt plugins (including alternate
 # platforms and image codecs); only omit this unused software OpenGL library.
 a.binaries=[entry for entry in a.binaries if Path(entry[0]).name.lower()!='opengl32sw.dll']
+if os.environ.get('ONION_PACK_QT','1')!='0':
+    runpy.run_path(str(ROOT/'packaging/qt_payload.py'))['compress_payload'](a,ROOT)
 pyz = PYZ(a.pure)
 
 exe = EXE(

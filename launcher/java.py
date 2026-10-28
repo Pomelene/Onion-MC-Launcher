@@ -170,19 +170,26 @@ def _candidate_paths(extra_roots=(),cancel_event=None) -> list[Path]:
             if cancel_event is not None and cancel_event.is_set():return result
             directory,depth=pending.pop();budget+=1
             try:
-                key=os.path.normcase(str(directory.resolve()))
+                key=os.path.normcase(os.path.abspath(directory))
                 if key in visited:continue
                 visited.add(key)
-                if not directory.is_dir():continue
-                binary=_java_binary_in(directory)
-                if binary:add(binary);continue
+                with os.scandir(directory) as entries:
+                    children=[entry for entry in entries if entry.is_dir()]
+                names={entry.name.casefold():entry for entry in children}
+                if 'bin' in names:
+                    binary=_java_binary_in(directory)
+                    if binary:add(binary);continue
                 # JDK bundles on macOS and IntelliJ/JBR use these known layouts.
                 for suffix in ('Contents/Home','jre','jbr'):
+                    if suffix.split('/')[0].casefold() not in names:continue
                     binary=_java_binary_in(directory/suffix)
                     if binary:add(binary)
                 if depth<5:
-                    for child in directory.iterdir():
-                        if child.name.lower() not in ('lib','legal','include','jmods','demo','sample','src','logs','cache') and child.is_dir():pending.append((child,depth+1))
+                    for child in children:
+                        if child.name.lower() in ('lib','legal','include','jmods','demo','sample','src','logs','cache'):continue
+                        path=Path(child.path)
+                        if child.is_symlink() or (hasattr(child,'is_junction') and child.is_junction()):path=path.resolve()
+                        pending.append((path,depth+1))
             except (OSError,ValueError):continue
     return result
 

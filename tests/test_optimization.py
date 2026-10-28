@@ -300,3 +300,19 @@ def test_legacy_secret_migration_does_not_silence_failed_atomic_save():
             except PermissionError:pass
             else:raise AssertionError('credential migration silently ignored failed save')
         assert path.read_text()==body
+
+
+def test_download_cancellation_at_response_close_preserves_original():
+    from launcher.download import DownloadCancelled
+    with tempfile.TemporaryDirectory() as folder:
+        path=Path(folder)/'file';path.write_bytes(b'old!');cancel=threading.Event()
+        class Response(io.BytesIO):
+            status=200;headers={'Content-Length':'4'}
+            def __exit__(self,*args):
+                cancel.set();return super().__exit__(*args)
+        opener=type('Opener',(),{'open':lambda *args,**kwargs:Response(b'new!')})()
+        with patch.object(Downloader,'_opener',return_value=opener):
+            try:Downloader(retries=1).download_one(DownloadJob('https://example.invalid',path,size=4,force=True,cancel_event=cancel))
+            except DownloadCancelled:pass
+            else:raise AssertionError('cancelled download replaced existing file')
+        assert path.read_bytes()==b'old!'

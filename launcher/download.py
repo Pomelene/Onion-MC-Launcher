@@ -258,8 +258,10 @@ class Downloader:
                     tmp.unlink(missing_ok=True)
                     raise DownloadError('文件大小不符')
                 from .safety import backup_file
+                self._check_cancel(job)
                 backup_file(path)
-                tmp.replace(path)
+                from .storage import _replace
+                _replace(tmp,path)
                 return True
             except DownloadCancelled:
                 raise

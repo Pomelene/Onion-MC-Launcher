@@ -15,7 +15,9 @@ from launcher.task_history import TaskHistory
 def jar(key,version='1.0',depends=None,extra=None):
     out=io.BytesIO()
     with zipfile.ZipFile(out,'w') as z:
-        z.writestr('fabric.mod.json',json.dumps(dict(id=key,name=key,version=version,depends=depends or {},**(extra or {}))))
+        # Stable archive timestamps keep byte/hash assertions independent of
+        # whether a filesystem operation crosses ZIP's two-second clock tick.
+        z.writestr(zipfile.ZipInfo('fabric.mod.json'),json.dumps(dict(id=key,name=key,version=version,depends=depends or {},**(extra or {}))))
     return out.getvalue()
 
 

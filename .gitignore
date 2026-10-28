@@ -43,6 +43,8 @@ settings.json
 !/docs/ui-copy-audit.md
 !/docs/next-features.md
 !/docs/launcher-updates.md
+!/docs/performance-20261028.md
+!/docs/performance-20261028.json
 
 # Portable user data and build output must never be published.
 onionmcl.json

@@ -1,0 +1,191 @@
+{
+  "baseline_ref": "e219ced",
+  "workloads": [
+    {
+      "name": "asset_presence_6000",
+      "baseline": 906.236,
+      "optimized": 43.953,
+      "unit": "ms",
+      "reduction_percent": 95.15,
+      "speedup": 20.618,
+      "objects": 6000
+    },
+    {
+      "name": "mod_list_repeat_200",
+      "baseline": 54.389,
+      "optimized": 1.881,
+      "unit": "ms",
+      "reduction_percent": 96.54,
+      "speedup": 28.917,
+      "mods": 200
+    },
+    {
+      "name": "mod_list_metadata_and_icons_200",
+      "baseline": 70.46,
+      "optimized": 18.279,
+      "unit": "ms",
+      "reduction_percent": 74.06,
+      "speedup": 3.855,
+      "mods": 200,
+      "scope": "filesystem and metadata only; excludes Qt paint"
+    },
+    {
+      "name": "mod_update_fixed_latency_200",
+      "baseline": 601.368,
+      "optimized": 89.358,
+      "unit": "ms",
+      "reduction_percent": 85.14,
+      "speedup": 6.73,
+      "requests_before": 400,
+      "requests_after": 2
+    },
+    {
+      "name": "dual_hash_local_file",
+      "baseline": 29.173,
+      "optimized": 24.042,
+      "unit": "ms",
+      "reduction_percent": 17.59,
+      "speedup": 1.213,
+      "bytes": 29360128
+    },
+    {
+      "name": "verified_download_loopback",
+      "baseline": 110.264,
+      "optimized": 69.355,
+      "unit": "ms",
+      "reduction_percent": 37.1,
+      "speedup": 1.59,
+      "bytes": 29360128
+    },
+    {
+      "name": "download_queue_peak_10000",
+      "baseline": 17378921,
+      "optimized": 135085,
+      "unit": "bytes",
+      "reduction_percent": 99.22,
+      "speedup": 128.652
+    },
+    {
+      "name": "native_preparation_repeat_12MiB",
+      "baseline": 31.474,
+      "optimized": 13.76,
+      "unit": "ms",
+      "reduction_percent": 56.28,
+      "speedup": 2.287,
+      "bytes": 12582912
+    },
+    {
+      "name": "java_path_discovery",
+      "baseline": 5174.289,
+      "optimized": 510.204,
+      "unit": "ms",
+      "reduction_percent": 90.14,
+      "speedup": 10.142,
+      "runtimes": 8
+    },
+    {
+      "name": "https_request_setup",
+      "baseline": 18.16,
+      "optimized": 0.119,
+      "unit": "ms",
+      "reduction_percent": 99.34,
+      "speedup": 152.539
+    }
+  ],
+  "network": "Simulated fixed 10 ms per request; no real network throughput claim",
+  "measurement_date": "2026-10-28",
+  "python": "3.13.7",
+  "builds": {
+    "public": {
+      "filename": "Onion-0.4.0-optimized.exe",
+      "source_commit": "5bcc875",
+      "bytes": 23805522,
+      "sha256": "ed5a72e2d40384d904d494144f47b5760b9af3f44a0bdf1ee30615de9c116b27",
+      "baseline_bytes": 31925224,
+      "saved_percent": 25.43,
+      "verified_deferred_files": 133,
+      "translations_and_plugins_preserved": true
+    },
+    "thunion": {
+      "filename": "Onion-0.4.0-T-optimized.exe",
+      "source_commit": "59410b4",
+      "bytes": 23891663,
+      "sha256": "67171d00e7f704994f4b53f415c56a19adf3bb6cc4fad70523f985ebe8c86b0b",
+      "baseline_bytes": 32109605,
+      "saved_percent": 25.59,
+      "verified_deferred_files": 137,
+      "translations_and_plugins_preserved": true
+    }
+  },
+  "startup_roundtrip": {
+    "public": {
+      "edition": "public",
+      "scope": "hidden real-entry startup self-check roundtrip including unpack, Qt setup, checks and shutdown; not first frame",
+      "samples_seconds": {
+        "baseline": [
+          2.7762308999954257,
+          1.909072800015565,
+          2.0036552000092342,
+          1.8256471999920905,
+          1.925172699993709
+        ],
+        "optimized": [
+          2.8090923999843653,
+          1.9494909000059124,
+          1.9916786999965552,
+          1.9880141000030562,
+          2.0330659999744967
+        ]
+      },
+      "median_seconds": {
+        "baseline": 1.925172699993709,
+        "optimized": 1.9916786999965552
+      }
+    },
+    "thunion": {
+      "edition": "thunion",
+      "scope": "hidden real-entry startup self-check roundtrip including unpack, Qt setup, checks and shutdown; not first frame",
+      "samples_seconds": {
+        "baseline": [
+          1.789866200007964,
+          1.5622893999970984,
+          1.7573384999996051,
+          1.8448471000010613,
+          1.504160199983744
+        ],
+        "optimized": [
+          2.770475400000578,
+          1.817231900000479,
+          1.831869599991478,
+          1.778327400010312,
+          1.8430065000138711
+        ]
+      },
+      "median_seconds": {
+        "baseline": 1.7573384999996051,
+        "optimized": 1.831869599991478
+      }
+    }
+  },
+  "test_results": {
+    "public": {
+      "passed": 322,
+      "total": 322
+    },
+    "thunion": {
+      "passed": 328,
+      "total": 328
+    },
+    "legacy_credential_migration_repetitions": 25,
+    "real_executable_replacement_and_restart": [
+      "public",
+      "thunion"
+    ]
+  },
+  "limits": [
+    "No whole-game startup benchmark",
+    "No real Internet throughput guarantee",
+    "Startup samples include hidden checks and shutdown, not first frame",
+    "Queue peak measures additional scheduling allocations only"
+  ]
+}

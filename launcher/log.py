@@ -11,6 +11,12 @@ from pathlib import Path
 _LOGGER: logging.Logger | None = None
 
 
+class SafeFormatter(logging.Formatter):
+    def format(self,record):
+        from .crash import redact
+        return redact(super().format(record))
+
+
 def _hide_directory(path: Path) -> None:
     if os.name != 'nt':
         return
@@ -71,6 +77,8 @@ def setup_logging(log_dir: Path | None = None, level: str = "info", to_console: 
     if log_dir is None:
         from .paths import default_log_dir
         log_dir = default_log_dir()
+        from .safety import contained
+        contained(log_dir/'launcher.log',log_dir.parent.parent)
         log_dir.parent.mkdir(parents=True, exist_ok=True)
         try:
             _hide_directory(log_dir.parent)
@@ -80,9 +88,12 @@ def setup_logging(log_dir: Path | None = None, level: str = "info", to_console: 
         warnings.extend(_migrate_legacy_logs(log_dir))
     else:
         log_dir = Path(log_dir)
+        for path in (log_dir.parent,log_dir,log_dir/'launcher.log'):
+            if path.is_symlink() or path.is_junction():raise OSError('日志路径不能是目录链接或符号链接')
     log_dir.mkdir(parents=True, exist_ok=True)
     logger.setLevel(getattr(logging, str(level).upper(), logging.INFO))
-    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    logger.propagate=False
+    fmt = SafeFormatter("%(asctime)s [%(levelname)s] %(message)s")
     fh = TimedRotatingFileHandler(log_dir / "launcher.log", when="midnight",
                                   backupCount=7, encoding="utf-8")
     fh.setFormatter(fmt)

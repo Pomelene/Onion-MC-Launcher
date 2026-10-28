@@ -6,6 +6,7 @@
 """
 
 import json
+import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -62,10 +63,18 @@ class AssetIndex:
 
     def jobs(self, objects_dir: Path, remap=None) -> list[DownloadJob]:
         """生成所有缺失对象的下载任务（尺寸一致视为已存在，避免全量哈希）。"""
-        jobs = []
+        jobs = [];sizes={};seen=set()
         for obj in self.objects.values():
-            p = objects_dir / obj.object_path()
-            if p.exists() and p.stat().st_size == obj.size:
+            relative=obj.object_path();prefix=os.path.normcase(relative[:2]);key=os.path.normcase(relative)
+            if key in seen:continue
+            seen.add(key)
+            if prefix not in sizes:
+                try:
+                    with os.scandir(objects_dir/prefix) as entries:
+                        sizes[prefix]={os.path.normcase(entry.name):entry.stat(follow_symlinks=False).st_size for entry in entries if entry.is_file(follow_symlinks=False)}
+                except FileNotFoundError:sizes[prefix]={}
+            p = objects_dir / relative
+            if sizes[prefix].get(os.path.normcase(obj.hash)) == obj.size:
                 continue
             jobs.append(DownloadJob(obj.url(remap), p, sha1=obj.hash, size=obj.size,
                                     name=obj.key, fallback_urls=(obj.url(),)))

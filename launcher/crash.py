@@ -6,10 +6,24 @@ from pathlib import Path
 from typing import Optional
 
 
-def parse_crash(path: Path) -> dict:
+def _report_text(path):
+    # Preserve the exception/header and environment/footer without loading huge logs.
+    with Path(path).open('rb') as stream:
+        size=stream.seek(0,2);stream.seek(0)
+        head=stream.read(3*1024**2)
+        if size>4*1024**2:
+            if not head.endswith(b'\n'):head=head.rpartition(b'\n')[0]+b'\n'
+            stream.seek(-1024**2-1,2);previous=stream.read(1);tail=stream.read(1024**2)
+            if previous!=b'\n':tail=tail.partition(b'\n')[2]
+            data=head+b'\n[report middle omitted]\n'+tail
+        else:data=head+stream.read(1024**2)
+    return data.decode('utf-8','replace')
+
+
+def parse_crash(path: Path, *, text=None) -> dict:
     """解析崩溃报告，返回 {description, exception, java, time, suspected}。"""
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        if text is None:text=redact(_report_text(path))
     except OSError:
         return {}
 
@@ -179,21 +193,30 @@ def diagnose(text: str) -> dict:
 def diagnose_file(path: Path) -> dict:
     """读取崩溃报告并给出结论。"""
     try:
-        text = Path(path).read_text(encoding="utf-8", errors="replace")
+        text = redact(_report_text(path))
     except OSError:
         return diagnose("")
     result = diagnose(text)
-    info = parse_crash(Path(path))
+    info = parse_crash(Path(path),text=text)
     result["description"] = info.get("description", "")
     result["suspected"] = info.get("suspected", [])
     result["exception"] = info.get("exception", "")
     return result
 
 
+_REDACTIONS=(
+    re.compile(r'(?i)((?:Bearer|Basic)\s+)\S+'),
+    re.compile(r'''(?i)((?:access[_-]?token|refresh[_-]?token|client[_-]?token|id_token|device_code|client[_-]?secret|password|x-api-key|curseforge_api_key)["']?\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)'''),
+    re.compile(r'(?i)(--(?:accessToken|session|uuid|username|xuid)\s+)(?:"[^"]*"|\S+)'),
+    re.compile(r'(?i)(https?://)[^\s/@:]+:[^\s/@]+@'),
+)
+
+
 def redact(text):
-    text=re.sub(r'(?i)(Bearer\s+)\S+',r'\1[已隐藏]',text)
-    text=re.sub(r'''(?i)((?:access[_-]?token|refresh[_-]?token|client[_-]?secret|password)["']?\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)''',r'\1[已隐藏]',text)
-    text=re.sub(r'(?i)(--(?:accessToken|uuid|username|xuid)\s+)(?:"[^"]*"|\S+)',r'\1[已隐藏]',text)
+    lower=text.lower()
+    if not any(marker in lower for marker in ('bearer','basic','token','secret','password','api','device_code','--session','--uuid','--username','--xuid','@')):return text
+    for pattern in _REDACTIONS:
+        text=pattern.sub(r'\1[已隐藏]',text)
     return text
 
 
@@ -215,7 +238,9 @@ def reports(run_dir):
             from .safety import contained
             contained(path,root)
             with path.open('rb') as source:
-                source.seek(max(0,path.stat().st_size-2*1024**2));sample=redact(source.read(2*1024**2).decode('utf-8','replace'))
+                offset=max(0,path.stat().st_size-2*1024**2);source.seek(offset);raw=source.read(2*1024**2)
+                if offset:raw=raw.partition(b'\n')[2]
+                sample=redact(raw.decode('utf-8','replace'))
         except OSError:continue
         # Generic mentions of a renderer or a mod are not evidence of a crash.
         for rule in RULES:

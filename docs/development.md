@@ -2,6 +2,14 @@
 
 项目目前面向 Windows、Python 3.13 和 PySide6 6.12。其他环境尚未充分验收。
 
+Qt 发行包采用有界的无损分组压缩。`packaging/qt_payload.py` 在构建时处理随附依赖，
+`packaging/qt_unpack.py` 在加载 Qt 前流式恢复并校验 SHA-256；语言包和备用插件全部保留。
+设置环境变量 `ONION_PACK_QT=0` 可以构建普通 PyInstaller 对照包。不要对启用 CFG 的 DLL 强行使用 UPX。
+
+性能复算：`python scripts/benchmark_optimizations.py --baseline e219ced --output docs/performance-20261028.json`。
+该工具使用隔离的合成文件、本地回环下载和固定延迟模拟服务，并比较本机 Java 枚举结果；不会修改用户游戏数据。
+远程请求减少量与真实公网下载带宽应分别报告。
+
 ## 源码结构
 
 | 位置 | 内容 |

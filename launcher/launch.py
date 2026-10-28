@@ -228,10 +228,19 @@ class ManagedProcess:
 
     def _pump(self, stream, is_error: bool) -> None:
         try:
-            for raw in iter(stream.readline, b""):
+            from .crash import redact
+            discarding=False
+            for raw in iter(lambda:stream.readline(256*1024), b""):
+                complete=raw.endswith(b'\n')
+                if discarding:
+                    discarding=not complete;continue
+                if len(raw)==256*1024 and not complete:
+                    discarding=True
+                    if self._on_log:self._on_log('[日志行过长，已省略]',is_error)
+                    continue
                 line = raw.decode("utf-8", "replace").rstrip("\r\n")
                 if self._on_log:
-                    self._on_log(line, is_error)
+                    self._on_log(redact(line), is_error)
         except (OSError, ValueError):
             pass
         finally:

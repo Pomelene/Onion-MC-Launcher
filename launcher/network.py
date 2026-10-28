@@ -1,9 +1,30 @@
 """Shared remote URL and redirect policy; response bodies are never errors."""
 import http.client
 import time
+import ssl
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+
+_TLS_CONTEXT=None
+_TLS_CREATED=0.0
+_TLS_LOCK=threading.Lock()
+
+
+def https_handler():
+    """Reuse immutable TLS trust configuration, not connections or credentials."""
+    global _TLS_CONTEXT,_TLS_CREATED
+    with _TLS_LOCK:
+        now=time.monotonic()
+        if (_TLS_CONTEXT is None or now-_TLS_CREATED>=300 or not _TLS_CONTEXT.check_hostname
+                or _TLS_CONTEXT.verify_mode!=ssl.CERT_REQUIRED):
+            context=ssl.create_default_context()
+            context.set_alpn_protocols(['http/1.1'])
+            if hasattr(context,'post_handshake_auth'):context.post_handshake_auth=True
+            _TLS_CONTEXT=context;_TLS_CREATED=now
+        context=_TLS_CONTEXT
+    return urllib.request.HTTPSHandler(context=context)
 
 
 def validate_url(url, *, https_only=False):
@@ -40,7 +61,7 @@ class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
 
 def secure_open(request,timeout=20):
     validate_url(request.full_url,https_only=True)
-    return urllib.request.build_opener(SafeRedirectHandler()).open(request,timeout=timeout)
+    return urllib.request.build_opener(SafeRedirectHandler(),https_handler()).open(request,timeout=timeout)
 
 
 def fetch_public(request, *, limit, timeout=20, proxy=None):
@@ -63,7 +84,7 @@ def fetch_public(request, *, limit, timeout=20, proxy=None):
         # ProxyHandler mutates Requests (including proxy credentials). Each
         # attempt starts from the original anonymous URL and headers.
         fresh=urllib.request.Request(request.full_url,headers=headers,method='GET')
-        opener=urllib.request.build_opener(urllib.request.ProxyHandler(route),SafeRedirectHandler())
+        opener=urllib.request.build_opener(urllib.request.ProxyHandler(route),SafeRedirectHandler(),https_handler())
         try:
             with opener.open(fresh,timeout=attempt_timeout) as response:
                 body=response.read(limit+1)

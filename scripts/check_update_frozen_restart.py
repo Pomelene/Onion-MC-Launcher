@@ -8,15 +8,44 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import argparse
 from dataclasses import replace
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-from launcher.updates import replacement_script
+from launcher.updates import replacement_script,_ps
 from tests.test_launcher_updates import release
 
+def check_launcher(path):
+    """Replace and restart a disposable copy of an actual release executable."""
+    with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='launcher-update-') as temporary:
+        root=Path(temporary);exe=root/"自定义 [Onion] '重命名'.exe";staged=root/'.onion/updates/pending-check/update.exe'
+        staged.parent.mkdir(parents=True);shutil.copy2(path,exe);shutil.copy2(path,staged)
+        settings=root/'onionmcl.json';settings.write_text('{"preserve":"fixture"}');original=settings.read_bytes()
+        report=root/'startup.json'
+        item=replace(release(),size=staged.stat().st_size,sha256=hashlib.sha256(staged.read_bytes()).hexdigest())
+        script=replacement_script(exe,staged,item,2147483647)
+        script=script.replace('$info.FileName=$target','$info.FileName=$target\n    $info.Arguments='+_ps('--startup-check-output "'+str(report)+'"'))
+        dirty={**os.environ,'_PYI_ARCHIVE_FILE':str(exe),'_PYI_APPLICATION_HOME_DIR':str(root/'deleted-runtime'),'_PYI_PARENT_PROCESS_LEVEL':'1'}
+        dirty.pop('PYINSTALLER_RESET_ENVIRONMENT',None)
+        powershell=Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'
+        encoded=base64.b64encode(script.encode('utf-16-le')).decode('ascii')
+        result=subprocess.run([str(powershell),'-NoProfile','-NonInteractive','-EncodedCommand',encoded],env=dirty,capture_output=True,timeout=60,creationflags=subprocess.CREATE_NO_WINDOW)
+        assert result.returncode==0,result.stderr.decode(errors='replace')
+        deadline=time.monotonic()+30
+        while not report.exists() and time.monotonic()<deadline:time.sleep(.05)
+        assert json.loads(report.read_text())['result']=='pass'
+        assert settings.read_bytes()==original
+        assert hashlib.sha256(exe.read_bytes()).hexdigest()==item.sha256
+        assert json.loads((staged.parent/'result.json').read_text())['result']=='success'
+        print('PASS: actual launcher update, renamed target, inherited runtime reset and isolated real-entry startup')
+
+
 def main():
+    parser=argparse.ArgumentParser();parser.add_argument('--launcher',type=Path);args=parser.parse_args()
     if os.name!='nt':raise SystemExit('Windows only')
+    if args.launcher:return check_launcher(args.launcher.resolve())
     with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='frozen-restart-') as temporary:
         root=Path(temporary)
         source=root/'probe.py'

@@ -86,6 +86,9 @@ def test_network_workers_receive_downloader_cancellation_context():
         def fetch_json(self,url):
             assert self._cancel_event() is cancel
             return dict(project_id=url,id=url)
+        def post_json(self,url,payload):
+            assert self._cancel_event() is cancel
+            return {digest:dict(project_id=digest,id=digest) for digest in payload['hashes']}
     class Job:
         def emit(self,value):pass
     cancel=threading.Event();job=Job();job.cancel=cancel;remote=Remote()

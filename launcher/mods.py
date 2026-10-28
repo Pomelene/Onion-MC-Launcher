@@ -7,15 +7,27 @@
 """
 
 import json
+import os
 import re
 import urllib.parse
 import urllib.request
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass,replace
+from collections import OrderedDict
+from threading import Lock
 from pathlib import Path
 from typing import Optional
 
 MODRINTH_API = "https://api.modrinth.com/v2"
+_INFO_CACHE=OrderedDict()
+_INFO_LOCK=Lock()
+_INFO_BYTES=0
+
+
+def _metadata_bytes(zf,name):
+    info=zf.getinfo(name)
+    if info.file_size>256*1024:raise ValueError('模组元数据超过安全上限')
+    return zf.read(info)
 
 
 @dataclass
@@ -41,17 +53,17 @@ class ModInfo:
 
 def _read_fabric_meta(zf: zipfile.ZipFile) -> Optional[dict]:
     try:
-        with zf.open("fabric.mod.json") as f:
-            return json.loads(f.read().decode("utf-8-sig", "replace"),strict=False)
-    except (KeyError, json.JSONDecodeError, OSError):
+        data=json.loads(_metadata_bytes(zf,'fabric.mod.json').decode('utf-8-sig','replace'),strict=False)
+        return data if isinstance(data,dict) else None
+    except (KeyError, ValueError, OSError):
         return None
 
 
 def _read_forge_toml(zf: zipfile.ZipFile) -> Optional[dict]:
     """从 META-INF/mods.toml 中粗略解析 modId / displayName / version。"""
     try:
-        text = zf.read("META-INF/mods.toml").decode("utf-8", "replace")
-    except (KeyError, OSError):
+        text = _metadata_bytes(zf,"META-INF/mods.toml").decode("utf-8", "replace")
+    except (KeyError, ValueError, OSError):
         return None
     result = {}
     for key in ("modId", "displayName", "version"):
@@ -63,8 +75,8 @@ def _read_forge_toml(zf: zipfile.ZipFile) -> Optional[dict]:
 
 def _read_mcmod_info(zf: zipfile.ZipFile) -> Optional[dict]:
     try:
-        data = json.loads(zf.read("mcmod.info").decode("utf-8", "replace"))
-    except (KeyError, json.JSONDecodeError, OSError):
+        data = json.loads(_metadata_bytes(zf,"mcmod.info").decode("utf-8", "replace"))
+    except (KeyError, ValueError, OSError):
         return None
     if isinstance(data, dict):
         data = data.get("modList") or [data]
@@ -75,14 +87,42 @@ def _read_mcmod_info(zf: zipfile.ZipFile) -> Optional[dict]:
     return None
 
 
-def read_mod_info(path: Path) -> ModInfo:
+def read_mod_info(path: Path, *, metadata=None) -> ModInfo:
+    global _INFO_BYTES
+    path=Path(path)
+    try:
+        metadata=metadata if metadata is not None else path.stat();identity=(metadata.st_size,metadata.st_mtime_ns,metadata.st_ctime_ns)
+    except OSError:return _read_mod_info(path)
+    key=str(path.absolute())
+    with _INFO_LOCK:
+        cached=_INFO_CACHE.get(key)
+        if cached and cached[0]==identity:
+            _INFO_CACHE.move_to_end(key);return replace(cached[1])
+    result=_read_mod_info(path)
+    # Recheck identity so an in-flight replacement cannot poison the cache.
+    try:
+        after=path.stat()
+        if identity!=(after.st_size,after.st_mtime_ns,after.st_ctime_ns):return result
+    except OSError:return result
+    weight=512+4*sum(len(value) for value in (str(result.path),result.name,result.version,result.mod_id))
+    if weight<=64*1024:
+        with _INFO_LOCK:
+            old=_INFO_CACHE.pop(key,None)
+            if old:_INFO_BYTES-=old[2]
+            _INFO_CACHE[key]=(identity,replace(result),weight);_INFO_BYTES+=weight
+            while len(_INFO_CACHE)>1024 or _INFO_BYTES>8*1024**2:
+                _,old=_INFO_CACHE.popitem(last=False);_INFO_BYTES-=old[2]
+    return result
+
+
+def _read_mod_info(path: Path) -> ModInfo:
     """读取单个模组文件的信息（无元数据时回退到文件名）。"""
     enabled = not path.name.endswith(".disabled")
     info = ModInfo(path=path, name=path.stem.replace(".jar", ""), enabled=enabled)
     try:
         with zipfile.ZipFile(path) as zf:
             meta = _read_fabric_meta(zf) or _read_forge_toml(zf) or _read_mcmod_info(zf)
-    except (zipfile.BadZipFile, OSError):
+    except (zipfile.BadZipFile, ValueError, OSError,RuntimeError):
         return info
     if meta:
         info.mod_id = str(meta.get("id") or meta.get("modId") or "")
@@ -96,11 +136,12 @@ def scan_mods(mods_dir: Path) -> list[ModInfo]:
     if not mods_dir.exists():
         return []
     result = []
-    for p in sorted(mods_dir.iterdir()):
-        if not p.is_file():
-            continue
+    with os.scandir(mods_dir) as entries:
+        files=sorted((entry for entry in entries if entry.is_file(follow_symlinks=False)),key=lambda entry:entry.name)
+    for entry in files:
+        p=Path(entry.path)
         if p.suffix.lower() in (".jar", ".zip") or p.name.lower().endswith((".jar.disabled", ".zip.disabled")):
-            result.append(read_mod_info(p))
+            result.append(read_mod_info(p,metadata=entry.stat(follow_symlinks=False)))
     return result
 
 
@@ -181,13 +222,15 @@ def scan_resourcepacks(pack_dir: Path) -> list[PackInfo]:
         info = PackInfo(path=p, name=p.stem)
         try:
             with zipfile.ZipFile(p) as zf:
-                meta = json.loads(zf.read("pack.mcmeta").decode("utf-8", "replace"))
+                meta = json.loads(_metadata_bytes(zf,"pack.mcmeta").decode("utf-8", "replace"))
+            if not isinstance(meta,dict):raise ValueError('资源包元数据格式无效')
             pack = meta.get("pack") or {}
+            if not isinstance(pack,dict):raise ValueError('资源包元数据格式无效')
             desc = pack.get("description", "")
             if isinstance(desc, dict):
                 desc = desc.get("text", "") or desc.get("translate", "")
             info.description = str(desc)
-        except (KeyError, json.JSONDecodeError, OSError, zipfile.BadZipFile):
+        except (KeyError, ValueError, OSError, zipfile.BadZipFile,RuntimeError):
             pass
         result.append(info)
     return result
@@ -288,16 +331,6 @@ def duplicate_ids(mods: list[ModInfo]) -> list[tuple[str, list[str]]]:
     return [(k, v) for k, v in groups.items() if len(v) > 1]
 
 
-def _post_json(url: str, payload: dict) -> dict:
-    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"),
-                                 method="POST", headers={
-        "Content-Type": "application/json", "Accept": "application/json",
-        "User-Agent": "Onion Minecraft Launcher/0.1.0",
-    })
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode("utf-8"))
-
-
 def check_updates(downloader, mods: list[ModInfo], game_version: str = "",
                   loader: str = "") -> list[dict]:
     """对每个启用的模组做 SHA-1 反查，返回可更新列表。
@@ -312,7 +345,7 @@ def check_updates(downloader, mods: list[ModInfo], game_version: str = "",
         if not sha1:
             continue
         try:
-            current = _post_json(f"{MODRINTH_API}/version_file/{sha1}?algorithm=sha1", {})
+            current = downloader.fetch_json(f"{MODRINTH_API}/version_file/{sha1}?algorithm=sha1")
         except Exception:  # noqa: BLE001
             continue
         project_id = current.get("project_id")

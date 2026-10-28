@@ -13,9 +13,21 @@ vulnerabilities have been found.
   credentials when crossing origins. The general game downloader still permits
   HTTP for compatible repositories; only use repositories you trust.
 - Downloads enforce size limits and check supplied SHA-1/SHA-256 digests.
+  Resumed responses must match the requested byte range and declared length.
+  Resource indexes are bounded and checked against published metadata when available;
+  malformed cached indexes are repaired rather than silently accepted.
   ZIP extraction streams files with bounds on file count, expansion size and
   compression ratio, rejects unsafe paths and links, and supports cancellation
   in pack imports and world restoration. NBT parsing has size and depth limits.
+- Launcher logs, game output and diagnostic exports redact credential-like fields.
+  Long log lines and report reads are bounded. This is best-effort redaction, not
+  a reason to publish unreviewed logs containing personal information.
+- Deferred runtime compression restores byte-identical libraries in PyInstaller's
+  private temporary directory and verifies every restored file's SHA-256 before
+  loading it. It does not patch DLLs or remove their original security metadata.
+- HTTPS certificate and hostname checks remain required. Only the TLS trust
+  configuration is cached (up to five minutes); account credentials, connections
+  and proxy routes are not cached by that mechanism.
 - The optional authlib-injector is pinned to version 1.2.8 and its SHA-256,
   obtained from the [upstream release](https://github.com/yushijinhun/authlib-injector/releases/tag/v1.2.8).
 - Source publication excludes accounts, local settings, logs, game data and

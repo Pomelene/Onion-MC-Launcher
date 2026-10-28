@@ -43,7 +43,7 @@ def read_member(archive,name,limit=16*1024**2):
     return value
 
 
-def copy_member(archive,info,destination,*,cancel_event=None,limit=1024**3):
+def copy_member(archive,info,destination,*,cancel_event=None,limit=1024**3,digest=None):
     from .download import DownloadCancelled
     destination=Path(destination);destination.parent.mkdir(parents=True,exist_ok=True)
     if info.file_size>limit:raise ValueError('解压内容超过安全上限')
@@ -61,6 +61,7 @@ def copy_member(archive,info,destination,*,cancel_event=None,limit=1024**3):
                     done+=len(block)
                     if done>limit or done>info.file_size:raise ValueError('解压内容超过安全上限')
                     output.write(block)
+                    if digest is not None:digest.update(block)
         temporary.replace(destination)
     finally:
         if temporary is not None:temporary.unlink(missing_ok=True)

@@ -151,54 +151,17 @@ class GameRepository:
         cache[key] = result
         return result
 
-    def _reference_covers_index(self, index_path: Path, assets_root: Path) -> bool:
-        """参考目录是否完整覆盖某个资源索引的全部对象（结果缓存）。"""
-        cache = getattr(self, "_asset_cover_cache", None)
-        if cache is None:
-            cache = {}
-            self._asset_cover_cache = cache
-        key = str(index_path)
-        if key in cache:
-            return cache[key]
+    def _reference_covers_index(self, index_path: Path, assets_root: Path, expected=None) -> bool:
+        """Recheck directory contents; a previous hit cannot hide removed assets."""
         try:
-            raw = json.loads(Path(index_path).read_text(encoding="utf-8"))
-            objects = (raw.get("objects") or {})
-        except (OSError, json.JSONDecodeError):
-            cache[key] = False
-            return False
-        if not objects:
-            cache[key] = True
-            return True
-        root = Path(assets_root) / "objects"
-        present = set()
-        try:
-            for sub in os.scandir(root):
-                if sub.is_dir():
-                    present.add(sub.name)
-        except OSError:
-            cache[key] = False
-            return False
-        missing = 0
-        buckets = {}
-        for meta in objects.values():
-            h = str(meta.get("hash") or "")
-            if len(h) < 2:
-                missing += 1
-                continue
-            buckets.setdefault(h[:2], set()).add(h)
-        for bucket, hashes in buckets.items():
-            if bucket not in present:
-                missing += len(hashes)
-                continue
-            try:
-                names = {e.name for e in os.scandir(root / bucket) if e.is_file()}
-            except OSError:
-                missing += len(hashes)
-                continue
-            missing += len(hashes - names)
-        ok = missing == 0
-        cache[key] = ok
-        return ok
+            size=Path(index_path).stat().st_size
+            if size>32*1024**2:return False
+            if expected:
+                if expected.get('size') is not None and size!=expected['size']:return False
+                if expected.get('sha1') and sha1_of(index_path)!=str(expected['sha1']).lower():return False
+            index=AssetIndex.parse(json.loads(Path(index_path).read_text(encoding='utf-8')))
+            return not index.jobs(Path(assets_root)/'objects')
+        except (OSError,ValueError,KeyError,TypeError,AttributeError):return False
 
     def reference_assets_dir(self) -> Optional[Path]:
         """可作为只读 --assetsDir 的参考资源目录（需同时存在 indexes 与 objects）。"""
@@ -448,26 +411,32 @@ class GameRepository:
         if not info:
             return
         index_id = rv.asset_index_id
+        index_path = child(self.assets_dir / "indexes", f"{index_id}.json")
         ref_assets = self.reference_assets_dir()
         if ref_assets is not None:
             ref_index = ref_assets / "indexes" / f"{index_id}.json"
-            if ref_index.exists() and self._reference_covers_index(ref_index, ref_assets):
+            if ref_index.exists() and self._reference_covers_index(ref_index, ref_assets,info):
                 if on_stage:on_stage("本地资源已完整 · 使用已有资源目录")
                 return
-        index_path = child(self.assets_dir / "indexes", f"{index_id}.json")
-        if not index_path.exists():
+        index=None;existed=index_path.exists()
+        if existed:
+            try:
+                size=index_path.stat().st_size
+                if size>32*1024**2 or (info.get('size') is not None and size!=info['size']):raise ValueError('资源索引大小无效')
+                if info.get('sha1') and sha1_of(index_path)!=str(info['sha1']).lower():raise ValueError('资源索引摘要不符')
+                index=AssetIndex.parse(json.loads(index_path.read_text(encoding='utf-8')),index_id,url=info.get('url',''))
+            except (OSError,ValueError,KeyError,TypeError,AttributeError):pass
+        if index is None:
             url = info.get("url")
             if not url:
-                return
-            if on_stage:on_stage("本地资源索引缺失 · 正在获取索引")
-            data = self.downloader.fetch(self.remap(url))
-            index_path.parent.mkdir(parents=True, exist_ok=True)
-            write_text(self.assert_writable(index_path), data)
-        try:
-            raw = json.loads(index_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return
-        index = AssetIndex.parse(raw, index_id, url=info.get("url", ""))
+                raise DownloadError('资源索引缺失或损坏，且版本没有提供修复地址')
+            if on_stage:on_stage('本地资源索引损坏 · 正在修复' if existed else '本地资源索引缺失 · 正在获取索引')
+            self.assert_writable(index_path)
+            # A malformed cache without a checksum must not be accepted as a
+            # size-only hit; known metadata remains verified by the downloader.
+            self.downloader.download_one(DownloadJob(self.remap(url),index_path,sha1=info.get('sha1'),size=info.get('size'),fallback_urls=(url,),force=existed,max_size=32*1024**2))
+            try:index=AssetIndex.parse(json.loads(index_path.read_text(encoding='utf-8')),index_id,url=url)
+            except (OSError,ValueError,KeyError,TypeError,AttributeError):raise DownloadError('资源索引格式无效，请检查下载源后重试') from None
         jobs = index.jobs(self.assets_dir / "objects", self.remap)
         if jobs:
             if on_stage:on_stage(f"补全缺失或大小不符的资源 · {len(jobs)} 个文件")

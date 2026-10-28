@@ -6,7 +6,7 @@
 
 This is the `for_thunion` branch; its versions append `-T` to the public edition. Workshop adds Club Services: the first accepted confirmation per launcher session fetches and caches the latest [webapp.json](https://github.com/Pomelene/OnionService4THUnion/blob/main/webapp.json). Categories describe the Wiki and online map before an explicit click opens a page inside the launcher. THUnion is an unofficial, nonprofit organization.
 
-Current source version: [v0.4.0-T · THUnion edition](https://github.com/Pomelene/Onion-MC-Launcher/tree/for_thunion). Download and run the corresponding Windows EXE from [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases).
+Current source version: [v0.5.0-T · THUnion edition](https://github.com/Pomelene/Onion-MC-Launcher/tree/for_thunion). Download and run the corresponding Windows EXE from [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases).
 
 **v0.4.0-T**: Add instance copies and custom icons, bulk mod toggling, world export, world data-pack management and downloads, screenshot multiselection, optional pre-launch and post-exit commands, and game process priority. Modpack export supports content selection and editable name/version; common MultiMC / Prism packs and new Legacy Fabric instances can be installed. View version changelogs and use rounded, solid list backgrounds for readability over detailed wallpapers. Fix Windows process detection to protect running instances. MultiMC packs with custom patches or unsupported components are explicitly rejected; this is not complete format compatibility. Online Legacy Fabric and data-pack operations depend on upstream service support.
 

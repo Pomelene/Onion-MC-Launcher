@@ -6,7 +6,7 @@
 
 本分支为 `for_thunion`，版本号在公众版后增加 `-T`。工具坊新增“社团服务”：每次启动仅首次进入时确认并同步 [OnionService4THUnion/webapp.json](https://github.com/Pomelene/OnionService4THUnion/blob/main/webapp.json)，后续读取本地缓存。子目录先说明 Wiki、在线地图等网址的用途，点击“打开”后在启动器内嵌网页中浏览。清华联盟工坊是非官方、非营利组织。
 
-当前源码版本：[v0.4.0-T · THUnion 特供版](https://github.com/Pomelene/Onion-MC-Launcher/tree/for_thunion)。Windows 程序见 [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases)，下载对应 EXE 后运行。
+当前源码版本：[v0.5.0-T · THUnion 特供版](https://github.com/Pomelene/Onion-MC-Launcher/tree/for_thunion)。Windows 程序见 [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases)，下载对应 EXE 后运行。
 
 **v0.4.0-T**：新增实例复制与自定义图标、模组批量启停、世界导出、数据包管理与下载、截图多选复制及移除、可选的启动前和退出后命令、游戏进程优先级。整合包导出支持选择内容及名称和版本；支持常见 MultiMC / Prism 整合包导入和 Legacy Fabric 新实例安装。版本列表可查看更新日志；列表新增跟随主题的纯色圆角底板，改善复杂壁纸下的可读性。修复 Windows 进程状态检测，保护运行中的实例。包含自定义补丁或不支持组件的 MultiMC 包会明确提示，不能视为完整格式兼容；Legacy Fabric 和数据包在线服务仍取决于上游支持。
 

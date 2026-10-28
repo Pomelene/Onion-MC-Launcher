@@ -164,6 +164,7 @@ class Config:
     def load(self) -> None:
         if not self.path.exists() and not is_portable(self.path):
             return
+        migrate_secret=False
         try:
             loaded = read_section(self.path,"settings")
             if isinstance(loaded, dict):
@@ -179,9 +180,12 @@ class Config:
                     coerced = _coerce(key, value)
                     if coerced is not None:
                         self.data[key] = coerced
-                if envelope is None and self.data.get('curseforge_api_key'):self.save()
+                migrate_secret=envelope is None and bool(self.data.get('curseforge_api_key'))
         except (json.JSONDecodeError, OSError):
             pass
+        # A failed encryption/write must be visible; otherwise migration can
+        # appear successful while a legacy plaintext secret remains on disk.
+        if migrate_secret:self.save()
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -196,7 +200,8 @@ class Config:
             with tempfile.NamedTemporaryFile(mode='w',encoding='utf-8',dir=self.path.parent,
                                              prefix='.onion-settings-',delete=False) as output:
                 temporary=Path(output.name);json.dump(payload,output,ensure_ascii=False,indent=2)
-            temporary.replace(self.path)
+            from .storage import _replace
+            _replace(temporary,self.path)
         finally:
             if temporary is not None:temporary.unlink(missing_ok=True)
 

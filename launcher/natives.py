@@ -43,9 +43,9 @@ def extract_native(library: Library, source_jar: Path, dest_dir: Path) -> int:
     count = 0
     stamp=source_jar.stat()
     identity=(stamp.st_dev,stamp.st_ino,stamp.st_size,stamp.st_mtime_ns,stamp.st_ctime_ns)
-    source_digest=_sha256(source_jar)
     with zipfile.ZipFile(source_jar) as zf:
         validate_archive(zf)
+        source_digest=_sha256(source_jar)
         stamp=source_jar.stat()
         if identity!=(stamp.st_dev,stamp.st_ino,stamp.st_size,stamp.st_mtime_ns,stamp.st_ctime_ns):source_digest=None
         for info in zf.infolist():

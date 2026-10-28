@@ -2,91 +2,87 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-**A free, open-source, community-oriented launcher for Minecraft: Java Edition.**
+A free, open-source, community-oriented launcher for Minecraft Java Edition.
 
-Current source version: [v0.5.0](https://github.com/Pomelene/Onion-MC-Launcher/tree/v0.5.0). Download and run the corresponding Windows EXE from [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases).
-
-**v0.4.0**: Add instance copies and custom icons, bulk mod toggling, world export, world data-pack management and downloads, screenshot multiselection, optional pre-launch and post-exit commands, and game process priority. Modpack export supports content selection and editable name/version; common MultiMC / Prism packs and new Legacy Fabric instances can be installed. View version changelogs and use rounded, solid list backgrounds for readability over detailed wallpapers. Fix Windows process detection to protect running instances. MultiMC packs with custom patches or unsupported components are explicitly rejected; this is not complete format compatibility. Online Legacy Fabric and data-pack operations depend on upstream service support.
-
-**v0.3.3**: Add launcher updates and release history management, including manual upgrades, downgrades, and edition switching. Verified replacement preserves the executable's custom filename and directory. Recover public catalog requests from failed system proxies. Versions v0.3.2 and earlier do not support automatic upgrades; install this version manually once to enable future updates.
-
-**v0.3.2**: Improve mod checks and direct updates, crash diagnostics, and launch preflight. Add cross-folder instance overview, favorites and tags, a download task center, and skin favorites. Unify list layouts, replace Fabric / Quilt in place, publish one instance per new installation, and consolidate caches under `.onion`.
-
-**v0.3.1**: Improve appearance, UI, and usability.
-
-**v0.3.0.1**: First launch fits the available screen area. Closing saves the normal window size and maximized state; reopening on a smaller screen clamps the size. Uses DPI-aware logical pixels, independently of game resolution.
-
-v0.3.0.1 corrected reissue: removes THUnion-only web initialization and navigation accidentally included in the public edition, fixing the missing `web_tools` startup crash. Release builds now exercise the real application entry point.
-
-**v0.3.0 improves download and modpack installation**: compact task windows show real stages and network transfer speed. Modpacks are staged privately and published as one standalone instance. Pending paths with Unicode names and the skin head underside orientation have been corrected.
-
-**v0.2.4 adds multiple game folders, Workshop tools and content management**: switch saved libraries from the instance list or Home picker, with isolated settings and play history for identically named instances. Java management is embedded in Settings. New tools include schematic management, a continuous screenshot gallery, interactive 3D skin previews and uploads, and a local seed map. Launcher logs now live in hidden `.onion/logs`; existing configuration is backed up before its format upgrade.
-
-The application is named **Onion Minecraft Launcher**. Built with Python and PySide6 / Qt, it aims to make instance management, game installation and content management straightforward. The project is developed as a free community resource, without a business model based on selling the launcher, accounts or game assets. Feedback and contributions are welcome.
-
-The source is available under the [MIT License](LICENSE). The project's community mission adds no restrictions beyond that license. This is an independent community project, unaffiliated with Mojang, Microsoft or other launchers.
+Onion brings game installation, instance management, and everyday tools into a simple, customizable interface. This is a nonprofit community project for learning and sharing. The launcher is free to use and does not provide a Minecraft license.
 
 ## Features
 
-### Instance and content management
+### Accounts and launching
 
-- A single Check and update button in the existing mod list scans and updates in the background. Downloads are verified before old files are renamed with an `.old` suffix; no additional mod inspection or update pages.
-- Local preflight checks and evidence-based diagnostics from game logs, crash reports and JVM error logs.
-- An all-folder instance overview, favorites, tags and search, with directory-scoped identities for instances sharing a name.
-- A download task center with live status, received bytes, cancellation, background operation and safe in-session retries; the latest 100 local task records are retained.
-- Skin favorites, favorite-first ordering and filtering; content-based identity survives renaming.
+- Microsoft accounts, offline accounts, and third-party authentication.
+- Automatic discovery, selection, and download of suitable Java runtimes.
+- Memory allocation, window dimensions, launch arguments, and game process priority.
+- Global and per-instance settings, automatic saving, and remembered instance selection.
+- Pre-launch environment checks, game logs, and basic crash diagnosis.
 
-Dependency checks cover recognized metadata and supported version predicates, not the loader's entire resolver. Users choose dependency projects and versions; new installations resolve required dependencies automatically.
+### Installation and instances
 
-- Qt interface, instance selection, background downloads, cancellation and logs.
-- Installation workflows for vanilla Minecraft, Fabric, Quilt, Forge, NeoForge and OptiFine.
-- Management of mods, resource packs, shaders, and Modrinth / CurseForge modpacks.
-- World backups, restoration and recoverable file removal.
-- Account management, offline profiles, external authentication and Microsoft account authorization workflows.
-- Per-instance settings, Java selection and launch arguments.
-- Automatic settings persistence and restoration of the last selected instance; custom title bars for the main window and launcher dialogs.
-- Dark/light themes, accent colors, bold text, separate text and window-surface transparency, and custom home wallpaper with display modes.
+- Vanilla Minecraft, Fabric, Legacy Fabric, Forge, NeoForge, Quilt, and OptiFine installation.
+- Multiple game folders and a combined instance overview.
+- Instance search, favorites, tags, renaming, copying, and custom icons.
+- In-place Fabric and Quilt loader changes for existing instances.
+- Modrinth, CurseForge, and common MultiMC/Prism modpack imports.
+- Modrinth modpack export with selectable content categories.
 
-For Microsoft account authorization and publisher application configuration, see the [Microsoft login guide (Chinese)](docs/microsoft-auth.md). Players authorize through Microsoft's official website; publisher application setup is separate from player sign-in.
+Support varies by loader and pack format. Packs with complex custom components may not be supported.
 
-## Run from source
+### Game content
 
-New in v0.2.4: per-instance schematic subfolders, a continuous screenshot grid in reverse chronological order, and a Workshop with a skin library, a rotatable 3D preview, authenticated skin upload, and a local seed map. Skins live in `.onion/skins/`. Offline skins affect local display only; Microsoft uploads change the account's Minecraft skin. Maps use xpple's maintained cubiomes fork and support the listed vanilla Java versions through 26.3, including newer biomes and End generation changes. Custom world generators are not supported.
+- Search and download mods, resource packs, and shaders, with compatible file version selection.
+- Required dependency installation and updates for installed mods.
+- Individual mod toggling and bulk enabling or disabling of search results.
+- World management, backups, export, and per-world data packs.
+- Litematica and other schematic file management, including subfolders.
+- Chronological screenshot browsing with multiselection, export, and removal.
 
-The primary development environment is Windows with Python 3.13.
+### Workshop
 
-```powershell
-git clone https://github.com/Pomelene/Onion-MC-Launcher.git
-cd Onion-MC-Launcher
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python main.py
-```
+- Local skin management, favorites, and a draggable, rotatable 3D preview.
+- Skin uploads and cape synchronization and selection for Microsoft accounts.
+- A local seed map with dimensions, coordinate navigation, zoom, and structure markers.
 
-The default game directory is `F:\.minecraft`. Change it to your own game directory in Settings. Settings, account records, instance display names and per-instance overrides are stored in `onionmcl.json` next to the launcher; Windows marks this file as hidden. Saved account tokens use Windows user-bound encryption. On first run, the launcher migrates the four legacy configuration files from the adjacent `config/` directory and keeps the originals. Games, worlds, Java runtimes and logs remain separate.
+### Appearance and everyday use
 
-New EXE builds are placed in the project's `release/` directory. Copying only the EXE to a new directory, without `onionmcl.json`, starts with default settings. Include the hidden file in a private backup if you want to preserve your settings. Windows account tokens are bound to the original Windows user; moving to another machine or user may require signing in again. Do not upload this configuration file publicly.
+- Dark, light, and system-following modes.
+- Custom accent colors and wallpaper-based theme colors.
+- Custom backgrounds, scaling modes, and background coverage.
+- Separate UI, text, and background transparency controls.
+- Font family, size, bold text, corner radius, blur, and animation duration settings.
+- Custom home-page greetings.
+- Download progress, task history, automatic launcher updates, and historical version selection.
 
-Settings save automatically. Instances follow Settings → Global game settings by default, showing inherited values as disabled controls. Enable independent settings for the current instance to edit only that instance, without changing global defaults or other instances. Disabling the option removes that instance's overrides and restores inheritance. Java detection and downloads are grouped under Java management in the Settings sidebar; the Java path field selects the runtime used by the game.
+## Editions
 
-Launcher logs are stored in `.onion/logs/` beside the executable; Windows automatically hides `.onion`. Recognized launcher logs from the old `logs/` directory are archived safely into the new location. Locked files and unrelated content are preserved. Minecraft's own logs remain in each game's run directory.
+| Edition | Intended use |
+| --- | --- |
+| Standard | General game launching and management for everyone. |
+| THUnion | The standard features plus a service directory for THUnion. Version numbers end in `-T`. |
 
-The repository includes no Minecraft game files, Java runtimes, player accounts, access tokens or developer machine configuration. Users must obtain game access and third-party content permissions separately; the source license does not grant a Minecraft license.
+Both editions are publicly available. THUnion is an unofficial, nonprofit community organization. Its services are not official Tsinghua University services.
 
-## Tests and builds
+## Download and use
 
-```powershell
-New-Item -ItemType Directory -Force tmp,docs/screens
-python -X utf8 tests/run_all.py
-python -X utf8 scripts/check_qt_ui.py
-```
+Download the appropriate Windows x64 EXE from [Releases](https://github.com/Pomelene/Onion-MC-Launcher/releases), place it in your preferred launcher folder, and run it.
 
-See the [development guide (Chinese)](docs/development.md) for Windows builds, project structure and dependencies. The repository provides a blank Microsoft publisher application template, excluding the developer's application configuration and authentication data.
+Settings are stored in the hidden `onionmcl.json` file beside the EXE. Logs, skins, and other supporting data are stored in the hidden `.onion` folder. Game files remain in your selected game folder. Keep the relevant files and folders when moving your installation.
 
-## Open source and contributions
+Microsoft account credentials are encrypted for the current Windows user. Moving to another device or Windows user may require signing in again.
 
-- This project is free, open source and community-oriented. Use and modify the code under the MIT License.
-- Issues and pull requests are welcome; see [Contributing](CONTRIBUTING.md).
-- HMCL, PCL and Axolotl informed workflow and interaction references; see [Third-party notices](THIRD_PARTY_NOTICES.md).
-- Do not include accounts, passwords, tokens, private configuration or unredacted logs in issues, pull requests or commits. See [Security](SECURITY.md).
+## Open source and acknowledgments
+
+Onion is an independent Python/Qt launcher. Its development references the workflows, implementations, and interaction design of open-source projects including HMCL and Axolotl. Thank you to their developers and everyone who provides feedback, testing, and contributions.
+
+The project's own code is licensed under the [MIT License](LICENSE). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party components and acknowledgments. The project license does not change the rights associated with third-party code, trademarks, or services.
+
+This project is not affiliated with or partnered with Mojang Studios or Microsoft.
+
+## Feedback and contributions
+
+Bug reports, suggestions, and code contributions are welcome.
+
+- [Report an issue or suggest a feature](https://github.com/Pomelene/Onion-MC-Launcher/issues)
+- [Browse the source code](https://github.com/Pomelene/Onion-MC-Launcher)
+- [Contributing](CONTRIBUTING.md) and [development guide (Chinese)](docs/development.md)
+
+Include reproduction steps in your report. Remove account tokens, passwords, and other sensitive information before uploading screenshots or logs.

@@ -276,3 +276,27 @@ def test_download_rejects_oversized_declared_body_before_writing():
             except DownloadError:pass
             else:raise AssertionError('oversized response was accepted')
         assert not path.exists() and not path.with_name('file.part').exists()
+
+
+def test_batch_network_failure_is_not_reported_as_no_updates():
+    with tempfile.TemporaryDirectory() as folder:
+        root=Path(folder);path=root/'mod.jar';path.write_bytes(jar('test'))
+        class Remote:
+            threads=1
+            def post_json(self,*args):raise DownloadError('offline fixture')
+        try:updates(Remote(),root,'1.21.1','fabric')
+        except DownloadError:pass
+        else:raise AssertionError('network failure was treated as an empty update list')
+        assert path.read_bytes()==jar('test')
+
+
+def test_legacy_secret_migration_does_not_silence_failed_atomic_save():
+    from launcher.config import Config
+    with tempfile.TemporaryDirectory() as folder:
+        path=Path(folder)/'settings.json';body=json.dumps({'curseforge_api_key':'fixture-private-key'})
+        path.write_text(body)
+        with patch.object(Config,'save',side_effect=PermissionError('fixture denied')):
+            try:Config(path)
+            except PermissionError:pass
+            else:raise AssertionError('credential migration silently ignored failed save')
+        assert path.read_text()==body

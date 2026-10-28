@@ -4,7 +4,7 @@ from contextlib import nullcontext
 from threading import BoundedSemaphore
 from pathlib import Path
 from urllib.parse import quote,urlsplit
-from .download import DownloadJob,DownloadCancelled
+from .download import DownloadJob,DownloadCancelled,DownloadError
 from .safety import child,component,contained,write_text
 from .mods import mod_sha1,MODRINTH_API
 from .parallel import ordered_parallel
@@ -79,7 +79,7 @@ def _identify_batch(downloader,paths,job):
         except DownloadCancelled:raise
         except Exception as error:return path,'',str(error)[:120]
     fingerprints=ordered_parallel(fingerprint,paths,workers=_workers(downloader),cancel=job.cancel if job else None,progress=_progress(job,'读取模组'))
-    hashes=list(dict.fromkeys(digest for path,digest,error in fingerprints if not error));versions={};errors={}
+    hashes=list(dict.fromkeys(digest for path,digest,error in fingerprints if not error));versions={}
     for start in range(0,len(hashes),200):
         chunk=hashes[start:start+200]
         try:
@@ -87,13 +87,13 @@ def _identify_batch(downloader,paths,job):
             if not isinstance(response,dict):raise ValueError('模组服务响应格式无效')
             versions.update({digest:item for digest,item in response.items() if digest in chunk})
         except DownloadCancelled:raise
-        except Exception as error:
-            for digest in chunk:errors[digest]=str(error)[:120]
+        except Exception:
+            raise DownloadError('无法获取模组版本信息，请检查网络后重试') from None
     found={};unknown=[]
     for path,digest,error in fingerprints:
         data=versions.get(digest)
-        if error or digest in errors or not isinstance(data,dict) or not data.get('project_id'):
-            unknown.append(path.name+' · '+(error or errors.get(digest) or '未在 Modrinth 收录'));continue
+        if error or not isinstance(data,dict) or not data.get('project_id'):
+            unknown.append(path.name+' · '+(error or '未在 Modrinth 收录'));continue
         pid=data['project_id']
         if pid in found:unknown.append(path.name+' · 同一项目存在多个启用版本，请先处理重复模组');continue
         found[pid]={'path':path,'version':data,'sha1':digest}

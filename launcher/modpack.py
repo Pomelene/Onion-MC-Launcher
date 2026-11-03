@@ -406,7 +406,7 @@ def _detect_loader(repo, version_id: str) -> tuple[str, str]:
     """Prefer actual library coordinates, including inherited profiles."""
     try:
         marker=repo.resolver.load_raw(version_id).get('onionLoaderComponent') or {}
-        if isinstance(marker,dict) and marker.get('kind')=='legacyfabric':return 'legacyfabric',str(marker.get('version') or '')
+        if isinstance(marker,dict) and marker.get('kind') in ('legacyfabric','liteloader'):return marker['kind'],str(marker.get('version') or '')
         for lib in repo.resolver.resolve(version_id).libraries:
             parts = lib.name.split(":")
             if len(parts) < 3:
@@ -460,7 +460,7 @@ def export_mrpack(repo, version_id: str, out_path: Path, name: str = "", *,
     """
     base = _base_version(repo, version_id)
     loader, loader_ver = _detect_loader(repo, version_id)
-    if loader=='legacyfabric':raise ValueError('Modrinth 整合包格式不能表达 Legacy Fabric，请使用实例复制')
+    if loader in ('legacyfabric','liteloader'):raise ValueError('Modrinth 整合包格式不能表达 '+('Legacy Fabric' if loader=='legacyfabric' else 'LiteLoader')+'，请使用实例复制')
     run_dir = repo.run_dir(version_id)
     mods_dir = run_dir / "mods"
 

@@ -1,4 +1,5 @@
 """Qt pages delegate filesystem, network and installation work to existing services."""
+from .i18n import tr
 from .lists import FlatTreeWidget as QTreeWidget,DETAIL_ROLE,META_ROLE
 
 from pathlib import Path
@@ -35,14 +36,14 @@ class Pages:
             widget.setText(text);widget.setVisible(bool(text))
 
     def open_appearance(self):
-        self.navigate('settings');self.open_settings_tab(self.settings_editor.tab_names['外观'])
+        self.navigate('settings');self.open_settings_tab(self.settings_editor.tab_names[tr('外观')])
 
     def build_instance(self):
         vid=self.selected_version
         if not vid:
             self.logs.setParent(None);self.instance_context='';self.instance_editor=None
             body=self.page('instance');body.setContentsMargins(24,20,24,20)
-            body.addWidget(Empty('尚未选择游戏实例','从实例列表选择已有游戏，或前往下载添加版本。','grid','选择实例',lambda:self.navigate('versions')));return
+            body.addWidget(Empty(tr('尚未选择游戏实例'),tr('从实例列表选择已有游戏，或前往下载添加版本。'),'grid',tr('选择实例'),lambda:self.navigate('versions')));return
         if self.instance_context!=vid:
             from .workspace import InstanceWorkspace
             self.logs.setParent(None)
@@ -53,22 +54,22 @@ class Pages:
 
     def build_versions(self):
         body=self.page('versions')
-        toolbar=row();query=QLineEdit();self.library_search=query;query.setPlaceholderText('搜索实例');query.setClearButtonEnabled(True);query.setText(getattr(self,'library_query',''));toolbar.addWidget(query,1)
-        kinds=ChoiceComboBox();kinds.addItems(['全部类型','原版','Fabric','Forge','NeoForge','Quilt','OptiFine','Legacy Fabric']);kinds.setCurrentIndex(getattr(self,'library_kind',0))
-        sort=ChoiceComboBox();sort.addItems(['名称排序','最近游玩','游玩时长']);sort.setCurrentIndex(getattr(self,'library_sort',0))
+        toolbar=row();query=QLineEdit();self.library_search=query;query.setPlaceholderText(tr('搜索实例'));query.setClearButtonEnabled(True);query.setText(getattr(self,'library_query',''));toolbar.addWidget(query,1)
+        kinds=ChoiceComboBox();kinds.addItems([tr('全部类型'),tr('原版'),'Fabric','Forge','NeoForge','Quilt','OptiFine','Legacy Fabric','LiteLoader']);kinds.setCurrentIndex(getattr(self,'library_kind',0))
+        sort=ChoiceComboBox();sort.addItems([tr('名称排序'),tr('最近游玩'),tr('游玩时长')]);sort.setCurrentIndex(getattr(self,'library_sort',0))
         kinds.setMaximumWidth(110);sort.setMaximumWidth(125)
-        toolbar.addWidget(button('安装',self.install_dialog,'primary','plus'));toolbar.addWidget(menu_button(lambda:[('导入整合包',self.import_modpack),('新建实例',self.create_instance),('恢复已移除文件',self.recovery)]));body.addLayout(toolbar)
-        filters=row();favorites=ChoiceComboBox();favorites.addItems(['全部实例','仅收藏']);favorites.setCurrentIndex(int(getattr(self,'library_favorites_only',False)));self.library_favorites=favorites
-        tags=ChoiceComboBox();tags.addItem('全部标签','')
+        toolbar.addWidget(button(tr('安装'),self.install_dialog,'primary','plus'));toolbar.addWidget(menu_button(lambda:[(tr('导入整合包'),self.import_modpack),(tr('新建实例'),self.create_instance),(tr('恢复已移除文件'),self.recovery)]));body.addLayout(toolbar)
+        filters=row();favorites=ChoiceComboBox();favorites.addItems([tr('全部实例'),tr('仅收藏')]);favorites.setCurrentIndex(int(getattr(self,'library_favorites_only',False)));self.library_favorites=favorites
+        tags=ChoiceComboBox();tags.addItem(tr('全部标签'),'')
         for tag in sorted({tag for vid in self.versions for tag in self.instances.get(vid).tags},key=str.casefold):tags.addItem(tag,tag)
         tags.setCurrentIndex(max(0,tags.findData(getattr(self,'library_tag',''))));self.library_tags=tags
-        filters.addWidget(kinds);filters.addWidget(favorites);filters.addWidget(tags);tags.setVisible(tags.count()>1);filters.addWidget(sort);filters.addStretch();filters.addWidget(icon_button('刷新实例',self.reload_versions,'refresh'));body.addLayout(filters)
+        filters.addWidget(kinds);filters.addWidget(favorites);filters.addWidget(tags);tags.setVisible(tags.count()>1);filters.addWidget(sort);filters.addStretch();filters.addWidget(icon_button(tr('刷新实例'),self.reload_versions,'refresh'));body.addLayout(filters)
         tree=QTreeWidget();self.version_tree=tree;tree.entities(2);tree.setMinimumHeight(180);body.addWidget(tree,1)
         summary=label('','muted');summary.hide();body.addWidget(summary)
         def render():
             self.library_query=query.text();self.library_kind=kinds.currentIndex();self.library_sort=sort.currentIndex();tree.clear();text=query.text().strip().lower()
             self.library_favorites_only=bool(favorites.currentIndex());self.library_tag=tags.currentData() or ''
-            versions=[v for v in self.versions if (kinds.currentIndex()==0 or self.kinds.get(v)==kinds.currentText()) and text in (v+' '+self.instances.display_name(v)+' '+self.instances.get(v).group+' '+' '.join(self.instances.get(v).tags)).lower()]
+            versions=[v for v in self.versions if (kinds.currentIndex()==0 or tr(self.kinds.get(v))==kinds.currentText()) and text in (v+' '+self.instances.display_name(v)+' '+self.instances.get(v).group+' '+' '.join(self.instances.get(v).tags)).lower()]
             versions=[v for v in versions if (not self.library_favorites_only or self.instances.get(v).favorite) and (not self.library_tag or self.library_tag in self.instances.get(v).tags)]
             versions.sort(key=(lambda v:self.instances.display_name(v).lower()) if sort.currentIndex()==0 else (lambda v:self.instances.get(v).last_played) if sort.currentIndex()==1 else (lambda v:self.instances.get(v).play_seconds),reverse=sort.currentIndex()!=0)
             versions.sort(key=lambda v:not self.instances.get(v).favorite)
@@ -76,7 +77,7 @@ class Pages:
                 meta=self.instances.get(vid)
                 try:game=self.repo.resolver.resolve(vid).game_version
                 except Exception:game=''
-                detail=' · '.join(v for v in (game,self.kinds.get(vid,'原版'),meta.group,*meta.tags) if v)
+                detail=' · '.join(v for v in (game,self.kinds.get(vid,tr('原版')),meta.group,*meta.tags) if v)
                 item=QTreeWidgetItem([meta.display_name,'','']);item.setData(0,DETAIL_ROLE,detail);item.setData(0,Qt.ItemDataRole.UserRole,vid);item.setToolTip(0,vid+'\n'+detail+'\n'+meta.last_played_text())
                 if meta.icon:
                     icon_path=Path(meta.icon);icon_path=icon_path if icon_path.is_absolute() else self.root/icon_path
@@ -86,10 +87,10 @@ class Pages:
                     try:self.instances.update(version,favorite=checked)
                     except Exception as error:self.error(error)
                     render()
-                tree.setItemWidget(item,1,favorite_button(meta.favorite,mark));tree.setItemWidget(item,2,icon_button('管理实例',lambda version=vid:self.instance_settings(version),'settings'))
+                tree.setItemWidget(item,1,favorite_button(meta.favorite,mark));tree.setItemWidget(item,2,icon_button(tr('管理实例'),lambda version=vid:self.instance_settings(version),'settings'))
                 if vid==self.selected_version:tree.setCurrentItem(item)
-            summary.setText('没有匹配的实例');summary.setVisible(not versions)
-        tree.setToolTip('单击选择，双击返回首页；右键管理实例')
+            summary.setText(tr('没有匹配的实例'));summary.setVisible(not versions)
+        tree.setToolTip(tr('单击选择，双击返回首页；右键管理实例'))
         def chosen():
             item=tree.currentItem();return item.data(0,Qt.ItemDataRole.UserRole) if item else ''
         def select_home(*args):
@@ -105,27 +106,27 @@ class Pages:
             def favorite():self.instances.update(vid,favorite=not self.instances.get(vid).favorite);render()
             def tags():
                 from PySide6.QtWidgets import QInputDialog
-                value,ok=QInputDialog.getText(self,'实例标签','多个标签用逗号分隔',text=', '.join(self.instances.get(vid).tags))
+                value,ok=QInputDialog.getText(self,tr('实例标签'),tr('多个标签用逗号分隔'),text=', '.join(self.instances.get(vid).tags))
                 if ok:self.instances.update(vid,tags=value);self.build_versions()
-            menu.addAction('取消收藏' if self.instances.get(vid).favorite else '收藏实例',favorite);menu.addAction('编辑标签',tags);menu.addSeparator()
-            for title,callback in [('选择并返回首页',select_home),('重命名实例',lambda:self.rename_instance(vid)),('复制实例',lambda:self.clone_instance(vid)),('选择图标',lambda:self.set_instance_icon(vid)),('恢复默认图标',lambda:self.reset_instance_icon(vid)),('管理实例',lambda:self.instance_settings(vid)),('启动游戏',lambda:self.launch_version_id(vid)),('打开目录',lambda:self.open_folder(self.repo.run_dir(vid))),('导出整合包',lambda:self.export_modpack(vid)),('移入恢复中心',lambda:self.delete_version(vid))]:menu.addAction(title,callback)
+            menu.addAction(tr('取消收藏') if self.instances.get(vid).favorite else tr('收藏实例'),favorite);menu.addAction(tr('编辑标签'),tags);menu.addSeparator()
+            for title,callback in [(tr('选择并返回首页'),select_home),(tr('重命名实例'),lambda:self.rename_instance(vid)),(tr('复制实例'),lambda:self.clone_instance(vid)),(tr('选择图标'),lambda:self.set_instance_icon(vid)),(tr('恢复默认图标'),lambda:self.reset_instance_icon(vid)),(tr('管理实例'),lambda:self.instance_settings(vid)),(tr('启动游戏'),lambda:self.launch_version_id(vid)),(tr('打开目录'),lambda:self.open_folder(self.repo.run_dir(vid))),(tr('导出整合包'),lambda:self.export_modpack(vid)),(tr('移入恢复中心'),lambda:self.delete_version(vid))]:menu.addAction(title,callback)
             menu.exec(tree.viewport().mapToGlobal(point))
         tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);tree.customContextMenuRequested.connect(context)
         query.textChanged.connect(render);kinds.currentIndexChanged.connect(render);sort.currentIndexChanged.connect(render);favorites.currentIndexChanged.connect(render);tags.currentIndexChanged.connect(render);render()
 
     def build_about(self):
         body=self.page('about')
-        card=Card('Onion Minecraft Launcher','免费、开源、公益的 Minecraft Java 版启动器。')
-        card.body.addWidget(label('版本 '+self.config_obj.get('launcher_version'),'muted'))
+        card=Card('Onion Minecraft Launcher',tr('免费、开源、公益的 Minecraft Java 版启动器。'))
+        card.body.addWidget(label(tr('版本 ')+self.config_obj.get('launcher_version'),'muted'))
         card.body.addSpacing(8)
-        card.body.addWidget(label('Onion 启动器参考 HMCL、Axolotl（美西螈）等启动器的开源实现与交互设计进行重构，使用 Python 与 Qt 实现。感谢这些项目的开发者及开源社区的贡献。','',True))
-        card.body.addWidget(label('本项目自有代码基于 MIT 协议开源。第三方组件遵循各自的开源协议。','muted',True))
-        source=row();source.addWidget(button('查看源代码',lambda:QDesktopServices.openUrl(QUrl('https://github.com/Pomelene/Onion-MC-Launcher')),'soft','github'));source.addStretch()
+        card.body.addWidget(label(tr('Onion 启动器参考 HMCL、Axolotl（美西螈）等启动器的开源实现与交互设计进行重构，使用 Python 与 Qt 实现。感谢这些项目的开发者及开源社区的贡献。'),'',True))
+        card.body.addWidget(label(tr('本项目自有代码基于 MIT 协议开源。第三方组件遵循各自的开源协议。'),'muted',True))
+        source=row();source.addWidget(button(tr('查看源代码'),lambda:QDesktopServices.openUrl(QUrl('https://github.com/Pomelene/Onion-MC-Launcher')),'soft','github'));source.addStretch()
         card.body.addLayout(source);body.addWidget(card)
         body.addStretch()
-        footer=row();notice=label('Minecraft 为 Mojang / Microsoft 的商标，本项目与其无隶属关系。','muted',True)
+        footer=row();notice=label(tr('Minecraft 为 Mojang / Microsoft 的商标，本项目与其无隶属关系。'),'muted',True)
         footer.addWidget(notice,1)
-        footer.addWidget(button('反馈问题',lambda:QDesktopServices.openUrl(QUrl('https://github.com/Pomelene/Onion-MC-Launcher/issues')),'soft','feedback'))
+        footer.addWidget(button(tr('反馈问题'),lambda:QDesktopServices.openUrl(QUrl('https://github.com/Pomelene/Onion-MC-Launcher/issues')),'soft','feedback'))
         body.addLayout(footer)
 
     def launch_version_id(self,vid):
@@ -133,6 +134,7 @@ class Pages:
 
     def build_download(self):
         from .browser import ContentBrowser
+        from .i18n import get_locale
         kind=getattr(self,'download_kind','mod');page=self.page_map['download']
         if not hasattr(self,'download_browsers'):self.download_browsers={}
         while page.body.count():
@@ -140,11 +142,14 @@ class Pages:
             if item.widget():item.widget().setParent(None)
         if kind=='tasks':
             from .task_center import TaskCenter
+            if hasattr(self,'download_tasks') and getattr(self.download_tasks,'ui_locale',None)!=get_locale():
+                self.download_tasks.deleteLater();del self.download_tasks
             if not hasattr(self,'download_tasks'):
                 self.download_tasks=TaskCenter(self);self.download_tasks.layout().setContentsMargins(24,20,24,20)
+                self.download_tasks.ui_locale=get_locale()
             page.body.addWidget(self.download_tasks);self.download_tasks.show();self.download_tasks.refresh();return
         browser=self.download_browsers.get(kind)
-        if browser is None or browser.repo is not self.repo:
+        if browser is None or browser.repo is not self.repo or browser.ui_locale!=get_locale():
             if browser is not None:browser.request_id+=1;browser.deleteLater()
             browser=ContentBrowser(self,kind);self.download_browsers[kind]=browser
         else:browser.sync_target()
@@ -171,42 +176,47 @@ class Pages:
 
     def install_project(self,project_id,kind,game,loader,version_id=None,release_id=None):
         vid=self.selected_version if version_id is None else version_id
-        if not vid and kind!='modpack':self.error('请先选择一个游戏实例。');return
+        if not vid and kind!='modpack':self.error(tr('请先选择一个游戏实例。'));return
         repo=self.repo;run=repo.run_dir(vid) if vid else repo.game_dir
         def work(job):
             from ..catalog import versions,pick_version,download_version
             if vid and kind!='modpack':repo.assert_idle(vid)
             target=repo.cache_path('modpacks') if kind=='modpack' else run/{'mod':'mods','resourcepack':'resourcepacks','shader':'shaderpacks'}[kind];repo.assert_writable(target)
-            available=versions(repo.downloader,project_id)
+            available=versions(repo.downloader,project_id,self.config_obj.get('curseforge_api_key'))
             if release_id is not None:available=[v for v in available if v.get('id')==release_id]
             chosen=pick_version(available,game,loader)
-            if not chosen:raise RuntimeError('没有适配当前版本或加载器的文件。')
+            if not chosen:raise RuntimeError(tr('没有适配当前版本或加载器的文件。'))
             if kind=='mod':
+                if str(project_id).startswith('cf:'):
+                    from ..curseforge import resolve_required_versions
+                    from ..mod_updates import install_selected
+                    selected=resolve_required_versions(repo.downloader,self.config_obj.get('curseforge_api_key'),chosen,game,loader,job)
+                    install_selected(repo,vid,[{'latest':v} for v in selected],job);return None
                 from ..mod_plan import build_plan
                 from ..mod_updates import install_selected
                 plan=build_plan(repo.downloader,target,[chosen],game,loader,job)
                 selected=[dict(path=target/e['old'] if e['old'] else None,latest=e['version'],old_sha1=plan['before'].get(e['old'],'')) for e in plan['entries'] if e['action']!='保留']
                 install_selected(repo,vid,selected,job);return None
-            target.mkdir(parents=True,exist_ok=True);job.emit('正在下载项目文件');path=download_version(repo.downloader,chosen,target)
+            target.mkdir(parents=True,exist_ok=True);job.emit(tr('正在下载项目文件'));path=download_version(repo.downloader,chosen,target)
             if kind=='modpack':
                 from ..modpack import import_modpack
                 return import_modpack(repo,path,job.emit,lambda a,b:job.emit((a,b)))
             return None
         def start():
-            if self.repo is not repo:self.error('游戏目录已切换，请回到原目录重新安装');return
-            return self.task('安装内容',work,lambda installed:self.installed(installed) if installed else self.status.setText('内容已安装'),retry=start,task_repo=repo,task_instance=vid)
+            if self.repo is not repo:self.error(tr('游戏目录已切换，请回到原目录重新安装'));return
+            return self.task(tr('安装内容'),work,lambda installed:self.installed(installed) if installed else self.status.setText(tr('内容已安装')),retry=start,task_repo=repo,task_instance=vid)
         return start()
 
     def build_mods(self,content_kind='mods'):
         body=self.page('mods');seq=self.page_seq['mods'];vid=self.selected_version
-        if not vid:body.addWidget(Empty('先选择一个游戏实例','所有内容都按实例独立管理。','grid','选择实例',lambda:self.navigate('versions')));return
+        if not vid:body.addWidget(Empty(tr('先选择一个游戏实例'),tr('所有内容都按实例独立管理。'),'grid',tr('选择实例'),lambda:self.navigate('versions')));return
         tabs=row();kind=ChoiceComboBox()
-        for title,key in [('模组','mods'),('资源包','resourcepacks'),('光影','shaderpacks')]:kind.addItem(title,key)
+        for title,key in [(tr('模组'),'mods'),(tr('资源包'),'resourcepacks'),(tr('光影'),'shaderpacks')]:kind.addItem(title,key)
         kind.setCurrentIndex(max(0,kind.findData(content_kind)));kind.hide()
         if content_kind=='mods':
-            tabs.addWidget(button('检查并更新',lambda:self.update_mods(vid),glyph='refresh'))
-        tabs.addWidget(button('打开目录',lambda:self.open_folder(self.repo.run_dir(vid)/content_kind),glyph='folder'));tabs.addWidget(button('搜索安装',lambda:self.open_content_download(content_kind),'soft','search'));body.addLayout(tabs)
-        query=QLineEdit();query.setPlaceholderText('搜索');tabs.addWidget(query,1)
+            tabs.addWidget(button(tr('检查并更新'),lambda:self.update_mods(vid),glyph='refresh'))
+        tabs.addWidget(button(tr('打开目录'),lambda:self.open_folder(self.repo.run_dir(vid)/content_kind),glyph='folder'));tabs.addWidget(button(tr('搜索安装'),lambda:self.open_content_download(content_kind),'soft','search'));body.addLayout(tabs)
+        query=QLineEdit();query.setPlaceholderText(tr('搜索'));tabs.addWidget(query,1)
         holder=QWidget();results=column(holder,0,0);body.addWidget(holder)
         visible_rows=[]
         def filter_rows():
@@ -215,19 +225,19 @@ class Pages:
         query.textChanged.connect(filter_rows)
         def batch(enabled):
             selected=[state[0] for widget,_content,state in visible_rows if not widget.isHidden() and state[0].enabled!=enabled]
-            if not selected:self.status.setText('没有需要修改的模组');return
-            verb='启用' if enabled else '停用'
-            if QMessageBox.question(self,'批量'+verb,f'{verb}当前搜索结果中的 {len(selected)} 个模组？')!=QMessageBox.StandardButton.Yes:return
+            if not selected:self.status.setText(tr('没有需要修改的模组'));return
+            verb=tr('启用') if enabled else tr('停用')
+            if QMessageBox.question(self,tr('批量')+verb,f"{verb}{tr('当前搜索结果中的 ')}{len(selected)}{tr(' 个模组？')}")!=QMessageBox.StandardButton.Yes:return
             repo=self.repo
             def work(job):
                 from ..mods import set_mods_enabled
                 repo.assert_idle(vid)
                 for info in selected:repo.assert_writable(info.path)
                 return set_mods_enabled(selected,enabled,job.cancel)
-            self.task('批量'+verb+'模组',work,lambda count:(self.status.setText(f'已{verb} {count} 个模组'),refresh()),task_repo=repo,task_instance=vid)
-        if content_kind=='mods':tabs.addWidget(menu_button(lambda:[('启用搜索结果',lambda:batch(True)),('停用搜索结果',lambda:batch(False))],'批量操作'))
+            self.task(tr('批量')+verb+tr('模组'),work,lambda count:(self.status.setText(f"{tr('已')}{verb} {count}{tr(' 个模组')}"),refresh()),task_repo=repo,task_instance=vid)
+        if content_kind=='mods':tabs.addWidget(menu_button(lambda:[(tr('启用搜索结果'),lambda:batch(True)),(tr('停用搜索结果'),lambda:batch(False))],tr('批量操作')))
         def refresh():
-            key=kind.currentData();path=self.repo.run_dir(vid)/key;clear(results);results.addWidget(label('正在读取内容…','muted'))
+            key=kind.currentData();path=self.repo.run_dir(vid)/key;clear(results);results.addWidget(label(tr('正在读取内容…'),'muted'))
             def scan(job):
                 from ..mods import scan_mods,scan_resourcepacks,scan_shaderpacks
                 from .content_icons import read_content_icon
@@ -237,7 +247,7 @@ class Pages:
             def done(items):
                 if self.page_seq.get('mods')!=seq or kind.currentData()!=key:return
                 clear(results);visible_rows.clear()
-                if not items:results.addWidget(Empty('尚未添加内容','为当前实例下载适配的模组、资源包或光影。','package','搜索安装',lambda:self.open_content_download(content_kind)));return
+                if not items:results.addWidget(Empty(tr('尚未添加内容'),tr('为当前实例下载适配的模组、资源包或光影。'),'package',tr('搜索安装'),lambda:self.open_content_download(content_kind)));return
                 for info,artwork in items:
                     version=getattr(info,'version','');title=info.name+('  ·  '+version if version else '')
                     detail=getattr(info,'description','') or info.path.name
@@ -246,12 +256,12 @@ class Pages:
                     item.text.setToolTip(title+'\n'+info.path.name+'\n'+info.size_text)
                     if item.check:item.check.clicked.connect(lambda checked=False,s=state,r=item:self.toggle_mod(s,vid,r))
                     item.set_artwork(artwork)
-                    item.action('打开所在目录',lambda s=state:self.open_folder(s[0].path.parent),'folder')
-                    item.action('移入恢复中心',lambda s=state:self.remove_content(s[0].path,vid,refresh),'trash','danger')
+                    item.action(tr('打开所在目录'),lambda s=state:self.open_folder(s[0].path.parent),'folder')
+                    item.action(tr('移入恢复中心'),lambda s=state:self.remove_content(s[0].path,vid,refresh),'trash','danger')
                     results.addWidget(item);visible_rows.append((item,(title+' '+detail+' '+getattr(info,'mod_id','')+' '+info.path.name).casefold(),state))
                 filter_rows()
             self.tasks.submit(scan,done,self.error)
-        tabs.insertWidget(0,button('刷新',refresh,glyph='history'));kind.currentIndexChanged.connect(refresh);refresh()
+        tabs.insertWidget(0,button(tr('刷新'),refresh,glyph='history'));kind.currentIndexChanged.connect(refresh);refresh()
 
     def toggle_mod(self,state,vid,item):
         from ..mods import set_mod_enabled
@@ -260,70 +270,70 @@ class Pages:
         def restore():
             if isValid(item):item.check.setChecked(state[0].enabled);item.check.setEnabled(True)
         if self.mutating:
-            restore();self.status.setText('已有文件操作进行中，请稍候');return
+            restore();self.status.setText(tr('已有文件操作进行中，请稍候'));return
         self.mutating=True;item.check.setEnabled(False)
         def work(job):self.repo.assert_idle(vid);self.repo.assert_writable(info.path);return set_mod_enabled(info,not info.enabled)
         def done(updated):
             self.mutating=False;state[0]=updated
             if isValid(item):
                 item.text.detail=item.text.detail.replace(info.path.name,updated.path.name);item.text.setToolTip(item.text.title+'\n'+item.text.detail);item.text.update();restore()
-            self.status.setText(('已启用 · ' if updated.enabled else '已禁用 · ')+updated.name)
+            self.status.setText((tr('已启用 · ') if updated.enabled else tr('已禁用 · '))+updated.name)
         def failed(error):
-            self.mutating=False;restore();self.status.setText('模组状态更新失败：'+str(error))
+            self.mutating=False;restore();self.status.setText(tr('模组状态更新失败：')+str(error))
         self.tasks.submit(work,done,failed)
 
     def remove_content(self,path,vid,refresh):
-        if QMessageBox.question(self,'移除内容','将 '+path.name+' 移入恢复中心？')!=QMessageBox.StandardButton.Yes:return
+        if QMessageBox.question(self,tr('移除内容'),tr('将 ')+path.name+tr(' 移入恢复中心？'))!=QMessageBox.StandardButton.Yes:return
         from ..safety import recycle
         def work(job):self.repo.assert_idle(vid);self.repo.assert_writable(path);return recycle(path,path.parent)
-        self.task('移除内容',work,lambda _:refresh())
+        self.task(tr('移除内容'),work,lambda _:refresh())
 
     def build_worlds(self):
         body=self.page('worlds');seq=self.page_seq['worlds'];vid=self.selected_version
-        if not vid:body.addWidget(Empty('先选择一个游戏实例','选择实例后查看它的世界存档。','world','选择实例',lambda:self.navigate('versions')));return
-        actions=row();actions.addWidget(label(str(self.repo.saves_dir(vid)),'muted'),1);actions.addWidget(button('恢复备份',self.restore_world,'soft'));body.addLayout(actions)
-        holder=QWidget();results=column(holder);body.addWidget(holder);results.addWidget(label('正在读取世界存档…','muted'))
+        if not vid:body.addWidget(Empty(tr('先选择一个游戏实例'),tr('选择实例后查看它的世界存档。'),'world',tr('选择实例'),lambda:self.navigate('versions')));return
+        actions=row();actions.addWidget(label(str(self.repo.saves_dir(vid)),'muted'),1);actions.addWidget(button(tr('恢复备份'),self.restore_world,'soft'));body.addLayout(actions)
+        holder=QWidget();results=column(holder);body.addWidget(holder);results.addWidget(label(tr('正在读取世界存档…'),'muted'))
         from ..worlds import list_worlds
         def done(worlds):
             if self.page_seq.get('worlds')!=seq:return
             clear(results)
-            if not worlds:results.addWidget(Empty('世界等待你来创造','创建世界后会显示在这里，也可以从 ZIP 备份恢复。','world','恢复备份',self.restore_world));return
+            if not worlds:results.addWidget(Empty(tr('世界等待你来创造'),tr('创建世界后会显示在这里，也可以从 ZIP 备份恢复。'),'world',tr('恢复备份'),self.restore_world));return
             for world in worlds:
                 card=Card(world.name,f'{world.version}  ·  {world.game_mode}  ·  {world.last_played_text()}');line=row();line.addStretch()
-                line.addWidget(button('打开目录',lambda w=world:self.open_folder(w.dir),glyph='folder'));line.addWidget(button('备份',lambda w=world:self.backup_world(w,vid),'soft'))
-                line.addWidget(menu_button(lambda w=world:[('数据包管理',lambda:self.manage_datapacks(w,vid)),('导出世界',lambda:self.export_world(w,vid))]))
-                line.addWidget(button('移除',lambda w=world:self.remove_content(w.dir,vid,lambda:self.navigate('worlds',force=True)),'danger'));card.body.addLayout(line);results.addWidget(card)
+                line.addWidget(button(tr('打开目录'),lambda w=world:self.open_folder(w.dir),glyph='folder'));line.addWidget(button(tr('备份'),lambda w=world:self.backup_world(w,vid),'soft'))
+                line.addWidget(menu_button(lambda w=world:[(tr('数据包管理'),lambda:self.manage_datapacks(w,vid)),(tr('导出世界'),lambda:self.export_world(w,vid))]))
+                line.addWidget(button(tr('移除'),lambda w=world:self.remove_content(w.dir,vid,lambda:self.navigate('worlds',force=True)),'danger'));card.body.addLayout(line);results.addWidget(card)
         self.tasks.submit(lambda job:list_worlds(self.repo.saves_dir(vid)),done,self.error)
 
     def backup_world(self,world,vid):
         from ..worlds import backup_world
         def work(job):self.repo.assert_idle(vid);return backup_world(world,self.repo.game_dir/'backups/worlds')
-        self.task('备份世界',work,lambda path:self.status.setText('已备份 · '+str(path)))
+        self.task(tr('备份世界'),work,lambda path:self.status.setText(tr('已备份 · ')+str(path)))
 
     def manage_datapacks(self,world,vid):
         from .datapacks import WorldDataPacks
         self.show_subpage(WorldDataPacks(self,vid,world))
 
     def export_world(self,world,vid):
-        path,_=QFileDialog.getSaveFileName(self,'导出世界',world.folder+'.zip','ZIP 存档 (*.zip)')
+        path,_=QFileDialog.getSaveFileName(self,tr('导出世界'),world.folder+'.zip',tr('ZIP 存档 (*.zip)'))
         if not path:return
         from ..worlds import export_world
         repo=self.repo
         def work(job):repo.assert_idle(vid);return export_world(world,Path(path),job.cancel)
-        self.task('导出世界',work,lambda result:self.status.setText('已导出 · '+str(result)),task_repo=repo,task_instance=vid)
+        self.task(tr('导出世界'),work,lambda result:self.status.setText(tr('已导出 · ')+str(result)),task_repo=repo,task_instance=vid)
 
     def restore_world(self):
         vid=self.selected_version
         if not vid:return
-        path,_=QFileDialog.getOpenFileName(self,'恢复世界备份','','ZIP 备份 (*.zip)')
+        path,_=QFileDialog.getOpenFileName(self,tr('恢复世界备份'),'',tr('ZIP 备份 (*.zip)'))
         if not path:return
         from ..saves import restore
         def work(job):self.repo.assert_idle(vid);return restore(Path(path),self.repo.saves_dir(vid),cancel_event=job.cancel)
-        self.task('恢复世界备份',work,lambda _:self.navigate('worlds',force=True))
+        self.task(tr('恢复世界备份'),work,lambda _:self.navigate('worlds',force=True))
 
     def build_logs(self):
-        body=self.page('logs');bar=row();bar.addWidget(button('打开实例日志',lambda:self.open_folder(self.repo.logs_dir(self.selected_version)) if self.selected_version else None,glyph='folder'))
-        bar.addWidget(button('崩溃诊断',self.diagnose));bar.addWidget(button('环境体检',lambda:self.preflight(self.selected_version)));bar.addStretch();bar.addWidget(button('停止游戏',lambda:self.process.stop() if self.process and self.process.proc.poll() is None else None,'danger'));body.addLayout(bar)
+        body=self.page('logs');bar=row();bar.addWidget(button(tr('打开实例日志'),lambda:self.open_folder(self.repo.logs_dir(self.selected_version)) if self.selected_version else None,glyph='folder'))
+        bar.addWidget(button(tr('崩溃诊断'),self.diagnose));bar.addWidget(button(tr('环境体检'),lambda:self.preflight(self.selected_version)));bar.addStretch();bar.addWidget(button(tr('停止游戏'),lambda:self.process.stop() if self.process and self.process.proc.poll() is None else None,'danger'));body.addLayout(bar)
         body.addWidget(self.logs,1)
         self.logs.setMinimumHeight(450)
 
@@ -340,4 +350,4 @@ class Pages:
     def manage_java(self,on_selected=None):
         self.navigate('settings')
         self.settings_editor.java_manager.on_selected=on_selected
-        self.open_settings_tab(self.settings_editor.tab_names['Java 管理'])
+        self.open_settings_tab(self.settings_editor.tab_names[tr('Java 管理')])

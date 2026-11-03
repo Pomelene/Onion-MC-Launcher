@@ -11,6 +11,8 @@ CurseForge 官方 API 需要 key（`x-api-key`）。为便于开箱使用：
 """
 
 import urllib.parse
+import re
+from .download import DownloadCancelled
 from typing import Optional
 
 API_BASE = "https://api.curseforge.com/v1"
@@ -58,12 +60,53 @@ class CurseForgeClient:
                 if isinstance(payload, dict) and "data" in payload:
                     return payload
                 errors.append(f"{base}: 响应格式异常")
+            except DownloadCancelled:raise
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"{base}: {exc}")
         hint = "" if self.api_key else "（可在设置里填写 CurseForge API Key）"
         raise CurseForgeError("CurseForge 接口不可用" + hint + "：" + "；".join(errors))
 
     # ------------------------------------------------------------ 查询
+
+    def search(self,kind,query='',game_version='',loader='',index=0,page_size=20):
+        classes={'mod':6,'resourcepack':12,'modpack':4471,'shader':6552}
+        loaders={'forge':1,'liteloader':3,'fabric':4,'quilt':5,'neoforge':6}
+        if kind not in classes:raise CurseForgeError('不支持的内容类型')
+        params={'gameId':432,'classId':classes[kind],'index':max(0,int(index)),'pageSize':min(50,max(1,int(page_size)))}
+        if query:params['searchFilter']=query
+        if game_version:params['gameVersion']=game_version
+        if loader in loaders:params['modLoaderType']=loaders[loader]
+        payload=self._get('/mods/search',params)
+        hits=[]
+        for item in payload.get('data') or []:
+            if not isinstance(item,dict) or not isinstance(item.get('id'),int):continue
+            hits.append({'project_id':'cf:'+str(item['id']),'title':item.get('name',''),
+                         'description':item.get('summary',''),'icon_url':(item.get('logo') or {}).get('thumbnailUrl','')})
+        return {'hits':hits,'total_hits':int((payload.get('pagination') or {}).get('totalCount',len(hits)))}
+
+    def normalized_versions(self,mod_id):
+        result=[]
+        files=[]
+        for index in range(0,500,50):
+            payload=self._get(f'/mods/{int(mod_id)}/files',{'index':index,'pageSize':50})
+            page=payload.get('data') or []
+            if not isinstance(page,list):raise CurseForgeError('文件列表格式无效')
+            files.extend(page)
+            total=(payload.get('pagination') or {}).get('totalCount')
+            if len(page)<50 or not isinstance(total,int) or index+len(page)>=total:break
+        for file in files:
+            if not isinstance(file,dict):continue
+            versions=file.get('gameVersions') or [];known={'fabric','forge','neoforge','quilt','liteloader'}
+            loaders=[str(v).lower() for v in versions if str(v).lower() in known]
+            sha1=next((h.get('value','') for h in file.get('hashes') or [] if h.get('algo')==1),'')
+            url=file.get('downloadUrl') or ''
+            usable=isinstance(url,str) and url.startswith('https://') and isinstance(sha1,str) and bool(re.fullmatch(r'[0-9a-fA-F]{40}',sha1))
+            result.append({'id':str(file.get('id')),'project_id':'cf:'+str(mod_id),'name':file.get('displayName',''),
+                'version_number':file.get('displayName',''),'version_type':{1:'release',2:'beta',3:'alpha'}.get(file.get('releaseType'),'release'),
+                'date_published':file.get('fileDate',''),'game_versions':[v for v in versions if str(v).lower() not in known],
+                'loaders':loaders,'cf_dependencies':[d for d in file.get('dependencies') or [] if d.get('relationType')==3],
+                'files':[{'filename':file.get('fileName',''),'url':url,'size':file.get('fileLength'),'hashes':{'sha1':sha1},'primary':True}] if usable else []})
+        return result
 
     def mod(self, mod_id: int) -> dict:
         return self._get(f"/mods/{int(mod_id)}")["data"]
@@ -102,3 +145,30 @@ class CurseForgeClient:
         if name.endswith((".zip",)) and "shader" in name:
             return "shaderpacks"
         return "mods"
+
+
+def resolve_required_versions(downloader,api_key,root,game,loader,job=None):
+    """Resolve required CurseForge dependencies before touching the mod folder."""
+    from .catalog import pick_version
+    client=CurseForgeClient(downloader,api_key);chosen={};visiting=set()
+    def visit(version):
+        if job and job.cancel.is_set():raise DownloadCancelled('模组安装已取消')
+        project=version.get('project_id','')
+        if project in chosen:
+            if chosen[project]['id']!=version['id']:raise CurseForgeError('依赖存在版本冲突：'+project)
+            return
+        if project in visiting:return
+        if len(chosen)+len(visiting)>=128:raise CurseForgeError('依赖数量超过安全上限')
+        if not version.get('files'):raise CurseForgeError('作者未提供可用的第三方下载地址或 SHA-1')
+        visiting.add(project)
+        for dependency in version.get('cf_dependencies') or []:
+            ident=dependency.get('modId')
+            if type(ident) is not int or ident<=0:raise CurseForgeError('前置依赖信息无效')
+            candidates=client.normalized_versions(ident)
+            candidates=[v for v in candidates if v.get('files') and v.get('version_type')=='release']
+            selected=pick_version(candidates,game,loader)
+            if not selected:raise CurseForgeError('没有适用的必需前置版本：'+str(ident))
+            visit(selected)
+        visiting.remove(project);chosen[project]=version
+    visit(root)
+    return list(chosen.values())

@@ -10,7 +10,7 @@ from .safety import write_text
 def component_info(repo,vid):
     resolved=repo.resolver.resolve(vid);kind='';version=''
     marker=repo.resolver.load_raw(vid).get('onionLoaderComponent') or {}
-    if isinstance(marker,dict) and marker.get('kind')=='legacyfabric':return resolved.game_version,'legacyfabric',str(marker.get('version') or '')
+    if isinstance(marker,dict) and marker.get('kind') in ('legacyfabric','liteloader'):return resolved.game_version,marker['kind'],str(marker.get('version') or '')
     for lib in resolved.libraries:
         parts=lib.name.split(':')
         if len(parts)<3:continue

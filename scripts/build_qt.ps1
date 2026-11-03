@@ -1,5 +1,5 @@
 # Reproducible Qt build: isolate native DLL discovery from unrelated tools in PATH.
-param([string]$OutputName='OnionMinecraftLauncher.exe')
+param([string]$OutputName='OnionMinecraftLauncher.exe', [string]$DependenciesPath='')
 $ErrorActionPreference='Stop'
 if ($OutputName -ne [IO.Path]::GetFileName($OutputName) -or $OutputName -notmatch '\.exe$') { throw 'OutputName must be an executable filename without a directory.' }
 $taskRoot=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -13,15 +13,25 @@ if (-not (Test-Path -LiteralPath $taskAppManifest)) {
 }
 $taskPython=(Get-Command python.exe).Source
 $taskPythonDir=Split-Path -Parent $taskPython
-$taskQt=Join-Path $taskRoot '.deps\qt\PySide6'
-$taskShiboken=Join-Path $taskRoot '.deps\qt\shiboken6'
+$taskDependencies=if ($DependenciesPath) { (Resolve-Path -LiteralPath $DependenciesPath).Path } else { Join-Path $taskRoot '.deps\qt' }
+$taskQt=Join-Path $taskDependencies 'PySide6'
+$taskShiboken=Join-Path $taskDependencies 'shiboken6'
 if (-not (Test-Path -LiteralPath $taskQt)) { throw 'Install project-local Qt: python -m pip install --target .deps/qt PySide6-Essentials==6.12.0' }
 $taskSavedPath=$env:PATH
 $taskSavedTemp=$env:TEMP
 $taskSavedTmp=$env:TMP
 $taskSavedCache=$env:PYINSTALLER_CONFIG_DIR
+$taskSavedQtPath=$env:ONION_QT_PATH
+$taskProfilePath=Join-Path $taskRoot 'packaging\build-profile.json'
+$taskThunion=$false
+if (Test-Path -LiteralPath $taskProfilePath) {
+    $taskProfile=Get-Content -LiteralPath $taskProfilePath -Raw | ConvertFrom-Json
+    $taskThunion=$taskProfile.edition -eq 'thunion'
+}
+if ($taskThunion -and -not (Test-Path -LiteralPath (Join-Path $taskQt 'QtWebView.pyd'))) { throw 'THUnion requires the Qt WebView binding in the configured dependencies directory.' }
 Push-Location -LiteralPath $taskRoot
 try {
+    $env:ONION_QT_PATH=$taskDependencies
     $env:PATH=@($taskPythonDir,$taskQt,$taskShiboken,(Join-Path $env:SystemRoot 'System32'),$env:SystemRoot)-join ';'
     $env:TEMP=Join-Path $taskRoot 'tmp\build-temp'
     $env:TMP=$env:TEMP
@@ -54,6 +64,13 @@ try {
     if ($taskRaster.ExitCode -ne 0) { throw 'Packaged Windows raster check failed; release executable has not been replaced.' }
     $taskRasterResult=Get-Content -LiteralPath $taskRasterReport -Raw | ConvertFrom-Json
     if ($taskRasterResult.result -ne 'pass' -or $taskRasterResult.visible_windows -ne $false) { throw 'Windows raster check did not report hidden-window success.' }
+    if ($taskThunion) {
+        $taskWebReport=Join-Path $taskRoot 'docs\thunion-frozen-web-check.json'
+        $taskWeb=Start-Process -FilePath $taskStage -ArgumentList @('--web-tool-check-output',('"'+$taskWebReport+'"')) -WindowStyle Hidden -PassThru -Wait
+        if ($taskWeb.ExitCode -ne 0) { throw 'Packaged WebView2 check failed; release executable has not been replaced.' }
+        $taskWebResult=Get-Content -LiteralPath $taskWebReport -Raw | ConvertFrom-Json
+        if ($taskWebResult.result -ne 'pass' -or $taskWebResult.visible_windows -ne $false) { throw 'WebView2 check did not report hidden-window success.' }
+    }
     & $taskPython -X utf8 scripts/check_bundle.py $taskStage --require-slim --max-bytes 38000000 --output docs/bundle-audit.json
     if ($LASTEXITCODE -ne 0) { throw 'Bundle size/dependency audit failed; release executable has not been replaced.' }
     $taskRelease=Join-Path $taskRoot 'release'
@@ -82,5 +99,6 @@ try {
     $env:TEMP=$taskSavedTemp
     $env:TMP=$taskSavedTmp
     $env:PYINSTALLER_CONFIG_DIR=$taskSavedCache
+    $env:ONION_QT_PATH=$taskSavedQtPath
     Pop-Location
 }

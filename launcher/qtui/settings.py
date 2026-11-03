@@ -1,4 +1,5 @@
 """Grouped settings with debounced, validated automatic persistence."""
+from .i18n import tr
 from PySide6.QtCore import Qt,QTimer
 from PySide6.QtWidgets import (QWidget,QStackedWidget,QLineEdit,QComboBox,QSpinBox,
     QCheckBox,QFileDialog,QMessageBox,QDialog,QSlider)
@@ -38,41 +39,41 @@ class SettingsEditor(QWidget):
         self.tab_names={};self.game_body=None
         if flat:
             scope=QWidget();scope_body=column(scope,0,6)
-            self.specific=QCheckBox('仅为当前实例启用独立设置');self.specific.setChecked(bool(self.values))
+            self.specific=QCheckBox(tr('仅为当前实例启用独立设置'));self.specific.setChecked(bool(self.values))
             scope_body.addWidget(self.specific)
             self.scope_description=label('','muted',True);scope_body.addWidget(self.scope_description)
-            self.global_settings_button=button('设置 → 全局游戏设置',self.open_global_settings,'soft','settings')
+            self.global_settings_button=button(tr('设置 → 全局游戏设置'),self.open_global_settings,'soft','settings')
             scope_body.addWidget(self.global_settings_button,0,Qt.AlignmentFlag.AlignLeft)
             outer.insertWidget(0,scope)
         def tab(title,glyph):
-            if (flat or title in ('游戏与窗口','高级参数')) and self.game_body is not None:return self.game_body
+            if (flat or title in (tr('游戏与窗口'),tr('高级参数'))) and self.game_body is not None:return self.game_body
             page=Page();index=self.stack.addWidget(page)
             self.tab_names[title]=index
             item=button(title,lambda:self.select_tab(index),'nav',glyph);item.setCheckable(True)
             nav.addWidget(item);self.tabs.append(item)
-            if title=='全局游戏设置' or flat:self.game_body=page.body
+            if title==tr('全局游戏设置') or flat:self.game_body=page.body
             return page.body
         if version_id and not flat:
-            body=tab('实例信息','grid');meta=window.instances.get(version_id)
-            card=Card('让这个实例属于你','展示信息不会修改版本文件名。')
-            for key,title,value in [('name','显示名称',meta.name),('group','分组',meta.group),('notes','备注',meta.notes)]:
-                edit=QLineEdit(value);edit.setPlaceholderText(version_id if key=='name' else '可选');edit.textChanged.connect(self.mark_dirty);self.fields[key]=edit;setting_row(card.body,title,'仅保存在当前启动器',edit)
+            body=tab(tr('实例信息'),'grid');meta=window.instances.get(version_id)
+            card=Card(tr('让这个实例属于你'),tr('展示信息不会修改版本文件名。'))
+            for key,title,value in [('name',tr('显示名称'),meta.name),('group',tr('分组'),meta.group),('notes',tr('备注'),meta.notes)]:
+                edit=QLineEdit(value);edit.setPlaceholderText(version_id if key=='name' else tr('可选'));edit.textChanged.connect(self.mark_dirty);self.fields[key]=edit;setting_row(card.body,title,tr('仅保存在当前启动器'),edit)
             body.addWidget(card)
-            tools=Card('实例维护',version_id)
-            for title,callback,glyph in [('打开实例目录',lambda:window.open_folder(window.repo.run_dir(version_id)),'folder'),('校验游戏文件',lambda:window.verify_version(version_id),'package'),('导出整合包',lambda:window.export_modpack(version_id),'download')]:tools.body.addWidget(button(title,callback,'soft',glyph))
+            tools=Card(tr('实例维护'),version_id)
+            for title,callback,glyph in [(tr('打开实例目录'),lambda:window.open_folder(window.repo.run_dir(version_id)),'folder'),(tr('校验游戏文件'),lambda:window.verify_version(version_id),'package'),(tr('导出整合包'),lambda:window.export_modpack(version_id),'download')]:tools.body.addWidget(button(title,callback,'soft',glyph))
             body.addWidget(tools)
-        body=tab('全局游戏设置' if not version_id else '游戏设置','java')
-        card=Card('Java 运行环境','留空时，启动器会根据游戏版本选择或下载匹配的 Java。')
-        self.edit(card,'java_path','Java 路径','选择 java.exe 或 javaw.exe','自动选择兼容的 Java',browse='file')
+        body=tab(tr('全局游戏设置') if not version_id else tr('游戏设置'),'java')
+        card=Card(tr('Java 运行环境'),tr('留空时，启动器会根据游戏版本选择或下载匹配的 Java。'))
+        self.edit(card,'java_path',tr('Java 路径'),tr('选择 java.exe 或 javaw.exe'),tr('自动选择兼容的 Java'),browse='file')
         body.addWidget(card)
-        card=Card('内存分配','单位为 MiB。大型整合包可以增加上限，请为系统保留足够内存。')
-        self.check(card,'auto_memory','自动分配内存','根据物理内存选择保守的分配值')
-        self.spin(card,'min_memory','最小内存','JVM 初始堆内存',512,65536,256)
-        self.spin(card,'max_memory','最大内存','JVM 最大堆内存',512,65536,256)
+        card=Card(tr('内存分配'),tr('单位为 MiB。大型整合包可以增加上限，请为系统保留足够内存。'))
+        self.check(card,'auto_memory',tr('自动分配内存'),tr('根据物理内存选择保守的分配值'))
+        self.spin(card,'min_memory',tr('最小内存'),tr('JVM 初始堆内存'),512,65536,256)
+        self.spin(card,'max_memory',tr('最大内存'),tr('JVM 最大堆内存'),512,65536,256)
         from ..memory import recommended_memory
         initial,maximum=recommended_memory()
-        recommendation=label(f'初始 {initial:,} MiB / 最大 {maximum:,} MiB','muted')
-        setting_row(card.body,'自动分配参考','根据当前系统可用物理内存估算',recommendation)
+        recommendation=label(f"{tr('初始 ')}{initial:,}{tr(' MiB / 最大 ')}{maximum:,} MiB",'muted')
+        setting_row(card.body,tr('自动分配参考'),tr('根据当前系统可用物理内存估算'),recommendation)
         def memory_state():
             auto=(self.fields['auto_memory'].isChecked() if not self.vid or self.flat or self.overrides['auto_memory'].isChecked() else bool(window.config_obj.get('auto_memory')))
             for key in ('min_memory','max_memory'):
@@ -83,9 +84,9 @@ class SettingsEditor(QWidget):
         for key in ('min_memory','max_memory'):
             if key in self.overrides:self.overrides[key].toggled.connect(memory_state)
         memory_state();body.addWidget(card)
-        body=tab('游戏与窗口','world');card=Card('游戏窗口','实例可以继承全局设置，也可以独立指定。')
-        for key,title,low,high in [('width' if version_id else 'window_width','窗口宽度',320,7680),('height' if version_id else 'window_height','窗口高度',240,4320)]:self.spin(card,key,title,'以游戏逻辑像素为单位',low,high,1)
-        preset=SettingsComboBox();preset.addItem('选择窗口尺寸',None)
+        body=tab(tr('游戏与窗口'),'world');card=Card(tr('游戏窗口'),tr('实例可以继承全局设置，也可以独立指定。'))
+        for key,title,low,high in [('width' if version_id else 'window_width',tr('窗口宽度'),320,7680),('height' if version_id else 'window_height',tr('窗口高度'),240,4320)]:self.spin(card,key,title,tr('以游戏逻辑像素为单位'),low,high,1)
+        preset=SettingsComboBox();preset.addItem(tr('选择窗口尺寸'),None)
         for title,value in [('1280 × 720',(1280,720)),('1600 × 900',(1600,900)),('1920 × 1080',(1920,1080))]:preset.addItem(title,value)
         def resize_preset(index):
             size=preset.currentData()
@@ -93,55 +94,59 @@ class SettingsEditor(QWidget):
             for key,value in zip(('width','height') if self.vid else ('window_width','window_height'),size):
                 if key in self.overrides:self.overrides[key].setChecked(True)
                 self.fields[key].setValue(value)
-        preset.currentIndexChanged.connect(resize_preset);self.custom_controls.append(preset);setting_row(card.body,'常用尺寸','选择后更新窗口宽度与高度',preset)
-        self.check(card,'fullscreen','全屏启动','使用游戏原生全屏模式');body.addWidget(card)
-        card=Card('运行目录与快速加入')
-        if not version_id:self.edit(card,'game_dir','游戏库目录','修改目录不会移动已有游戏文件',str(window.repo.game_dir),browse='directory')
-        self.check(card,'isolate' if version_id else 'version_isolation','版本隔离','将模组、存档与配置保存在各自的实例目录')
-        self.edit(card,'server_address','自动加入服务器','启动后连接指定服务器；留空进入主菜单','例如 play.example.com:25565');body.addWidget(card)
+        preset.currentIndexChanged.connect(resize_preset);self.custom_controls.append(preset);setting_row(card.body,tr('常用尺寸'),tr('选择后更新窗口宽度与高度'),preset)
+        self.check(card,'fullscreen',tr('全屏启动'),tr('使用游戏原生全屏模式'));body.addWidget(card)
+        card=Card(tr('运行目录与快速加入'))
+        if not version_id:self.edit(card,'game_dir',tr('游戏库目录'),tr('修改目录不会移动已有游戏文件'),str(window.repo.game_dir),browse='directory')
+        self.check(card,'isolate' if version_id else 'version_isolation',tr('版本隔离'),tr('将模组、存档与配置保存在各自的实例目录'))
+        self.edit(card,'server_address',tr('自动加入服务器'),tr('启动后连接指定服务器；留空进入主菜单'),tr('例如 play.example.com:25565'));body.addWidget(card)
         if not version_id:
-            body=tab('下载与网络','download');card=Card('下载设置','修改后会用于后续下载任务。')
-            self.combo(card,'download_source','下载源','游戏与资源文件的下载服务',[('Mojang 官方','mojang'),('BMCLAPI 镜像','bmclapi')])
-            self.number_slider(card,'max_download_threads','并发下载数','同时进行的文件下载数量',1,32,' 个')
-            self.spin(card,'download_speed_limit','下载限速','单位 KiB/s；0 表示不限速',0,100000,256)
+            body=tab(tr('下载与网络'),'download');card=Card(tr('下载设置'),tr('修改后会用于后续下载任务。'))
+            self.combo(card,'download_source',tr('下载源'),tr('游戏与资源文件的下载服务'),[(tr('Mojang 官方'),'mojang'),(tr('BMCLAPI 镜像'),'bmclapi')])
+            self.number_slider(card,'max_download_threads',tr('并发下载数'),tr('同时进行的文件下载数量'),1,32,tr(' 个'))
+            self.spin(card,'download_speed_limit',tr('下载限速'),tr('单位 KiB/s；0 表示不限速'),0,100000,256)
+            self.edit(card,'curseforge_api_key','CurseForge API Key',tr('留空使用公共接口'),'API Key')
+            self.fields['curseforge_api_key'].setEchoMode(QLineEdit.EchoMode.Password)
             body.addWidget(card)
-            card=Card('代理连接','留空时直连。仅影响启动器网络请求。')
-            self.edit(card,'proxy_host','代理主机','HTTP 代理服务器地址','例如 127.0.0.1')
-            self.spin(card,'proxy_port','代理端口','0 表示不启用代理',0,65535,1);body.addWidget(card)
-            body=tab('启动器行为','home');card=Card('启动与退出')
-            self.check(card,'close_after_launch','启动后收起窗口','游戏启动成功后隐藏启动器')
-            self.check(card,'keep_launcher_open','游戏退出后保留启动器','关闭此项会在游戏退出后结束启动器')
-            self.check(card,'show_launch_logs','启动后显示日志页','便于查看游戏输出和定位问题');body.addWidget(card)
-            card=Card('启动器更新')
-            self.check(card,'check_launcher_updates','启动时检查更新','仅提示当前版本系列的新版本')
+            card=Card(tr('代理连接'),tr('留空时直连。仅影响启动器网络请求。'))
+            self.edit(card,'proxy_host',tr('代理主机'),tr('HTTP 代理服务器地址'),tr('例如 127.0.0.1'))
+            self.spin(card,'proxy_port',tr('代理端口'),tr('0 表示不启用代理'),0,65535,1);body.addWidget(card)
+            body=tab(tr('启动器行为'),'home');card=Card(tr('启动与退出'))
+            self.check(card,'close_after_launch',tr('启动后收起窗口'),tr('游戏启动成功后隐藏启动器'))
+            self.check(card,'keep_launcher_open',tr('游戏退出后保留启动器'),tr('关闭此项会在游戏退出后结束启动器'))
+            self.check(card,'show_launch_logs',tr('启动后显示日志页'),tr('便于查看游戏输出和定位问题'));body.addWidget(card)
+            card=Card(tr('启动器更新'))
+            self.check(card,'check_launcher_updates',tr('启动时检查更新'),tr('仅提示当前版本系列的新版本'))
             from ..paths import LAUNCHER_VERSION
-            setting_row(card.body,'当前版本','',button(LAUNCHER_VERSION+' · 版本管理',window.updater.manage_versions,'soft','refresh'))
+            setting_row(card.body,tr('当前版本'),'',button(LAUNCHER_VERSION+tr(' · 版本管理'),window.updater.manage_versions,'soft','refresh'))
             body.addWidget(card)
-            card=Card('账号管理','正版、离线与外置账号在统一的账号窗口中管理。')
-            card.body.addWidget(button('管理游戏账号',window.open_accounts,'soft','account'));body.addWidget(card)
-            body=tab('外观','grid');card=Card('界面外观','透明度越高，显示越淡；修改后自动保存。')
-            self.combo(card,'color_mode','显示模式','切换启动器的深色或浅色外观',[('跟随系统','auto'),('深色','dark'),('浅色','light')])
-            self.check(card,'bold_text','粗体文字','加粗启动器界面文字');self.fields['bold_text'].toggled.connect(self.queue_preview)
+            card=Card(tr('账号管理'),tr('正版、离线与外置账号在统一的账号窗口中管理。'))
+            card.body.addWidget(button(tr('管理游戏账号'),window.open_accounts,'soft','account'));body.addWidget(card)
+            body=tab(tr('外观'),'grid');card=Card(tr('语言'))
+            self.combo(card,'language',tr('语言'),tr('立即生效'),[('简体中文','zh-CN'),('English','en-US')]);body.addWidget(card)
+            card=Card(tr('界面外观'),tr('透明度越高，显示越淡；修改后自动保存。'))
+            self.combo(card,'color_mode',tr('显示模式'),tr('切换启动器的深色或浅色外观'),[(tr('跟随系统'),'auto'),(tr('深色'),'dark'),(tr('浅色'),'light')])
+            self.check(card,'bold_text',tr('粗体文字'),tr('加粗启动器界面文字'));self.fields['bold_text'].toggled.connect(self.queue_preview)
             for key,title,description,high in [
-                ('text_transparency','文字透明度','0% 为不透明，最高 70%，保留基本可读性',70),
-                ('ui_transparency','UI 透明度','仅调整界面底色和控件，不影响背景图片；文字透明度独立控制',90)]:
+                ('text_transparency',tr('文字透明度'),tr('0% 为不透明，最高 70%，保留基本可读性'),70),
+                ('ui_transparency',tr('UI 透明度'),tr('仅调整界面底色和控件，不影响背景图片；文字透明度独立控制'),90)]:
                 self.percentage(card,key,title,description,high)
             body.addWidget(card)
-            card=Card('字体与可读性')
+            card=Card(tr('字体与可读性'))
             families=QFontDatabase.families()
-            self.combo(card,'font_family','界面字体','使用系统已有字体，不随程序打包字体',[('默认（Microsoft YaHei UI）','')]+[(name,name) for name in families])
-            self.number_slider(card,'font_size','界面字号','同时调整标题、列表和辅助文字，12–18 逻辑像素',12,18,'px',preview=True)
-            self.combo(card,'font_antialiasing','字体抗锯齿','自动通常最适合当前显示器',[('自动','auto'),('灰度','gray'),('子像素（由系统支持情况决定）','subpixel')])
-            self.combo(card,'log_font_family','日志字体','仅影响运行日志',[('默认（Consolas）','Consolas'),('跟随界面字体','')]+[(name,name) for name in families if name!='Consolas'])
-            self.number_slider(card,'log_font_size','日志字号','独立于界面字号',9,28,'px',preview=True)
-            sample=label('字体预览 · 清华联盟工坊 · Onion 0123456789','muted',True)
+            self.combo(card,'font_family',tr('界面字体'),tr('使用系统已有字体，不随程序打包字体'),[(tr('默认（Microsoft YaHei UI）'),'')]+[(name,name) for name in families])
+            self.number_slider(card,'font_size',tr('界面字号'),tr('同时调整标题、列表和辅助文字，12–18 逻辑像素'),12,18,'px',preview=True)
+            self.combo(card,'font_antialiasing',tr('字体抗锯齿'),tr('自动通常最适合当前显示器'),[(tr('自动'),'auto'),(tr('灰度'),'gray'),(tr('子像素（由系统支持情况决定）'),'subpixel')])
+            self.combo(card,'log_font_family',tr('日志字体'),tr('仅影响运行日志'),[(tr('默认（Consolas）'),'Consolas'),(tr('跟随界面字体'),'')]+[(name,name) for name in families if name!='Consolas'])
+            self.number_slider(card,'log_font_size',tr('日志字号'),tr('独立于界面字号'),9,28,'px',preview=True)
+            sample=label(tr('字体预览 · 清华联盟工坊 · Onion 0123456789'),'muted',True)
             sample.setContentsMargins(16,10,16,10);card.body.addWidget(sample)
             body.addWidget(card)
-            card=Card('配色','以感知色彩空间生成界面底色、选中态与文字颜色。')
-            self.combo(card,'accent_source','颜色来源','壁纸取色失败时使用默认紫色',[('自定义颜色','custom'),('跟随背景壁纸','wallpaper')])
-            self.combo(card,'color_style','色彩模式','改变配色的饱和度与色相；保真尽量保留原色',[
-                ('保真','fidelity'),('柔和点缀','tonal_spot'),('鲜艳','vibrant'),('中性','neutral'),('水果沙拉','fruit_salad'),('彩虹','rainbow')])
-            self.edit(card,'accent_color','自定义颜色','输入六位十六进制颜色，例如 #cebafa','#cebafa')
+            card=Card(tr('配色'),tr('以感知色彩空间生成界面底色、选中态与文字颜色。'))
+            self.combo(card,'accent_source',tr('颜色来源'),tr('壁纸取色失败时使用默认紫色'),[(tr('自定义颜色'),'custom'),(tr('跟随背景壁纸'),'wallpaper')])
+            self.combo(card,'color_style',tr('色彩模式'),tr('改变配色的饱和度与色相；保真尽量保留原色'),[
+                (tr('保真'),'fidelity'),(tr('柔和点缀'),'tonal_spot'),(tr('鲜艳'),'vibrant'),(tr('中性'),'neutral'),(tr('水果沙拉'),'fruit_salad'),(tr('彩虹'),'rainbow')])
+            self.edit(card,'accent_color',tr('自定义颜色'),tr('输入六位十六进制颜色，例如 #cebafa'),'#cebafa')
             if not self.fields['accent_color'].text():self.fields['accent_color'].setText('#cebafa')
             def choose_accent():
                 from .color_picker import ColorPicker
@@ -149,37 +154,37 @@ class SettingsEditor(QWidget):
                 if picker.exec()==QDialog.DialogCode.Accepted:
                     self.fields['accent_color'].setText(picker.color.name())
                     self.fields['accent_source'].setCurrentIndex(self.fields['accent_source'].findData('custom'))
-            self.choose_accent_button=button('选择颜色',choose_accent,'soft')
-            setting_row(card.body,'颜色选择器','选择颜色后改用自定义颜色',self.choose_accent_button)
+            self.choose_accent_button=button(tr('选择颜色'),choose_accent,'soft')
+            setting_row(card.body,tr('颜色选择器'),tr('选择颜色后改用自定义颜色'),self.choose_accent_button)
             self.palette_feedback=label('','',True);self.palette_feedback.setAlignment(Qt.AlignmentFlag.AlignRight|Qt.AlignmentFlag.AlignVCenter)
-            setting_row(card.body,'当前主题色','壁纸取色只改变界面配色，不会改变背景图片',self.palette_feedback)
+            setting_row(card.body,tr('当前主题色'),tr('壁纸取色只改变界面配色，不会改变背景图片'),self.palette_feedback)
             self.fields['accent_source'].currentIndexChanged.connect(self.refresh_color_feedback)
             body.addWidget(card)
-            card=Card('布局与动效')
-            self.check(card,'titlebar_transparent','标题栏透明','关闭后标题栏保持不透明；背景与正文控件仍独立控制')
-            self.number_slider(card,'corner_radius','圆角大小','控件和弹出选择框的圆角；滑块、开关保留圆形结构',0,24,'px',preview=True)
-            self.number_slider(card,'animation_duration','动画时长','控制悬停、按压与开关动效；0 表示关闭，导航尾随按比例变化',0,600,'ms',preview=True)
-            self.check(card,'ui_animations','界面动效','导航胶囊滑动、按钮按压和开关滑动；关闭可减少动态效果');body.addWidget(card)
-            card=Card('首页背景','独立设置背景显示方式与透明度，不改变首页按钮和文字。')
-            self.combo(card,'background_scope','背景范围','整个窗口会将背景延伸至导航栏和标题栏',[
-                ('仅主页内容区','content'),('整个窗口（含导航栏）','window')])
-            self.combo(card,'background_mode','图片显示方式','填充会裁切，适应会保留完整图片',[
-                ('填充（保持比例，裁切）','fill'),('自适应（完整显示）','fit'),
-                ('拉伸（铺满）','stretch'),('居中（原始大小）','center'),('平铺','tile')])
-            self.number_slider(card,'background_blur','背景图片模糊','只处理背景图片，文字和控件保持清晰；0 为关闭',0,40,'px',preview=True)
-            self.percentage(card,'background_transparency','背景透明度','0% 为完整显示；100% 为隐藏图片及装饰',100)
-            field=QLineEdit(str(self.initial('background_image') or ''));field.setPlaceholderText('使用默认背景');field.setProperty('wideEditor',True);self.add(card,'background_image','自定义图片','支持 PNG、JPG 和 WebP',field)
+            card=Card(tr('布局与动效'))
+            self.check(card,'titlebar_transparent',tr('标题栏透明'),tr('关闭后标题栏保持不透明；背景与正文控件仍独立控制'))
+            self.number_slider(card,'corner_radius',tr('圆角大小'),tr('控件和弹出选择框的圆角；滑块、开关保留圆形结构'),0,24,'px',preview=True)
+            self.number_slider(card,'animation_duration',tr('动画时长'),tr('控制悬停、按压与开关动效；0 表示关闭，导航尾随按比例变化'),0,600,'ms',preview=True)
+            self.check(card,'ui_animations',tr('界面动效'),tr('导航胶囊滑动、按钮按压和开关滑动；关闭可减少动态效果'));body.addWidget(card)
+            card=Card(tr('首页背景'),tr('独立设置背景显示方式与透明度，不改变首页按钮和文字。'))
+            self.combo(card,'background_scope',tr('背景范围'),tr('整个窗口会将背景延伸至导航栏和标题栏'),[
+                (tr('仅主页内容区'),'content'),(tr('整个窗口（含导航栏）'),'window')])
+            self.combo(card,'background_mode',tr('图片显示方式'),tr('填充会裁切，适应会保留完整图片'),[
+                (tr('填充（保持比例，裁切）'),'fill'),(tr('自适应（完整显示）'),'fit'),
+                (tr('拉伸（铺满）'),'stretch'),(tr('居中（原始大小）'),'center'),(tr('平铺'),'tile')])
+            self.number_slider(card,'background_blur',tr('背景图片模糊'),tr('只处理背景图片，文字和控件保持清晰；0 为关闭'),0,40,'px',preview=True)
+            self.percentage(card,'background_transparency',tr('背景透明度'),tr('0% 为完整显示；100% 为隐藏图片及装饰'),100)
+            field=QLineEdit(str(self.initial('background_image') or ''));field.setPlaceholderText(tr('使用默认背景'));field.setProperty('wideEditor',True);self.add(card,'background_image',tr('自定义图片'),tr('支持 PNG、JPG 和 WebP'),field)
             def choose_background(background_field=field):
-                path,_=QFileDialog.getOpenFileName(self,'选择首页背景','','图片 (*.png *.jpg *.jpeg *.webp)')
+                path,_=QFileDialog.getOpenFileName(self,tr('选择首页背景'),'',tr('图片 (*.png *.jpg *.jpeg *.webp)'))
                 if path:background_field.setText(path)
             picture_actions=QWidget();actions=row(picture_actions,0,12)
-            for title,callback,glyph in [('选择图片',choose_background,'folder'),('恢复默认',lambda background_field=field:background_field.clear(),None)]:
+            for title,callback,glyph in [(tr('选择图片'),choose_background,'folder'),(tr('恢复默认'),lambda background_field=field:background_field.clear(),None)]:
                 action=button(title,callback,'soft',glyph);action.setProperty('settingAction',True);action.setMinimumWidth(112);actions.addWidget(action)
-            setting_row(card.body,'图片操作','',picture_actions);body.addWidget(card)
-            card=Card('首页欢迎语')
-            self.check(card,'custom_home_welcome','自定义主界面欢迎字样','默认不显示；开启后显示下方自定义内容')
-            self.edit(card,'home_welcome_large','大字','','输入欢迎语；留空不显示')
-            self.edit(card,'home_welcome_small','小字','','输入欢迎语；留空不显示')
+            setting_row(card.body,tr('图片操作'),'',picture_actions);body.addWidget(card)
+            card=Card(tr('首页欢迎语'))
+            self.check(card,'custom_home_welcome',tr('自定义主界面欢迎字样'),tr('默认不显示；开启后显示下方自定义内容'))
+            self.edit(card,'home_welcome_large',tr('大字'),'',tr('输入欢迎语；留空不显示'))
+            self.edit(card,'home_welcome_small',tr('小字'),'',tr('输入欢迎语；留空不显示'))
             for key in ('home_welcome_large','home_welcome_small'):self.fields[key].setMaxLength(120)
             def preview_welcome(*args):
                 custom=self.fields['custom_home_welcome'].isChecked()
@@ -191,24 +196,24 @@ class SettingsEditor(QWidget):
             self.fields['custom_home_welcome'].toggled.connect(preview_welcome)
             for key in ('home_welcome_large','home_welcome_small'):self.fields[key].textChanged.connect(preview_welcome)
             preview_welcome();body.addWidget(card)
-            reset=button('恢复外观默认值',self.reset_appearance,'soft')
+            reset=button(tr('恢复外观默认值'),self.reset_appearance,'soft')
             body.addWidget(reset,0,Qt.AlignmentFlag.AlignRight)
-        body=tab('高级参数','settings');card=Card('启动参数','通常保持默认即可。额外参数会传递给 Java 或游戏。')
-        self.edit(card,'jvm_args','JVM 参数','支持用引号包裹含空格的参数','留空使用默认参数')
-        self.edit(card,'game_args','游戏参数','附加到游戏启动命令','留空使用默认参数')
-        self.combo(card,'process_priority','游戏进程优先级','仅影响 Windows 游戏进程',[('默认','normal'),('较低','below'),('较高','above')])
-        self.edit(card,'pre_launch_command','启动前命令','直接运行程序；成功退出后启动游戏','留空不执行')
-        self.edit(card,'post_exit_command','游戏退出后命令','直接运行程序；不经过命令行 shell','留空不执行')
-        if not version_id:self.check(card,'demo','试玩模式','仅在需要 Minecraft 试玩时开启')
+        body=tab(tr('高级参数'),'settings');card=Card(tr('启动参数'),tr('通常保持默认即可。额外参数会传递给 Java 或游戏。'))
+        self.edit(card,'jvm_args',tr('JVM 参数'),tr('支持用引号包裹含空格的参数'),tr('留空使用默认参数'))
+        self.edit(card,'game_args',tr('游戏参数'),tr('附加到游戏启动命令'),tr('留空使用默认参数'))
+        self.combo(card,'process_priority',tr('游戏进程优先级'),tr('仅影响 Windows 游戏进程'),[(tr('默认'),'normal'),(tr('较低'),'below'),(tr('较高'),'above')])
+        self.edit(card,'pre_launch_command',tr('启动前命令'),tr('直接运行程序；成功退出后启动游戏'),tr('留空不执行'))
+        self.edit(card,'post_exit_command',tr('游戏退出后命令'),tr('直接运行程序；不经过命令行 shell'),tr('留空不执行'))
+        if not version_id:self.check(card,'demo',tr('试玩模式'),tr('仅在需要 Minecraft 试玩时开启'))
         body.addWidget(card)
         nav.addStretch();self.select_tab(0)
         if not version_id:
             from .java_manager import JavaManager
-            self.java_manager=JavaManager(window);self.tab_names['Java 管理']=self.stack.addWidget(self.java_manager)
-            index=self.tab_names['Java 管理'];item=button('Java 管理',lambda:self.select_tab(index),'nav','java')
+            self.java_manager=JavaManager(window);self.tab_names[tr('Java 管理')]=self.stack.addWidget(self.java_manager)
+            index=self.tab_names[tr('Java 管理')];item=button(tr('Java 管理'),lambda:self.select_tab(index),'nav','java')
             item.setCheckable(True);nav.insertWidget(nav.count()-1,item);self.tabs.append(item)
         bar=row();self.hint=label('','muted');bar.addWidget(self.hint,1)
-        if version_id and not flat:bar.addWidget(button('全部跟随全局',self.inherit_all))
+        if version_id and not flat:bar.addWidget(button(tr('全部跟随全局'),self.inherit_all))
         outer.addLayout(bar)
         if flat:
             def enable_controls(checked):
@@ -217,8 +222,8 @@ class SettingsEditor(QWidget):
                 memory_state()
                 name=window.instances.display_name(self.vid)
                 self.scope_description.setText(
-                    f'以下修改仅对“{name}”生效，不会修改全局设置或其他实例。'
-                    if checked else '当前实例跟随全局设置。下方仅展示全局值；请前往“设置 → 全局游戏设置”修改。开启独立设置仅影响当前实例。')
+                    f"{tr('以下修改仅对“')}{name}{tr('”生效，不会修改全局设置或其他实例。')}"
+                    if checked else tr('当前实例跟随全局设置。下方仅展示全局值；请前往“设置 → 全局游戏设置”修改。开启独立设置仅影响当前实例。'))
                 self.global_settings_button.setVisible(not checked)
             def specific_changed(checked):
                 enable_controls(checked);self.mark_dirty()
@@ -247,7 +252,7 @@ class SettingsEditor(QWidget):
 
     def open_global_settings(self):
         self.launcher.navigate('settings')
-        self.launcher.open_settings_tab(self.launcher.settings_editor.tab_names['全局游戏设置'])
+        self.launcher.open_settings_tab(self.launcher.settings_editor.tab_names[tr('全局游戏设置')])
 
     def select_tab(self,index):
         self.stack.setCurrentIndex(index)
@@ -268,7 +273,7 @@ class SettingsEditor(QWidget):
         if self.vid and not self.flat:
             if control is None:field.setMinimumWidth(360 if field.property('wideEditor') else 220);field.setMaximumWidth(960 if field.property('wideEditor') else 310)
             holder=column(spacing=5);holder.addWidget(control if control is not None else field)
-            override=QCheckBox('单独设置');override.setChecked(key in self.values);self.overrides[key]=override
+            override=QCheckBox(tr('单独设置'));override.setChecked(key in self.values);self.overrides[key]=override
             field.setEnabled(override.isChecked());override.toggled.connect(field.setEnabled);override.toggled.connect(self.mark_dirty);holder.addWidget(override)
             if control is not None:control.setEnabled(override.isChecked());override.toggled.connect(control.setEnabled)
             def inherit(checked):
@@ -293,11 +298,11 @@ class SettingsEditor(QWidget):
         self.add(card,key,title,description,field)
         if browse:
             def choose():
-                path=(QFileDialog.getExistingDirectory(self,'选择游戏库',field.text()) if browse=='directory' else QFileDialog.getOpenFileName(self,'选择 Java',field.text(),'Java (java.exe javaw.exe);;所有文件 (*)')[0])
+                path=(QFileDialog.getExistingDirectory(self,tr('选择游戏库'),field.text()) if browse=='directory' else QFileDialog.getOpenFileName(self,tr('选择 Java'),field.text(),tr('Java (java.exe javaw.exe);;所有文件 (*)'))[0])
                 if path:
                     if key in self.overrides:self.overrides[key].setChecked(True)
                     field.setText(path)
-            action=field.addAction(icon('folder',paint_color(self,'icon')),QLineEdit.ActionPosition.TrailingPosition);action.setProperty('onionGlyph','folder');action.setToolTip('浏览目录' if browse=='directory' else '浏览 Java');action.triggered.connect(choose)
+            action=field.addAction(icon('folder',paint_color(self,'icon')),QLineEdit.ActionPosition.TrailingPosition);action.setProperty('onionGlyph','folder');action.setToolTip(tr('浏览目录') if browse=='directory' else tr('浏览 Java'));action.triggered.connect(choose)
 
     def spin(self,card,key,title,description,low,high,step):
         field=InlineSpinBox();field.setRange(low,high);field.setSingleStep(step);field.setKeyboardTracking(False);field.setValue(int(self.initial(key) or 0))
@@ -312,7 +317,7 @@ class SettingsEditor(QWidget):
         else:line.addStretch(1)
         if key=='download_speed_limit':
             hint=label('','muted');hint.setFixedWidth(60);self.number_hints[key]=hint;line.addWidget(hint)
-            def update_hint(value):hint.setText('不限速' if value==0 else '')
+            def update_hint(value):hint.setText(tr('不限速') if value==0 else '')
             field.valueChanged.connect(update_hint);update_hint(field.value())
         field.setSuffix('');field.setSpecialValueText('');field.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
         field.setAlignment(Qt.AlignmentFlag.AlignRight);field.setFixedWidth(96);line.addWidget(field)
@@ -325,9 +330,9 @@ class SettingsEditor(QWidget):
 
     def number_slider(self,card,key,title,description,low,high,suffix='',preview=False):
         field=InlineSpinBox();field.setRange(low,high);field.setSingleStep(1);field.setKeyboardTracking(False)
-        field.setValue(int(self.initial(key) or 0));field.setAccessibleName(title+'数值')
+        field.setValue(int(self.initial(key) or 0));field.setAccessibleName(title+tr('数值'))
         slider=SettingsSlider(Qt.Orientation.Horizontal);slider.setRange(low,high);slider.setSingleStep(1);slider.setPageStep(5)
-        slider.setMinimumHeight(28);slider.setValue(field.value());slider.setAccessibleName(title+'滑动条')
+        slider.setMinimumHeight(28);slider.setValue(field.value());slider.setAccessibleName(title+tr('滑动条'))
         slider.valueChanged.connect(field.setValue);field.valueChanged.connect(slider.setValue)
         holder=self.number_holder(key,field,suffix.strip(),slider);self.sliders[key]=slider
         self.add(card,key,title,description,field,holder)
@@ -349,13 +354,13 @@ class SettingsEditor(QWidget):
         if self.vid or not hasattr(self,'palette_feedback'):return
         automatic=self.fields['accent_source'].currentData()=='wallpaper'
         self.fields['accent_color'].setEnabled(not automatic)
-        self.choose_accent_button.setText('改用自定义颜色' if automatic else '选择颜色')
+        self.choose_accent_button.setText(tr('改用自定义颜色') if automatic else tr('选择颜色'))
         config=self.launcher.config_obj;accent=effective_accent(config)
         if automatic:
             if getattr(config,'_qt_wallpaper_seed_found',False):
-                text='壁纸取色 '+config._qt_wallpaper_seed+' → '+accent
-            else:text='壁纸无可用取色，使用默认紫色 → '+accent
-        else:text='自定义 → '+accent
+                text=tr('壁纸取色 ')+config._qt_wallpaper_seed+' → '+accent
+            else:text=tr('壁纸无可用取色，使用默认紫色 → ')+accent
+        else:text=tr('自定义 → ')+accent
         self.palette_feedback.setText(text)
 
     def reset_appearance(self):
@@ -375,9 +380,9 @@ class SettingsEditor(QWidget):
 
     def combo(self,card,key,title,description,options):
         field=SettingsComboBox()
-        for text,value in options:field.addItem(text,value)
+        for text,value in options:field.addItem(tr(text),value)
         index=field.findData(self.initial(key))
-        if index<0:field.addItem('当前配置（保留）',self.initial(key));index=field.count()-1
+        if index<0:field.addItem(tr('当前配置（保留）'),self.initial(key));index=field.count()-1
         field.setCurrentIndex(index);self.add(card,key,title,description,field)
 
     def inherit_all(self):
@@ -407,7 +412,7 @@ class SettingsEditor(QWidget):
         w=self.launcher
         try:
             if w.mutating or w.launch_pending:
-                self.hint.setText('当前任务结束后自动保存')
+                self.hint.setText(tr('当前任务结束后自动保存'))
                 if self.dirty:self.autosave_timer.start(700)
                 return False
             values={}
@@ -415,11 +420,11 @@ class SettingsEditor(QWidget):
                 if key in self.overrides and not self.overrides[key].isChecked():continue
                 values[key]=(field.isChecked() if isinstance(field,QCheckBox) else field.value() if isinstance(field,QSpinBox) else field.currentData() if isinstance(field,QComboBox) else field.text().strip())
             minimum=values.get('min_memory',w.config_obj.get('min_memory'));maximum=values.get('max_memory',w.config_obj.get('max_memory'))
-            if not (self.flat and not self.specific.isChecked()) and not values.get('auto_memory',w.config_obj.get('auto_memory')) and minimum>maximum:raise ValueError('最小内存不能大于最大内存。')
-            if not self.vid and bool(values.get('proxy_host')) != bool(values.get('proxy_port')):raise ValueError('代理主机和端口需要同时填写，或同时留空 / 设为 0。')
+            if not (self.flat and not self.specific.isChecked()) and not values.get('auto_memory',w.config_obj.get('auto_memory')) and minimum>maximum:raise ValueError(tr('最小内存不能大于最大内存。'))
+            if not self.vid and bool(values.get('proxy_host')) != bool(values.get('proxy_port')):raise ValueError(tr('代理主机和端口需要同时填写，或同时留空 / 设为 0。'))
             if not self.vid:
                 import re
-                if not re.fullmatch(r'#[0-9a-fA-F]{6}',values.get('accent_color','')):raise ValueError('特征色需要使用 #RRGGBB 格式。')
+                if not re.fullmatch(r'#[0-9a-fA-F]{6}',values.get('accent_color','')):raise ValueError(tr('特征色需要使用 #RRGGBB 格式。'))
             if self.vid:
                 metadata={key:values.pop(key) for key in ('name','group','notes') if key in values}
                 if self.flat and not self.specific.isChecked():values={}
@@ -443,22 +448,23 @@ class SettingsEditor(QWidget):
                     w.repo=GameRepository(w.config_obj)
                 if w.instance_editor:w.instance_editor.refresh_inherited()
             self.dirty=False;self.refresh_inherited();self.hint.setText('');w.status.setText('')
+            if not self.vid and 'language' in changed:QTimer.singleShot(0,w.apply_language)
             if self.vid and metadata:w.reload_versions(refresh_page=False)
             return True
         except Exception as error:
-            self.hint.setText('未保存：'+str(error));w.status.setText('设置未保存：'+str(error))
+            self.hint.setText(tr('未保存：')+str(error));w.status.setText(tr('设置未保存：')+str(error))
             if not quiet:w.error(error)
             return False
 
 
 class InstanceSettingsDialog(QDialog):
     def __init__(self,window,vid):
-        super().__init__(window);self.setWindowTitle('实例设置 · '+window.instances.display_name(vid));self.resize(1020,760);self.setMinimumSize(850,620)
+        super().__init__(window);self.setWindowTitle(tr('实例设置 · ')+window.instances.display_name(vid));self.resize(1020,760);self.setMinimumSize(850,620)
         body=column(self,24,18);body.addWidget(label(window.instances.display_name(vid),'title'))
-        body.addWidget(label('实例设置  /  未单独设置的项目将跟随全局配置','muted'))
+        body.addWidget(label(tr('实例设置  /  未单独设置的项目将跟随全局配置'),'muted'))
         self.editor=SettingsEditor(window,vid);body.addWidget(self.editor,1)
 
     def reject(self):
         self.editor.flush()
-        if self.editor.dirty and QMessageBox.question(self,'尚未保存','放弃未保存的实例设置？')!=QMessageBox.StandardButton.Yes:return
+        if self.editor.dirty and QMessageBox.question(self,tr('尚未保存'),tr('放弃未保存的实例设置？'))!=QMessageBox.StandardButton.Yes:return
         super().reject()

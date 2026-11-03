@@ -1,0 +1,28 @@
+自动打包
+
+1. 在 config.json 中修改 edition：
+   standard = 标准版
+   thunion = THUnion 特供版
+   both = 两版都构建（默认）
+2. 运行 build.cmd，或从任意目录运行 python <本文件夹路径>/build.py。
+3. 自检通过的 EXE 输出到项目根目录 release，不生成 ZIP。
+
+版本号自动读取 launcher/paths.py，T 版自动加 -T。
+source_files 是公共源码清单；overlay_files 是 T 版专属源码清单。
+新增或删除运行代码后，检查改动并执行：
+   python build_tools/build.py --refresh-manifest
+这只更新配置文件，不开始构建。也可以手动编辑清单。
+打包前发现遗漏、缺失、重复文件或越界路径会直接停止。
+
+常用命令（项目根目录）：
+   python build_tools/build.py --check
+   python build_tools/build.py
+   python build_tools/build.py --edition thunion
+
+dependencies 指向已有的项目 Qt 依赖目录；T 版还需 QtWebView 组件。
+include_files 只列构建资源，不能加入账号、设置、日志等个人数据。
+所有配置路径相对于项目根目录，不依赖运行时所在目录。
+公共源码由两版共用；T 版专属功能放在 build_tools/thunion。
+每次构建使用 tmp/automatic-builds 下的独立快照，不修改工作目录版本号。
+构建日志和自检报告保留在该快照内，汇总为 tmp/automatic-builds/latest.json。
+只有全部自检通过才替换 release 中对应的 EXE；失败保留原文件。

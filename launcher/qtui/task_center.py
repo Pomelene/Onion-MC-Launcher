@@ -1,4 +1,5 @@
 """Quiet task list, stable live rows and details shown only on request."""
+from .i18n import tr
 import time
 from PySide6.QtCore import Qt,QTimer
 from PySide6.QtWidgets import QWidget,QTreeWidgetItem,QPlainTextEdit
@@ -10,10 +11,10 @@ class TaskCenter(QWidget):
     def __init__(self,owner):
         super().__init__();self.owner=owner;self.nodes={};body=column(self,0,8)
         toolbar=row();toolbar.addStretch()
-        self.cancel_button=button('取消',self.cancel);toolbar.addWidget(self.cancel_button)
-        self.retry_button=button('重试',self.retry,glyph='refresh');toolbar.addWidget(self.retry_button)
-        self.details_button=icon_button('任务详情',self.toggle_details,'info');toolbar.addWidget(self.details_button)
-        toolbar.addWidget(menu_button(lambda:[('清除已结束记录',self.clear)]));body.addLayout(toolbar)
+        self.cancel_button=button(tr('取消'),self.cancel);toolbar.addWidget(self.cancel_button)
+        self.retry_button=button(tr('重试'),self.retry,glyph='refresh');toolbar.addWidget(self.retry_button)
+        self.details_button=icon_button(tr('任务详情'),self.toggle_details,'info');toolbar.addWidget(self.details_button)
+        toolbar.addWidget(menu_button(lambda:[(tr('清除已结束记录'),self.clear)]));body.addLayout(toolbar)
         self.tree=FlatTreeWidget();self.tree.entities();body.addWidget(self.tree,1)
         self.detail=QPlainTextEdit();self.detail.setReadOnly(True);self.detail.setMaximumHeight(150);self.detail.hide();body.addWidget(self.detail)
         self.tree.currentItemChanged.connect(lambda *_:self.selection());self.tree.itemDoubleClicked.connect(lambda *_:self.toggle_details())
@@ -25,7 +26,7 @@ class TaskCenter(QWidget):
 
     def refresh(self):
         if not self.isVisible() and self.tree.topLevelItemCount():return
-        names={'running':'进行中','cancelling':'正在取消','complete':'已完成','failed':'失败','cancelled':'已取消','interrupted':'已中断'}
+        names={'running':tr('进行中'),'cancelling':tr('正在取消'),'complete':tr('已完成'),'failed':tr('失败'),'cancelled':tr('已取消'),'interrupted':tr('已中断')}
         records=list(reversed(self.owner.task_history.items));keys={i['id'] for i in records}
         self.tree.blockSignals(True)
         for key in list(self.nodes):

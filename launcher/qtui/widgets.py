@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QWidget,QFrame,QVBoxLayout,QHBoxLayout,QLabel,QPu
 from .theme import STYLE,appearance_style,appearance_values,config_for,paint_color,surface_opacity,effective_accent,corner,text_size,row_height,preference
 from .motion import MotionButton,motion_enabled
 from .choices import ChoiceComboBox
+from .i18n import tr
 
 
 def paint_glass_background(p,viewport,widget):
@@ -285,7 +286,7 @@ def favorite_button(checked,callback):
     def state(value):
         glyph='star-filled' if value else 'star';item.setProperty('onionGlyph',glyph)
         item.setIcon(icon(glyph,control_accent(item) if value else '#a4b0ba'));item.setIconSize(QSize(20,20))
-        title='取消收藏' if value else '收藏';item.setToolTip(title);item.setAccessibleName(title)
+        title=tr('取消收藏') if value else tr('收藏');item.setToolTip(title);item.setAccessibleName(title)
     item.toggled.connect(state);item.setChecked(bool(checked));state(bool(checked));item.clicked.connect(callback)
     return item
 
@@ -295,7 +296,7 @@ def icon_button(title,callback,glyph):
     return control
 
 
-def menu_button(entries,title='更多'):
+def menu_button(entries,title=tr('更多')):
     def show():
         from .choices import ActionMenu
         menu=ActionMenu(control)
@@ -474,7 +475,7 @@ class ContentRow(QWidget):
         super().__init__();self.glyph=glyph;self.has_artwork=False;self._fallback_color=None;self.setObjectName('listRow');self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground,True);self.setFixedHeight(68);self.line=row(self,10,14)
         self.check=None
         if enabled is not None:
-            self.check=ContentCheck();self.check.setChecked(enabled);self.check.setToolTip('启用此模组');self.check.setAccessibleName('启用 '+title)
+            self.check=ContentCheck();self.check.setChecked(enabled);self.check.setToolTip(tr('启用此模组'));self.check.setAccessibleName(tr('启用 ')+title)
             if on_toggle:self.check.clicked.connect(lambda _:on_toggle())
             self.line.addWidget(self.check)
         self.image=QLabel();self.image.setPixmap(icon(glyph).pixmap(32,32));self.image.setFixedSize(36,36);self.image.setAlignment(Qt.AlignmentFlag.AlignCenter);self.line.addWidget(self.image)
@@ -666,7 +667,7 @@ def setting_row(layout,title,description,control):
     """A HMCL-style title, explanation and aligned editor row."""
     container=SettingsRow();container.setMinimumHeight(58)
     line=row(container,16,20);line.setContentsMargins(16,6,16,6)
-    text=label(title,'settingTitle');text.setToolTip(description);text.setMinimumWidth(128);line.addWidget(text,1)
+    text=label(title,'settingTitle');text.setToolTip(tr(description));text.setMinimumWidth(128);line.addWidget(text,1)
     if isinstance(control,QWidget):
         if isinstance(control,QSpinBox):
             control.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons);control.setAlignment(Qt.AlignmentFlag.AlignRight);control.setFixedWidth(140)
@@ -716,13 +717,13 @@ class TaskDialog(QDialog):
         self.stages.setWidget(self.stage_content);self.body.addWidget(self.stages,1)
         self.rows=[];self.current=None;self.cancelled=False;self.job=None
         self.detail=QWidget();detail=column(self.detail,30,6);detail.setContentsMargins(30,0,0,6)
-        self.message=label('准备中…','muted',True);detail.addWidget(self.message)
+        self.message=label(tr('准备中…'),'muted',True);detail.addWidget(self.message)
         self.progress=QProgressBar();self.progress.setRange(0,0);self.progress.setTextVisible(False);self.progress.setFixedHeight(5);detail.addWidget(self.progress)
         self.amount=label('','muted');detail.addWidget(self.amount)
         self.stage_body.addWidget(self.detail)
         footer=row();stats=column(spacing=3)
         self.speed=label('0 B/s','muted');self.transferred=label('','muted');stats.addWidget(self.speed);stats.addWidget(self.transferred)
-        footer.addLayout(stats,1);footer.addWidget(button('后台运行',self.background),0,Qt.AlignmentFlag.AlignBottom);self.cancel_button=button('取消',self.cancel_job);footer.addWidget(self.cancel_button,0,Qt.AlignmentFlag.AlignBottom);self.body.addLayout(footer)
+        footer.addLayout(stats,1);footer.addWidget(button(tr('后台运行'),self.background),0,Qt.AlignmentFlag.AlignBottom);self.cancel_button=button(tr('取消'),self.cancel_job);footer.addWidget(self.cancel_button,0,Qt.AlignmentFlag.AlignBottom);self.body.addLayout(footer)
         self.samples=deque();self.total_bytes=0;self.timer=QTimer(self);self.timer.setInterval(250);self.timer.timeout.connect(self.update_speed);self.timer.start()
 
     def paintEvent(self,event):
@@ -736,6 +737,8 @@ class TaskDialog(QDialog):
             value/=1024
 
     def start_stage(self,text):
+        from .i18n import message
+        text=message(text)
         if self.current and self.current[2].text()==text:return
         if self.current:self.current[1].state='done';self.current[1].update()
         item=QWidget();line=row(item,0,8);mark=TaskStageMark();line.addWidget(mark,0,Qt.AlignmentFlag.AlignTop)
@@ -746,14 +749,14 @@ class TaskDialog(QDialog):
         # Keep a bounded history and never rebuild existing rows on a progress tick.
         if len(self.rows)>80:
             old=self.rows.pop(0)[0];self.stage_body.removeWidget(old);old.hide();old.deleteLater()
-        self.message.setText('正在处理…');self.amount.clear();self.progress.setRange(0,0)
+        self.message.setText(tr('正在处理…'));self.amount.clear();self.progress.setRange(0,0)
         QTimer.singleShot(0,lambda:self.stages.ensureWidgetVisible(self.detail))
 
     def update_progress(self,value):
         if isinstance(value,dict) and value.get('kind')=='transfer':
             now=time.monotonic();previous=self.total_bytes;self.total_bytes=max(previous,int(value['bytes']))
             if not self.samples:self.samples.append((now-.25,previous))
-            self.samples.append((now,self.total_bytes));self.transferred.setText('已接收 '+self.byte_text(self.total_bytes));self.update_speed();return
+            self.samples.append((now,self.total_bytes));self.transferred.setText(tr('已接收 ')+self.byte_text(self.total_bytes));self.update_speed();return
         if self.cancelled:return
         if isinstance(value,str):self.start_stage(value)
         elif isinstance(value,tuple) and len(value)==2:
@@ -761,7 +764,7 @@ class TaskDialog(QDialog):
             if total>0:
                 fraction=max(0,min(1,done/total));self.progress.setRange(0,1000);self.progress.setValue(round(fraction*1000))
                 self.amount.setText(f'{done:,} / {total:,}  ·  {fraction:.0%}')
-                self.message.setText('当前阶段已完成' if done>=total else '正在处理…')
+                self.message.setText(tr('当前阶段已完成') if done>=total else tr('正在处理…'))
             else:self.progress.setRange(0,0);self.amount.setText('')
 
     def update_speed(self):
@@ -778,7 +781,7 @@ class TaskDialog(QDialog):
 
     def cancel_job(self):
         if self.job:self.job.cancel.set()
-        self.cancelled=True;self.cancel_button.setEnabled(False);self.message.setText('正在取消，请稍候…')
+        self.cancelled=True;self.cancel_button.setEnabled(False);self.message.setText(tr('正在取消，请稍候…'))
 
     def reject(self):
         self.cancel_job()

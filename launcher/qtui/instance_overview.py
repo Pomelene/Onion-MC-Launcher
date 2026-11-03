@@ -1,4 +1,5 @@
 """All saved folders in one instance list; never identifies instances by name alone."""
+from .i18n import tr
 from .lists import FlatTreeWidget as QTreeWidget,DETAIL_ROLE
 
 from PySide6.QtCore import Qt,QTimer
@@ -10,14 +11,14 @@ from ..instance import InstanceStore
 
 class InstanceOverview(QDialog):
     def __init__(self,owner):
-        super().__init__(owner);self.owner=owner;self.navigation_title='实例总览';self.setWindowTitle(self.navigation_title);self.rows=[];self.active=True;self.loading=False
+        super().__init__(owner);self.owner=owner;self.navigation_title=tr('实例总览');self.setWindowTitle(self.navigation_title);self.rows=[];self.active=True;self.loading=False
         self.finished.connect(lambda _:setattr(self,'active',False));body=column(self,24,12)
-        filters=row();self.query=QLineEdit();self.query.setPlaceholderText('搜索实例、目录或标签');self.query.setClearButtonEnabled(True);filters.addWidget(self.query,1)
-        self.only_favorites=QCheckBox('仅收藏');filters.addWidget(self.only_favorites);self.tags_filter=ChoiceComboBox();self.tags_filter.addItem('全部标签','');self.tags_filter.currentIndexChanged.connect(self.render);filters.addWidget(self.tags_filter);self.reload_button=icon_button('刷新',self.fetch,'refresh');filters.addWidget(self.reload_button);body.addLayout(filters)
+        filters=row();self.query=QLineEdit();self.query.setPlaceholderText(tr('搜索实例、目录或标签'));self.query.setClearButtonEnabled(True);filters.addWidget(self.query,1)
+        self.only_favorites=QCheckBox(tr('仅收藏'));filters.addWidget(self.only_favorites);self.tags_filter=ChoiceComboBox();self.tags_filter.addItem(tr('全部标签'),'');self.tags_filter.currentIndexChanged.connect(self.render);filters.addWidget(self.tags_filter);self.reload_button=icon_button(tr('刷新'),self.fetch,'refresh');filters.addWidget(self.reload_button);body.addLayout(filters)
         self.tree=QTreeWidget();self.tree.entities(1);body.addWidget(self.tree,1)
-        self.status=label('正在扫描…','muted',True);body.addWidget(self.status)
-        actions=row();self.more=menu_button(lambda:[('编辑标签',self.tags),('管理实例',lambda:self.use('instance'))]);actions.addWidget(self.more);actions.addStretch()
-        self.use_button=button('使用',lambda:self.use('home'),'primary');actions.addWidget(self.use_button);body.addLayout(actions)
+        self.status=label(tr('正在扫描…'),'muted',True);body.addWidget(self.status)
+        actions=row();self.more=menu_button(lambda:[(tr('编辑标签'),self.tags),(tr('管理实例'),lambda:self.use('instance'))]);actions.addWidget(self.more);actions.addStretch()
+        self.use_button=button(tr('使用'),lambda:self.use('home'),'primary');actions.addWidget(self.use_button);body.addLayout(actions)
         self.query.textChanged.connect(self.render);self.only_favorites.toggled.connect(self.render);self.tree.currentItemChanged.connect(lambda *_:self.selection());self.tree.itemDoubleClicked.connect(lambda *_:self.use('home'))
         self.selection();QTimer.singleShot(0,self.fetch)
 
@@ -31,7 +32,7 @@ class InstanceOverview(QDialog):
         def done(result):
             if not self.active:return
             self.loading=False;self.reload_button.setEnabled(True);self.rows,missing=result;self.populate_tags()
-            self.status.setText('不可用目录：'+'、'.join(missing) if missing else '');self.status.setVisible(bool(missing));self.render()
+            self.status.setText(tr('不可用目录：')+'、'.join(missing) if missing else '');self.status.setVisible(bool(missing));self.render()
         def failed(error):
             if self.active:self.loading=False;self.reload_button.setEnabled(True);self.status.setText(str(error));self.status.show()
         self.owner.tasks.submit(work,done,failed)
@@ -57,7 +58,7 @@ class InstanceOverview(QDialog):
         for control in (self.more,self.use_button):control.setEnabled(enabled)
 
     def populate_tags(self):
-        current=self.tags_filter.currentData();self.tags_filter.blockSignals(True);self.tags_filter.clear();self.tags_filter.addItem('全部标签','')
+        current=self.tags_filter.currentData();self.tags_filter.blockSignals(True);self.tags_filter.clear();self.tags_filter.addItem(tr('全部标签'),'')
         for tag in sorted({tag for entry in self.rows for tag in entry['tags']},key=str.casefold):self.tags_filter.addItem(tag,tag)
         self.tags_filter.setCurrentIndex(max(0,self.tags_filter.findData(current)));self.tags_filter.blockSignals(False);self.tags_filter.setVisible(self.tags_filter.count()>1)
 
@@ -76,7 +77,7 @@ class InstanceOverview(QDialog):
     def tags(self):
         item=self.current()
         if not item:return
-        value,ok=QInputDialog.getText(self,'实例标签','多个标签用逗号分隔',text=', '.join(item['tags']))
+        value,ok=QInputDialog.getText(self,tr('实例标签'),tr('多个标签用逗号分隔'),text=', '.join(item['tags']))
         if ok:
             try:
                 meta=self.store(item).update(item['id'],tags=value);item['tags']=meta.tags;self.owner.instances.load();self.populate_tags();self.render()

@@ -46,7 +46,10 @@ def project(downloader, project_id: str) -> dict:
     return downloader.fetch_json(f"{MODRINTH_API}/project/{project_id}")
 
 
-def versions(downloader, project_id: str) -> list[dict]:
+def versions(downloader, project_id: str, api_key='') -> list[dict]:
+    if str(project_id).startswith('cf:'):
+        from .curseforge import CurseForgeClient
+        return CurseForgeClient(downloader,api_key).normalized_versions(int(project_id[3:]))
     return downloader.fetch_json(f"{MODRINTH_API}/project/{project_id}/version")
 
 

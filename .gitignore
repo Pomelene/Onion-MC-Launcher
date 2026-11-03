@@ -16,6 +16,7 @@
 !/tests/
 !/scripts/
 !/packaging/
+!/build_tools/
 !/assets/
 !/docs/
 __pycache__/

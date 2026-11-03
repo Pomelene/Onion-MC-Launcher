@@ -1,4 +1,5 @@
 """Shared flat choice popups, preserving QComboBox models and native signals."""
+from .i18n import tr
 from PySide6.QtCore import Qt,QPoint,QRectF,QSize,QEvent,QSortFilterProxyModel
 from PySide6.QtGui import QColor,QPainter,QPen,QFont,QFontMetrics,QPainterPath
 from PySide6.QtWidgets import (QFrame,QComboBox,QListView,QLineEdit,QVBoxLayout,
@@ -60,7 +61,7 @@ class ChoicePopup(QFrame):
         self.owner=owner;self.setObjectName('choicePopup');self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground,True)
         self.setAttribute(Qt.WidgetAttribute.WA_NoMouseReplay,True)
         body=QVBoxLayout(self);body.setContentsMargins(8,8,8,8);body.setSpacing(6)
-        self.search=QLineEdit(self);self.search.setObjectName('choiceSearch');self.search.setPlaceholderText('搜索选项');self.search.setClearButtonEnabled(True);body.addWidget(self.search)
+        self.search=QLineEdit(self);self.search.setObjectName('choiceSearch');self.search.setPlaceholderText(tr('搜索选项'));self.search.setClearButtonEnabled(True);body.addWidget(self.search)
         self.proxy=QSortFilterProxyModel(self);self.proxy.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self.list=QListView(self);self.list.setObjectName('choiceList');self.list.setMouseTracking(True)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff);self.list.setUniformItemSizes(False);self.list.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel)

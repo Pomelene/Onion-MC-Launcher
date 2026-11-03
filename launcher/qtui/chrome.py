@@ -4,6 +4,7 @@ The header stays inside the client area. Launcher dialogs are decorated before
 display; file pickers use the platform dialog. Embedded subpages and popups keep
 their existing layout and input behavior.
 """
+from .i18n import tr
 from .choices import ActionMenu
 from PySide6.QtCore import QObject, QEvent, Qt, QRect, QTimer
 from PySide6.QtGui import QPainter,QFontMetrics
@@ -80,7 +81,7 @@ class FrameController(QObject):
             control = controls['maximize']
             control.setProperty('onionGlyph','restore' if window.isMaximized() else 'maximize')
             control.update()
-            text = '还原窗口' if window.isMaximized() else '最大化'
+            text = tr('还原窗口') if window.isMaximized() else tr('最大化')
             control.setToolTip(text)
             control.setAccessibleName(text)
 
@@ -114,11 +115,11 @@ class TitleBar(QWidget):
         window = self.controller.window
         menu = ActionMenu(self)
         if self.controller.allow_maximize:
-            menu.addAction('还原', window.showNormal).setEnabled(window.isMaximized())
-            menu.addAction('最小化', window.showMinimized)
-            menu.addAction('最大化', window.showMaximized).setEnabled(not window.isMaximized())
+            menu.addAction(tr('还原'), window.showNormal).setEnabled(window.isMaximized())
+            menu.addAction(tr('最小化'), window.showMinimized)
+            menu.addAction(tr('最大化'), window.showMaximized).setEnabled(not window.isMaximized())
             menu.addSeparator()
-        menu.addAction('关闭', window.reject if isinstance(window,QDialog) else window.close)
+        menu.addAction(tr('关闭'), window.reject if isinstance(window,QDialog) else window.close)
         menu.exec(event.globalPos())
 
 
@@ -129,9 +130,9 @@ def window_controls(controller):
     layout.setContentsMargins(0,0,7,0)
     layout.setSpacing(0)
     controls = {}
-    actions = [('minimize','最小化',window.showMinimized),
-               ('maximize','最大化',controller.toggle_maximize)] if controller.allow_maximize else []
-    actions.append(('close','关闭',window.reject if isinstance(window,QDialog) else window.close))
+    actions = [('minimize',tr('最小化'),window.showMinimized),
+               ('maximize',tr('最大化'),controller.toggle_maximize)] if controller.allow_maximize else []
+    actions.append(('close',tr('关闭'),window.reject if isinstance(window,QDialog) else window.close))
     for glyph, text, callback in actions:
         control = button('',callback,glyph=glyph)
         control.setObjectName('windowClose' if glyph=='close' else 'windowControl')

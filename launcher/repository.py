@@ -265,7 +265,7 @@ class GameRepository:
             if any(lib.name.lower().startswith("optifine:") for lib in resolved.libraries):
                 return "OptiFine"
             name, _version = _detect_loader(self, version_id)
-            return {"fabric": "Fabric", "legacyfabric":"Legacy Fabric", "quilt": "Quilt", "forge": "Forge",
+            return {"fabric": "Fabric", "legacyfabric":"Legacy Fabric", "liteloader":"LiteLoader", "quilt": "Quilt", "forge": "Forge",
                     "neoforge": "NeoForge"}.get(name, "原版")
         except (OSError, ValueError):
             return "未知"

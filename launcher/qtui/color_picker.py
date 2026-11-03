@@ -1,4 +1,5 @@
 """Compact HSV picker with explicit, reversible colour selection."""
+from .i18n import tr
 import re
 
 from PySide6.QtCore import Qt, Signal, QRectF, QPointF, QSignalBlocker
@@ -34,7 +35,7 @@ class SaturationValue(QWidget):
     def __init__(self,parent=None):
         super().__init__(parent);self.hue=258;self.saturation=0.;self.value=1.
         self.setMinimumSize(360,210);self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setCursor(Qt.CursorShape.CrossCursor);self.setAccessibleName('饱和度与明度，方向键调整，Shift 加速')
+        self.setCursor(Qt.CursorShape.CrossCursor);self.setAccessibleName(tr('饱和度与明度，方向键调整，Shift 加速'))
 
     def area(self):return QRectF(self.rect()).adjusted(7,7,-7,-7)
 
@@ -75,7 +76,7 @@ class SaturationValue(QWidget):
 class HueSlider(QSlider):
     def __init__(self,parent=None):
         super().__init__(Qt.Orientation.Horizontal,parent);self.setRange(0,359);self.setFixedHeight(28)
-        self.setAccessibleName('色相');self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAccessibleName(tr('色相'));self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def paintEvent(self,event):
         p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -103,7 +104,7 @@ class ColorPicker(QDialog):
              '#a3e635','#facc15','#fb923c','#f87171','#f472b6','#e2e8f0')
 
     def __init__(self,color,parent=None):
-        super().__init__(parent);self.setWindowTitle('选择特征色');self.setObjectName('colorPicker')
+        super().__init__(parent);self.setWindowTitle(tr('选择特征色'));self.setObjectName('colorPicker')
         self.original=QColor(color) if QColor(color).isValid() else QColor('#cebafa')
         self.color=QColor(self.original);self.hue=258
         self.setFixedWidth(540)
@@ -116,28 +117,28 @@ class ColorPicker(QDialog):
             presets.addWidget(swatch);self.swatches.append(swatch)
         presets.addStretch();body.addLayout(presets)
         values=QHBoxLayout();values.setSpacing(16)
-        self.original_swatch=ColorSwatch(self.original,self,44);self.original_swatch.setAccessibleName('恢复原颜色')
-        self.original_swatch.setToolTip('恢复原颜色');self.original_swatch.clicked.connect(lambda:self.set_color(self.original))
+        self.original_swatch=ColorSwatch(self.original,self,44);self.original_swatch.setAccessibleName(tr('恢复原颜色'))
+        self.original_swatch.setToolTip(tr('恢复原颜色'));self.original_swatch.clicked.connect(lambda:self.set_color(self.original))
         self.preview=ColorSwatch(self.color,self,44);self.preview.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.preview.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         samples=QVBoxLayout();samples.setSpacing(3);samples.setContentsMargins(0,0,0,0)
         sample_row=QHBoxLayout();sample_row.setSpacing(3);sample_row.addWidget(self.original_swatch);sample_row.addWidget(self.preview)
-        samples.addLayout(sample_row);samples.addWidget(label('原色 / 新色','muted'),0,Qt.AlignmentFlag.AlignHCenter)
+        samples.addLayout(sample_row);samples.addWidget(label(tr('原色 / 新色'),'muted'),0,Qt.AlignmentFlag.AlignHCenter)
         values.addLayout(samples)
         fields=QGridLayout();fields.setHorizontalSpacing(10);fields.setVerticalSpacing(6)
-        self.hex=QLineEdit();self.hex.setMaxLength(7);self.hex.setAccessibleName('HEX 颜色');self.hex.setFixedHeight(36)
+        self.hex=QLineEdit();self.hex.setMaxLength(7);self.hex.setAccessibleName(tr('HEX 颜色'));self.hex.setFixedHeight(36)
         self.hex.setAlignment(Qt.AlignmentFlag.AlignCenter)
         fields.addWidget(label('HEX','muted'),0,0);fields.addWidget(self.hex,1,0)
         self.rgb=[]
         for column,title in enumerate(('R','G','B'),1):
             field=InlineSpinBox();field.setRange(0,255);field.setFixedSize(66,36)
             field.setAlignment(Qt.AlignmentFlag.AlignCenter);field.setButtonSymbols(InlineSpinBox.ButtonSymbols.NoButtons)
-            field.setAccessibleName({'R':'红色','G':'绿色','B':'蓝色'}[title]);fields.addWidget(label(title,'muted'),0,column)
+            field.setAccessibleName({'R':tr('红色'),'G':tr('绿色'),'B':tr('蓝色')}[title]);fields.addWidget(label(title,'muted'),0,column)
             fields.addWidget(field,1,column);self.rgb.append(field);field.valueChanged.connect(self.rgb_changed)
         fields.setColumnStretch(0,1);values.addLayout(fields,1);body.addLayout(values)
         self.error=label('','muted');self.error.setFixedHeight(18);body.addWidget(self.error)
         footer=QHBoxLayout();footer.addStretch();footer.setSpacing(10)
-        self.cancel=button('取消',self.reject,'soft');self.confirm=button('应用颜色',self.accept,'primary')
+        self.cancel=button(tr('取消'),self.reject,'soft');self.confirm=button(tr('应用颜色'),self.accept,'primary')
         for control in (self.cancel,self.confirm):control.setMinimumWidth(100);control.setFixedHeight(38);footer.addWidget(control)
         self.confirm.setDefault(True);body.addLayout(footer)
         self.plane.changed.connect(self.sv_changed);self.hue_slider.valueChanged.connect(self.hue_changed)
@@ -172,7 +173,7 @@ class ColorPicker(QDialog):
 
     def hex_changed(self,text):
         valid=bool(re.fullmatch(r'#?[0-9a-fA-F]{6}',text))
-        self.confirm.setEnabled(valid);self.error.setText('' if valid else '请输入 6 位十六进制颜色')
+        self.confirm.setEnabled(valid);self.error.setText('' if valid else tr('请输入 6 位十六进制颜色'))
         if valid:self.set_color(QColor('#'+text.lstrip('#')),update_hex=False)
 
     def finish_hex(self):

@@ -1,4 +1,5 @@
 """Asynchronous, full-viewport biome atlas. Gestures never wait for generation."""
+from .i18n import tr
 import math
 from array import array
 from collections import OrderedDict
@@ -34,7 +35,7 @@ class MapCanvas(QWidget):
         self.enabled_layers=set(STRUCTURES);self.grid=False;self.active=False;self.selection=None;self.show_markers=True
         self.drag=None;self.drag_distance=0;self.hit_regions=[];self.image=QImage()
         self.setMinimumSize(320,300);self.setMouseTracking(True);self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setCursor(Qt.CursorShape.OpenHandCursor);self.setAccessibleName('种子地图，拖动平移，滚轮缩放，单击查看坐标')
+        self.setCursor(Qt.CursorShape.OpenHandCursor);self.setAccessibleName(tr('种子地图，拖动平移，滚轮缩放，单击查看坐标'))
         self.animation=QVariantAnimation(self);self.animation.setDuration(200)
         self.animation.setEasingCurve(QEasingCurve.Type.OutCubic);self.animation.valueChanged.connect(self.zoom_frame)
         self.animation.finished.connect(self.moved);self.anchor=QPointF();self.zoom_target=4
@@ -58,15 +59,18 @@ class MapCanvas(QWidget):
         for tile in sorted(self.tiles.values(),key=lambda t:t[4]):
             _,ids,legend,(ox,oz),scale,size=tile
             px,pz=math.floor((x-ox)/scale),math.floor((z-oz)/scale)
-            if 0<=px<size and 0<=pz<size:return biome_name(legend[ids[pz*size+px]])
-        return '地图计算中'
+            if 0<=px<size and 0<=pz<size:
+                from .i18n import is_english
+                key=legend[ids[pz*size+px]]
+                return key.replace('_',' ').title() if is_english() else biome_name(key)
+        return tr('地图计算中')
 
     def paintEvent(self,event):
         p=QPainter(self);p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.fillRect(self.rect(),paint_color(self,'base'))
         if not self.active:
             p.setPen(paint_color(self,'muted',text=True))
-            p.drawText(self.rect(),Qt.AlignmentFlag.AlignCenter,'输入世界种子，探索生物群系与结构');return
+            p.drawText(self.rect(),Qt.AlignmentFlag.AlignCenter,tr('输入世界种子，探索生物群系与结构'));return
         for image,ids,legend,(x,z),scale,size in sorted(self.tiles.values(),key=lambda t:-t[4]):
             point=self.screen(x,z);side=size*scale/self.view.blocks_per_pixel
             target=QRectF(point.x(),point.y(),side,side)
@@ -87,17 +91,19 @@ class MapCanvas(QWidget):
             point=self.screen(x,z);rect=QRectF(point.x()-11,point.y()-13,22,26)
             if not rect.intersects(QRectF(self.rect())):continue
             _,glyph,color=next(item for item in BADGES if item[0]==name)
+            from .i18n import is_english
+            if is_english():glyph=tr(name)[0]
             active=(name,x,z)==self.selection
             p.setPen(QPen(QColor(255,255,255,255 if active else 200),2 if active else 1))
             p.setBrush(QColor(color));p.drawRoundedRect(rect,7,7)
             p.setPen(QColor('white'));p.drawText(rect,Qt.AlignmentFlag.AlignCenter,glyph)
             self.hit_regions.append((rect,(name,x,z)))
             if self.view.blocks_per_pixel<=2 or active:
-                width=p.fontMetrics().horizontalAdvance(name)+14
+                width=p.fontMetrics().horizontalAdvance(tr(name))+14
                 text_rect=QRectF(point.x()+15,point.y()-12,width,24)
                 if active or not any(text_rect.intersects(r) for r in occupied):
                     p.setPen(Qt.PenStyle.NoPen);p.setBrush(QColor(24,25,36,220));p.drawRoundedRect(text_rect,6,6)
-                    p.setPen(QColor('white'));p.drawText(text_rect,Qt.AlignmentFlag.AlignCenter,name);occupied.append(text_rect)
+                    p.setPen(QColor('white'));p.drawText(text_rect,Qt.AlignmentFlag.AlignCenter,tr(name));occupied.append(text_rect)
         if self.selection:
             point=self.screen(*self.selection[1:]);p.setBrush(Qt.BrushStyle.NoBrush)
             p.setPen(QPen(QColor(control_accent(self)),2));p.drawEllipse(point,19,19)
@@ -113,7 +119,7 @@ class MapCanvas(QWidget):
         p.setPen(Qt.PenStyle.NoPen);p.setBrush(QColor(24,25,36,210));p.drawRoundedRect(QRectF(12,self.height()-49,max(95,length+24),37),8,8)
         p.setPen(QPen(QColor('white'),2));y=self.height()-22
         p.drawLine(QPointF(24,y),QPointF(24+length,y));p.drawLine(QPointF(24,y-3),QPointF(24,y+3));p.drawLine(QPointF(24+length,y-3),QPointF(24+length,y+3))
-        p.drawText(QRectF(24,y-23,max(70,length),20),f'{distance:,} 方块')
+        p.drawText(QRectF(24,y-23,max(70,length),20),f"{distance:,}{tr(' 方块')}")
 
     def resizeEvent(self,event):super().resizeEvent(event);self.moved.emit()
     def mousePressEvent(self,event):
@@ -156,8 +162,8 @@ class MapCanvas(QWidget):
         if not self.active:return
         x,z=self.world(QPointF(event.pos()));x,z=math.floor(x),math.floor(z)
         menu=ActionMenu(self)
-        menu.addAction(f'复制坐标 · {x}, {z}',lambda:QApplication.clipboard().setText(f'X {x} Z {z}'))
-        menu.addAction('复制传送指令',lambda:QApplication.clipboard().setText(f'/tp @s {x} ~ {z}'))
+        menu.addAction(f"{tr('复制坐标 · ')}{x}, {z}",lambda:QApplication.clipboard().setText(f'X {x} Z {z}'))
+        menu.addAction(tr('复制传送指令'),lambda:QApplication.clipboard().setText(f'/tp @s {x} ~ {z}'))
         menu.exec(event.globalPos())
 
 
@@ -167,42 +173,42 @@ class SeedMap(QWidget):
         self.failed_tiles=set();self.structure_job=False;self.structure_coverage=None
         self.timer=QTimer(self);self.timer.setSingleShot(True);self.timer.setInterval(130);self.timer.timeout.connect(self.refresh_view)
         body=column(self,0,10);top=row(spacing=8)
-        self.seed=QLineEdit();self.seed.setPlaceholderText('世界种子 · 数字或文本');top.addWidget(self.seed,1)
+        self.seed=QLineEdit();self.seed.setPlaceholderText(tr('世界种子 · 数字或文本'));top.addWidget(self.seed,1)
         self.version=ChoiceComboBox();self.version.addItems(VERSIONS);top.addWidget(self.version)
         self.dimension=ChoiceComboBox()
-        for title,value in [('主世界',0),('下界',-1),('末地',1)]:self.dimension.addItem(title,value)
-        top.addWidget(self.dimension);self.go=button('探索地图',self.render_map,'primary','world');top.addWidget(self.go)
-        top.addWidget(button('读取存档',self.read_world,glyph='folder'));body.addLayout(top)
+        for title,value in [(tr('主世界'),0),(tr('下界'),-1),(tr('末地'),1)]:self.dimension.addItem(title,value)
+        top.addWidget(self.dimension);self.go=button(tr('探索地图'),self.render_map,'primary','world');top.addWidget(self.go)
+        top.addWidget(button(tr('读取存档'),self.read_world,glyph='folder'));body.addLayout(top)
         controls=row(spacing=8);self.coords=[]
         for name,lo,hi,value in [('X',-29_000_000,29_000_000,0),('Z',-29_000_000,29_000_000,0),('Y',-64,320,64)]:
             controls.addWidget(label(name,'muted'));spin=InlineSpinBox();spin.setRange(lo,hi);spin.setValue(value)
             spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
             spin.setMinimumWidth(74);spin.setMaximumWidth(125);controls.addWidget(spin);self.coords.append(spin)
-        controls.addWidget(button('定位',self.locate,glyph='search'));controls.addStretch()
-        self.grid=QCheckBox('网格');controls.addWidget(self.grid)
-        self.layer_toggle=button('图层',self.toggle_layers,glyph='list');controls.addWidget(self.layer_toggle)
+        controls.addWidget(button(tr('定位'),self.locate,glyph='search'));controls.addStretch()
+        self.grid=QCheckBox(tr('网格'));controls.addWidget(self.grid)
+        self.layer_toggle=button(tr('图层'),self.toggle_layers,glyph='list');controls.addWidget(self.layer_toggle)
         controls.addWidget(button('−',lambda:self.canvas.zoom_to(self.canvas.view.blocks_per_pixel*2)))
         controls.addWidget(button('+',lambda:self.canvas.zoom_to(self.canvas.view.blocks_per_pixel/2)))
-        controls.addWidget(button('原点',lambda:self.pan(-self.canvas.view.x,-self.canvas.view.z)))
+        controls.addWidget(button(tr('原点'),lambda:self.pan(-self.canvas.view.x,-self.canvas.view.z)))
         body.addLayout(controls)
         content=row(spacing=10);body.addLayout(content,1)
         self.layers=QWidget();self.layers.setFixedWidth(176);left=column(self.layers,0,8)
-        left.addWidget(label('结构图层','heading'));toggles=row(spacing=4)
-        toggles.addWidget(button('全选',lambda:self.set_layers(True)));toggles.addWidget(button('清空',lambda:self.set_layers(False)));left.addLayout(toggles)
+        left.addWidget(label(tr('结构图层'),'heading'));toggles=row(spacing=4)
+        toggles.addWidget(button(tr('全选'),lambda:self.set_layers(True)));toggles.addWidget(button(tr('清空'),lambda:self.set_layers(False)));left.addLayout(toggles)
         scroll=QScrollArea();scroll.setWidgetResizable(True);scroll.setFrameShape(scroll.Shape.NoFrame)
         list_widget=QWidget();listing=column(list_widget,0,4);self.checks={}
         for name,glyph,color in BADGES:
-            check=QCheckBox(name);check.setChecked(name not in ('试炼密室','废弃营地'));check.setMinimumHeight(29)
-            check.setToolTip('预测位置，未校验全部地形条件');check.toggled.connect(self.update_layers)
+            check=QCheckBox(tr(name));check.setChecked(name not in ('试炼密室','废弃营地'));check.setMinimumHeight(29)
+            check.setToolTip(tr('预测位置，未校验全部地形条件'));check.toggled.connect(self.update_layers)
             listing.addWidget(check);self.checks[name]=check
         listing.addStretch();scroll.setWidget(list_widget);left.addWidget(scroll,1)
-        self.detail=label('单击地图查看位置','muted',True);left.addWidget(self.detail)
-        self.copy=button('复制坐标',self.copy_selection,glyph='copy');self.copy.setEnabled(False);left.addWidget(self.copy)
-        self.tp=button('复制传送指令',lambda:self.copy_selection(True));self.tp.setEnabled(False);left.addWidget(self.tp)
+        self.detail=label(tr('单击地图查看位置'),'muted',True);left.addWidget(self.detail)
+        self.copy=button(tr('复制坐标'),self.copy_selection,glyph='copy');self.copy.setEnabled(False);left.addWidget(self.copy)
+        self.tp=button(tr('复制传送指令'),lambda:self.copy_selection(True));self.tp.setEnabled(False);left.addWidget(self.tp)
         content.addWidget(self.layers);self.canvas=MapCanvas();content.addWidget(self.canvas,1)
-        footer=row(spacing=12);self.status=label('Java 版 · 拖动平移 / 滚轮缩放','muted');footer.addWidget(self.status,1)
+        footer=row(spacing=12);self.status=label(tr('Java 版 · 拖动平移 / 滚轮缩放'),'muted');footer.addWidget(self.status,1)
         self.progress=label('','muted');footer.addWidget(self.progress);body.addLayout(footer)
-        self.progress.setToolTip('结构为生成规则预测位置；不包含模组结构，尚未校验全部地形条件')
+        self.progress.setToolTip(tr('结构为生成规则预测位置；不包含模组结构，尚未校验全部地形条件'))
         self.canvas.moved.connect(self.view_moved);self.canvas.hovered.connect(self.status.setText)
         self.canvas.selected.connect(self.select);self.grid.toggled.connect(self.change_grid);self.seed.returnPressed.connect(self.render_map)
         self.coords[2].editingFinished.connect(self.locate)
@@ -219,7 +225,7 @@ class SeedMap(QWidget):
         if not hasattr(self,'canvas'):return
         self.canvas.enabled_layers={name for name,check in self.checks.items() if check.isChecked()};self.canvas.update()
     def select(self,name,x,z):
-        self.detail.setText(f'{name}\nX {x:,}   Z {z:,}');self.copy.setEnabled(True);self.tp.setEnabled(True)
+        self.detail.setText(f'{tr(name)}\nX {x:,}   Z {z:,}');self.copy.setEnabled(True);self.tp.setEnabled(True)
         if self.layers.isHidden():self.layers.show()
     def copy_selection(self,tp=False):
         if not self.canvas.selection:return
@@ -244,7 +250,7 @@ class SeedMap(QWidget):
         if context!=self.context:
             self.context=context;self.epoch+=1;self.canvas.tiles.clear();self.canvas.markers=[];self.canvas.selection=None
             self.failed_tiles.clear();self.structure_coverage=None;self.copy.setEnabled(False);self.tp.setEnabled(False)
-            self.detail.setText('单击地图查看位置')
+            self.detail.setText(tr('单击地图查看位置'))
             for name,check in self.checks.items():
                 dimension=-1 if name in ('下界要塞','堡垒遗迹') else 1 if name=='末地城' else 0
                 check.setVisible(dimension==context[2])
@@ -280,14 +286,14 @@ class SeedMap(QWidget):
                 self.pump_tiles()
             self.owner.tasks.submit(work,done,failed)
         remaining=sum(key not in self.canvas.tiles and key not in self.failed_tiles for key in self.wanted)
-        self.progress.setText(f'补齐地图 · {remaining} 块' if remaining else '本地地图 · 结构预测')
+        self.progress.setText(f"{tr('补齐地图 · ')}{remaining}{tr(' 块')}" if remaining else tr('本地地图 · 结构预测'))
         if not remaining:self.wanted=[]
     def query_structures(self):
         bounds=self.canvas.view.bounds(self.canvas.width(),self.canvas.height())
         span=math.ceil(max(bounds[2]-bounds[0],bounds[3]-bounds[1])*1.3)
         self.canvas.show_markers=span<=16000;self.canvas.update()
         if span>16000:
-            self.progress.setText('放大地图以查看结构');return
+            self.progress.setText(tr('放大地图以查看结构'));return
         if self.structure_coverage and self.structure_coverage[0]==self.epoch:
             _,x,z,size=self.structure_coverage
             if x<=bounds[0] and z<=bounds[1] and x+size>=bounds[2] and z+size>=bounds[3]:return
@@ -305,13 +311,13 @@ class SeedMap(QWidget):
             if isValid(self):self.structure_job=False;self.status.setText(str(error))
         self.owner.tasks.submit(lambda job:structure_positions(seed,version,dimension,x,z,span),done,failed)
     def read_world(self):
-        path,_=QFileDialog.getOpenFileName(self,'选择存档 level.dat','','世界数据 (level.dat)')
+        path,_=QFileDialog.getOpenFileName(self,tr('选择存档 level.dat'),'',tr('世界数据 (level.dat)'))
         if not path:return
         from ..worlds import read_level_dat
         try:
             data=read_level_dat(Path(path));settings=data.get('WorldGenSettings',{})
             seed=settings.get('seed') if isinstance(settings,dict) else None
             if seed is None:seed=data.get('RandomSeed')
-            if not isinstance(seed,int):raise ValueError('未能读取世界种子')
-            self.seed.setText(str(seed));self.status.setText('已读取种子，请核对版本后探索地图')
+            if not isinstance(seed,int):raise ValueError(tr('未能读取世界种子'))
+            self.seed.setText(str(seed));self.status.setText(tr('已读取种子，请核对版本后探索地图'))
         except Exception as error:self.status.setText(str(error))

@@ -87,6 +87,14 @@ def _read_mcmod_info(zf: zipfile.ZipFile) -> Optional[dict]:
     return None
 
 
+def _read_litemod_meta(zf: zipfile.ZipFile) -> Optional[dict]:
+    try:
+        data = json.loads(_metadata_bytes(zf, 'litemod.json').decode('utf-8-sig', 'replace'))
+        return data if isinstance(data, dict) else None
+    except (KeyError, ValueError, OSError):
+        return None
+
+
 def read_mod_info(path: Path, *, metadata=None) -> ModInfo:
     global _INFO_BYTES
     path=Path(path)
@@ -121,7 +129,7 @@ def _read_mod_info(path: Path) -> ModInfo:
     info = ModInfo(path=path, name=path.stem.replace(".jar", ""), enabled=enabled)
     try:
         with zipfile.ZipFile(path) as zf:
-            meta = _read_fabric_meta(zf) or _read_forge_toml(zf) or _read_mcmod_info(zf)
+            meta = _read_fabric_meta(zf) or _read_forge_toml(zf) or _read_mcmod_info(zf) or _read_litemod_meta(zf)
     except (zipfile.BadZipFile, ValueError, OSError,RuntimeError):
         return info
     if meta:
@@ -140,7 +148,7 @@ def scan_mods(mods_dir: Path) -> list[ModInfo]:
         files=sorted((entry for entry in entries if entry.is_file(follow_symlinks=False)),key=lambda entry:entry.name)
     for entry in files:
         p=Path(entry.path)
-        if p.suffix.lower() in (".jar", ".zip") or p.name.lower().endswith((".jar.disabled", ".zip.disabled")):
+        if p.suffix.lower() in (".jar", ".zip", ".litemod") or p.name.lower().endswith((".jar.disabled", ".zip.disabled", ".litemod.disabled")):
             result.append(read_mod_info(p,metadata=entry.stat(follow_symlinks=False)))
     return result
 

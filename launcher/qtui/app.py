@@ -1,4 +1,5 @@
 """Onion Minecraft Launcher Qt shell: HMCL-inspired navigation and native high-DPI rendering."""
+from .i18n import tr
 import sys
 import time
 from pathlib import Path
@@ -29,6 +30,8 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
 
     def __init__(self,config_path=None,root=None):
         super().__init__();install_window_chrome(QApplication.instance());self.root=Path(root or app_root());self.config_obj=Config(config_path or self.root/'onionmcl.json')
+        from .i18n import set_locale
+        set_locale(self.config_obj.get('language'))
         from ..storage import is_portable
         portable=self.config_obj.path if is_portable(self.config_obj.path) else None
         self.repo=GameRepository(self.config_obj);self.accounts=AccountStore(portable or self.root/'config/accounts.json')
@@ -56,10 +59,10 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         toolbar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground,True)
         home_area=QWidget();home_area.setFixedWidth(220);home_line=row(home_area,12,0)
         self.home_area=home_area;self.home_line=home_line
-        self.home_button=button('返回首页',lambda:self.navigate('home'),'soft','home');self.home_button.setAccessibleName('返回首页');home_line.addWidget(self.home_button);home_line.addStretch();top.addWidget(home_area)
+        self.home_button=button(tr('返回首页'),lambda:self.navigate('home'),'soft','home');self.home_button.setAccessibleName(tr('返回首页'));home_line.addWidget(self.home_button);home_line.addStretch();top.addWidget(home_area)
         heading=QWidget();heading_line=row(heading,0,10);heading_line.setContentsMargins(24,0,12,0);top.addWidget(heading,1)
         self.heading_area=heading;self.heading_line=heading_line
-        self.back_button=button('',self.go_back,glyph='back');self.back_button.setFixedSize(30,34);self.back_button.setStyleSheet('padding:0;');self.back_button.setToolTip('返回上一页');self.back_button.setAccessibleName('返回上一页');heading_line.addWidget(self.back_button)
+        self.back_button=button('',self.go_back,glyph='back');self.back_button.setFixedSize(30,34);self.back_button.setStyleSheet('padding:0;');self.back_button.setToolTip(tr('返回上一页'));self.back_button.setAccessibleName(tr('返回上一页'));heading_line.addWidget(self.back_button)
         self.title=label('','heading');self.title.setMinimumWidth(0);self.title.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Preferred);heading_line.addWidget(self.title,1)
         self.brand_widget=QWidget();branding=row(self.brand_widget,0,8);branding.addWidget(label('Onion','heading'));branding.addWidget(label(LAUNCHER_VERSION,'pill'),0,Qt.AlignmentFlag.AlignVCenter);heading_line.addWidget(self.brand_widget);top.addWidget(window_controls(self.frame_controller));outer.addWidget(toolbar)
         lower=row(spacing=0);outer.addLayout(lower,1)
@@ -80,7 +83,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         self.status=FeedbackLabel();self.status.setContentsMargins(14,4,14,4);body.addWidget(self.status)
         self.task_strip=QWidget();strip=column(self.task_strip,10,5);info=row(spacing=8)
         self.task_stage=label('','muted');info.addWidget(self.task_stage,1);self.task_amount=label('','muted');info.addWidget(self.task_amount)
-        self.task_cancel=button('取消',self.cancel_active_task);info.addWidget(button('任务中心',lambda:self.open_task_center(),'soft','history'));info.addWidget(self.task_cancel);strip.addLayout(info)
+        self.task_cancel=button(tr('取消'),self.cancel_active_task);info.addWidget(button(tr('任务中心'),lambda:self.open_task_center(),'soft','history'));info.addWidget(self.task_cancel);strip.addLayout(info)
         self.task_progress=QProgressBar();self.task_progress.setTextVisible(False);strip.addWidget(self.task_progress);body.addWidget(self.task_strip);self.task_strip.hide();self.active_task=None
         self.selector=QComboBox(self);self.selector.hide();self.selector.currentIndexChanged.connect(self.choose_version)
         self.logs=QPlainTextEdit();self.logs.setReadOnly(True);self.logs.setMaximumBlockCount(3000)
@@ -142,32 +145,34 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
             from .game_libraries import LibraryRail
             self.library_rail=LibraryRail(self);nav.addWidget(self.library_rail,1)
         elif key=='instance' and self.selected_version:
-            for name,title,glyph in [('game','游戏设置','settings'),('auto','自动安装','package'),('mods','模组管理','package'),('resourcepacks','资源包管理','grid'),('shaderpacks','光影管理','world'),('worlds','世界管理','world'),('schematics','原理图管理','schematic'),('screenshots','截图管理','image'),('logs','运行日志','history')]:
+            for name,title,glyph in [('game',tr('游戏设置'),'settings'),('auto',tr('自动安装'),'package'),('mods',tr('模组管理'),'package'),('resourcepacks',tr('资源包管理'),'grid'),('shaderpacks',tr('光影管理'),'world'),('worlds',tr('世界管理'),'world'),('schematics',tr('原理图管理'),'schematic'),('screenshots',tr('截图管理'),'image'),('logs',tr('运行日志'),'history')]:
                 item=entry(name,title,glyph,lambda k=name:self.open_instance_tab(k));item.setChecked(name==self.instance_tab)
-            nav.addStretch();entry('launch','启动游戏','play',self.launch_selected);entry('folder','浏览实例目录','folder',lambda:self.open_folder(self.repo.run_dir(self.selected_version)));entry('info','管理','settings',lambda:self.open_instance_tab('info'))
+            nav.addStretch();entry('launch',tr('启动游戏'),'play',self.launch_selected);entry('folder',tr('浏览实例目录'),'folder',lambda:self.open_folder(self.repo.run_dir(self.selected_version)));entry('info',tr('管理'),'settings',lambda:self.open_instance_tab('info'))
         elif key=='tools':
-            for name,title,glyph in [('skins','皮肤管理','skin'),('seedmap','种子地图','world'),('services','社团服务','tools')]:
+            tools=[('skins',tr('皮肤管理'),'skin'),('seedmap',tr('种子地图'),'world')]
+            if LAUNCHER_VERSION.endswith('-T'):tools.append(('services',tr('社团服务'),'tools'))
+            for name,title,glyph in tools:
                 item=entry(name,title,glyph,lambda k=name:self.open_tools_tab(k));item.setChecked(name==getattr(self,'tools_tab','skins'))
             nav.addStretch()
         elif key=='settings' and self.settings_editor:
             for title,index in self.settings_editor.tab_names.items():
-                item=entry(title,title,'java' if title=='Java 管理' else 'settings',lambda i=index:self.open_settings_tab(i));item.setChecked(index==self.settings_editor.stack.currentIndex())
-            nav.addStretch();entry('about','关于','package',lambda:self.navigate('about'))
+                item=entry(title,title,'java' if title==tr('Java 管理') else 'settings',lambda i=index:self.open_settings_tab(i));item.setChecked(index==self.settings_editor.stack.currentIndex())
+            nav.addStretch();entry('about',tr('关于'),'package',lambda:self.navigate('about'))
         elif key=='download':
-            heading('新游戏');entry('install','安装游戏','grid',self.install_dialog)
-            item=entry('modpack','整合包','package',lambda:self.choose_download_kind('modpack'));item.setChecked(getattr(self,'download_kind','mod')=='modpack')
-            heading('游戏内容')
-            for name,title,glyph in [('mod','模组','package'),('resourcepack','资源包','grid'),('shader','光影','world')]:
+            heading(tr('新游戏'));entry('install',tr('安装游戏'),'grid',self.install_dialog)
+            item=entry('modpack',tr('整合包'),'package',lambda:self.choose_download_kind('modpack'));item.setChecked(getattr(self,'download_kind','mod')=='modpack')
+            heading(tr('游戏内容'))
+            for name,title,glyph in [('mod',tr('模组'),'package'),('resourcepack',tr('资源包'),'grid'),('shader',tr('光影'),'world')]:
                 item=entry(name,title,glyph,lambda k=name:self.choose_download_kind(k));item.setChecked(name==getattr(self,'download_kind','mod'))
-            heading('任务');item=entry('tasks','下载任务','history',self.open_task_center);item.setChecked(getattr(self,'download_kind','mod')=='tasks')
-            nav.addStretch();entry('import','导入整合包','plus',self.import_modpack)
+            heading(tr('任务'));item=entry('tasks',tr('下载任务'),'history',self.open_task_center);item.setChecked(getattr(self,'download_kind','mod')=='tasks')
+            nav.addStretch();entry('import',tr('导入整合包'),'plus',self.import_modpack)
         else:
-            heading('账户');account=self.accounts.current()
-            self.account_button=entry('account',account.username if account else '添加账户','account',self.open_accounts)
+            heading(tr('账户'));account=self.accounts.current()
+            self.account_button=entry('account',account.username if account else tr('添加账户'),'account',self.open_accounts)
             self.account_button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu);self.account_button.customContextMenuRequested.connect(self.show_account_menu)
-            heading('游戏');entry('instance','实例管理','settings',lambda:self.navigate('instance'),self.instances.display_name(self.selected_version) if self.selected_version else '尚未选择游戏实例')
-            entry('versions','实例列表','grid',lambda:self.navigate('versions'));entry('download','下载','download',lambda:self.navigate('download'))
-            heading('通用');entry('tools','工具坊','tools',lambda:self.navigate('tools'));entry('settings','设置','settings',lambda:self.navigate('settings'));entry('about','关于','package',lambda:self.navigate('about'));nav.addStretch()
+            heading(tr('游戏'));entry('instance',tr('实例管理'),'settings',lambda:self.navigate('instance'),self.instances.display_name(self.selected_version) if self.selected_version else tr('尚未选择游戏实例'))
+            entry('versions',tr('实例列表'),'grid',lambda:self.navigate('versions'));entry('download',tr('下载'),'download',lambda:self.navigate('download'))
+            heading(tr('通用'));entry('tools',tr('工具坊'),'tools',lambda:self.navigate('tools'));entry('settings',tr('设置'),'settings',lambda:self.navigate('settings'));entry('about',tr('关于'),'package',lambda:self.navigate('about'));nav.addStretch()
             for name,item in self.nav.items():item.setChecked(name==key)
         self.update_selection()
         self.sync_navigation_motion(False)
@@ -208,9 +213,12 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         self.tools_tab=key;self.update_sidebar_selection('tools')
 
     def build_tools(self):
+        from .i18n import get_locale
+        if hasattr(self,'workshop') and getattr(self.workshop,'ui_locale',None)!=get_locale():
+            clear(self.page_map['tools'].body);del self.workshop
         if not hasattr(self,'workshop'):
             from .workshop import Workshop
-            self.workshop=Workshop(self);self.page_map['tools'].body.addWidget(self.workshop)
+            self.workshop=Workshop(self);self.workshop.ui_locale=get_locale();self.page_map['tools'].body.addWidget(self.workshop)
         if self.workshop.open_tab(getattr(self,'tools_tab','skins')) is False:
             self.tools_tab='skins';self.workshop.open_tab('skins')
 
@@ -237,14 +245,14 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         self.current_route=route
         self.current_page=key;self.back_button.setVisible(key!='home');self.stack.setCurrentWidget(self.page_map[key])
         self.sync_header_layout()
-        titles={'home':'','instance':'实例管理 · '+self.instances.display_name(self.selected_version),'versions':'实例列表','download':'下载','settings':'设置','about':'关于 Onion','tools':'工具坊'}
-        self.page_title=titles[key];self.title.setText(titles[key])
+        titles={'home':'','instance':tr('实例管理 · ')+self.instances.display_name(self.selected_version),'versions':tr('实例列表'),'download':tr('下载'),'settings':tr('设置'),'about':tr('关于 Onion'),'tools':tr('工具坊')}
+        self.page_title=tr(titles[key]);self.title.setText(self.page_title)
         if key=='instance':self.build_instance()
         elif key!='settings' or self.settings_editor is None:getattr(self,'build_'+key)()
         self.build_sidebar(key)
         if key=='download':
             from .browser import TITLES
-            kind=getattr(self,'download_kind','mod');self.page_title='下载任务' if kind=='tasks' else '下载 / '+TITLES[kind];self.title.setText(self.page_title)
+            kind=getattr(self,'download_kind','mod');self.page_title=tr('下载任务') if kind=='tasks' else tr('下载 / ')+tr(TITLES[kind]);self.title.setText(self.page_title)
 
     def page(self,key):
         if key=='logs':self.logs.setParent(None)
@@ -257,10 +265,10 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
     def update_selection(self):
         vid=self.selected_version
         if 'instance' in self.nav:
-            self.nav['instance'].setSubtitle(self.instances.display_name(vid) if vid else '尚未选择游戏实例')
+            self.nav['instance'].setSubtitle(self.instances.display_name(vid) if vid else tr('尚未选择游戏实例'))
             self.nav['instance'].setEnabled(bool(vid))
         if hasattr(self,'launch_button'):
-            self.launch_button.setText(('启动游戏\n'+self.instances.display_name(vid)) if vid else '安装游戏\n选择 Minecraft 版本')
+            self.launch_button.setText((tr('启动游戏\n')+self.instances.display_name(vid)) if vid else tr('安装游戏\n选择 Minecraft 版本'))
             self.quick_button.setEnabled(bool(self.versions))
 
     def show_account_menu(self,point):
@@ -269,7 +277,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         for record in self.accounts.accounts:
             action=menu.addAction(record.label);action.setCheckable(True);action.setChecked(record.uuid==self.accounts.current_uuid)
             action.triggered.connect(lambda checked=False,uid=record.uuid:self.switch_account(uid))
-        menu.addSeparator();menu.addAction('管理账户',self.open_accounts);menu.exec(self.account_button.mapToGlobal(point))
+        menu.addSeparator();menu.addAction(tr('管理账户'),self.open_accounts);menu.exec(self.account_button.mapToGlobal(point))
 
     def switch_account(self,uid):
         self.accounts.set_current(uid);self.refresh_account()
@@ -291,11 +299,11 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
                 if overview[0]==directory_key(repo.game_dir):
                     self._overview_target=None
                     if overview[1] in self.versions:self.selected_version=overview[1]
-                    else:self.status.setText('目标实例已不在该目录中，请刷新实例总览');overview=None
+                    else:self.status.setText(tr('目标实例已不在该目录中，请刷新实例总览'));overview=None
             if self.selected_version not in self.versions:self.selected_version=self.versions[0] if self.versions else ''
             self.selector.blockSignals(True);self.selector.clear()
             for vid in self.versions:self.selector.addItem(self.instances.display_name(vid),vid)
-            if not self.versions:self.selector.addItem('尚未安装游戏','')
+            if not self.versions:self.selector.addItem(tr('尚未安装游戏'),'')
             self.selector.setCurrentIndex(max(0,self.selector.findData(self.selected_version)));self.selector.blockSignals(False)
             self.update_selection()
             self.game_libraries.remember(self.selected_version)
@@ -320,6 +328,37 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
     def flush_settings(self):
         results=[editor.flush() for editor in (self.settings_editor,self.instance_editor) if editor]
         return all(results)
+
+    def apply_language(self):
+        """Refresh authored UI after saving; keep the process, tasks and stores."""
+        from .i18n import get_locale,set_locale
+        requested=self.config_obj.get('language')
+        if requested==get_locale():return
+        # Preserve any valid instance draft before its cached editor is replaced.
+        if self.instance_editor and not self.instance_editor.flush():return
+        settings_index=self.settings_editor.stack.currentIndex() if self.settings_editor else 0
+        strip_labels={tr('任务中心'):'任务中心',tr('取消'):'取消'}
+        set_locale(requested)
+        self.home_button.setText(tr('返回首页'));self.home_button.setAccessibleName(tr('返回首页'))
+        self.back_button.setToolTip(tr('返回上一页'));self.back_button.setAccessibleName(tr('返回上一页'))
+        self.task_cancel.setText(tr('取消'))
+        from PySide6.QtWidgets import QAbstractButton
+        for control in self.task_strip.findChildren(QAbstractButton):
+            if control.text() in strip_labels:control.setText(tr(strip_labels[control.text()]))
+        for key,title in (('minimize',tr('最小化')),('maximize',tr('还原窗口') if self.isMaximized() else tr('最大化')),('close',tr('关闭'))):
+            control=self._window_controls[key];control.setToolTip(title);control.setAccessibleName(title)
+        self.instance_context=''
+        self.sidebar_scheme=None
+        if self.settings_editor:
+            self.build_settings()
+            self.settings_editor.select_tab(min(settings_index,self.settings_editor.stack.count()-1))
+        titles={'settings':tr('设置'),'versions':tr('实例列表'),'about':tr('关于 Onion'),'tools':tr('工具坊'),
+                'instance':tr('实例管理 · ')+self.instances.display_name(self.selected_version),'home':''}
+        self.page_title=titles.get(self.current_page,tr('下载'))
+        self.title.setText(self.page_title)
+        self.build_sidebar(self.current_page);self.update_selection()
+        if self.current_page!='settings' and not self.subpages:
+            self.navigate(self.current_page,record_history=False,force=True)
 
     def _system_mode_changed(self,*args):
         from .theme import preference
@@ -377,7 +416,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
     def refresh_account(self):
         account=self.accounts.current()
         if self.account_button:
-            self.account_button.setText(account.username if account else '添加账户')
+            self.account_button.setText(account.username if account else tr('添加账户'))
             self.account_button.setSubtitle('')
 
     def open_accounts(self):
@@ -388,40 +427,42 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(path).resolve())))
 
     def error(self,error):
-        self.status.setText(str(error));QMessageBox.warning(self,'操作未完成',str(error))
+        from .i18n import message
+        text=message(str(error));self.status.setText(text);QMessageBox.warning(self,tr('操作未完成'),text)
 
     def task(self,title,work,done=None,mutates=True,retry=None,task_repo=None,task_instance=None):
-        if mutates and self.mutating:self.error('已有文件操作进行中，请等待完成或取消当前任务。');return
+        if mutates and self.mutating:self.error(tr('已有文件操作进行中，请等待完成或取消当前任务。'));return
         if mutates:self.mutating=True
         dialog=TaskDialog(self,title);self.dialogs.append(dialog)
         task_repo=task_repo or self.repo
         record=self.task_history.begin(title,task_repo.game_dir,self.selected_version if task_instance is None else task_instance)
         if retry:self.task_history.retries[record['id']]=retry
-        self.active_task=dialog;self.task_strip.show();self.task_cancel.setEnabled(True);self.task_stage.setText(title+' · 准备中…');self.task_amount.setText('');self.task_progress.setRange(0,0)
+        self.active_task=dialog;self.task_strip.show();self.task_cancel.setEnabled(True);self.task_stage.setText(title+tr(' · 准备中…'));self.task_amount.setText('');self.task_progress.setRange(0,0)
         def progress(value):
             self.task_history.progress(record,value)
             dialog.update_progress(value)
             if self.active_task is not dialog:return
             if isinstance(value,str):
-                self.task_stage.setText(title+' · '+value);self.task_amount.setText('');self.task_progress.setRange(0,0)
+                from .i18n import message
+                self.task_stage.setText(title+' · '+message(value));self.task_amount.setText('');self.task_progress.setRange(0,0)
             elif isinstance(value,tuple) and len(value)==2:
                 completed,total=value
                 if total>0:
                     self.task_progress.setRange(0,1000);self.task_progress.setValue(min(1000,int(completed*1000/total)))
                     self.task_amount.setText(f'{completed:,} / {total:,}  ·  {min(100,int(completed*100/total))}%')
-                else:self.task_progress.setRange(0,0);self.task_amount.setText('正在处理…')
+                else:self.task_progress.setRange(0,0);self.task_amount.setText(tr('正在处理…'))
         def finish():
             if self.active_task is dialog:self.active_task=None;self.task_strip.hide()
         def success(value):
             if mutates:self.mutating=False
             self.task_history.finish(record,'cancelled' if dialog.job.cancel.is_set() else 'complete')
-            dialog.complete();dialog.accept();finish();self.status.setText('任务已取消' if dialog.job.cancel.is_set() else title+' · 完成')
+            dialog.complete();dialog.accept();finish();self.status.setText(tr('任务已取消') if dialog.job.cancel.is_set() else title+tr(' · 完成'))
             if done:done(value)
         def failure(error):
             if mutates:self.mutating=False
             self.task_history.finish(record,'cancelled' if dialog.job and dialog.job.cancel.is_set() else 'failed',str(error))
             dialog.complete(failed=True);dialog.accept();finish()
-            if dialog.job and dialog.job.cancel.is_set():self.status.setText('任务已取消')
+            if dialog.job and dialog.job.cancel.is_set():self.status.setText(tr('任务已取消'))
             else:self.error(error)
         dialog.job=self.tasks.submit(work,success,failure,progress,task_repo.downloader)
         self.task_history.live[record['id']]=dialog
@@ -429,7 +470,7 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
 
     def cancel_active_task(self):
         if self.active_task:
-            self.active_task.cancel_job();self.task_cancel.setEnabled(False);self.task_stage.setText('正在取消，请稍候…')
+            self.active_task.cancel_job();self.task_cancel.setEnabled(False);self.task_stage.setText(tr('正在取消，请稍候…'))
 
     @Slot(str,bool)
     def append_log(self,text,is_error=False):
@@ -443,20 +484,20 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
             store=getattr(self,'running_instance_store',self.instances);store.load()
             store.add_play_time(self.running_version,time.time()-self.started_at)
             if store is not self.instances:self.instances.load()
-        self.started_at=0;self.status.setText(f'游戏已退出 · 代码 {code}')
+        self.started_at=0;self.status.setText(f"{tr('游戏已退出 · 代码 ')}{code}")
         if self.config_obj.get('keep_launcher_open'):self.show();self.raise_()
         else:self.close()
 
     def closeEvent(self,event):
         if self.tasks.jobs:
-            if QMessageBox.question(self,'后台任务仍在运行','取消后台任务并在结束后关闭启动器？')!=QMessageBox.StandardButton.Yes:event.ignore();return
+            if QMessageBox.question(self,tr('后台任务仍在运行'),tr('取消后台任务并在结束后关闭启动器？'))!=QMessageBox.StandardButton.Yes:event.ignore();return
             self.tasks.cancel_all();self.hide();event.ignore()
             self.close_timer=QTimer(self);self.close_timer.timeout.connect(lambda:self.close() if not self.tasks.jobs else None);self.close_timer.start(200)
             return
         self.flush_settings()
         editors=[self.settings_editor,self.instance_editor]
         if any(editor and editor.dirty for editor in editors):
-            if QMessageBox.question(self,'尚未保存','关闭并放弃未保存的设置？')!=QMessageBox.StandardButton.Yes:event.ignore();return
+            if QMessageBox.question(self,tr('尚未保存'),tr('关闭并放弃未保存的设置？'))!=QMessageBox.StandardButton.Yes:event.ignore();return
             for editor in editors:
                 if editor:editor.dirty=False
         from .window_size import remember_window_size
@@ -472,8 +513,9 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
 
 
 def main():
-    from .web_tools import initialize_webview
-    initialize_webview()
+    if LAUNCHER_VERSION.endswith('-T'):
+        from .web_tools import initialize_webview
+        initialize_webview()
     application=QApplication.instance() or QApplication(sys.argv)
     install_window_chrome(application)
     configure_fonts(application)
@@ -484,7 +526,7 @@ def main():
     from ..secrets import SecretStorageError
     try:window=MainWindow()
     except (StorageError,SecretStorageError,OSError) as error:
-        QMessageBox.critical(None,'启动器数据无法加载',str(error));return 1
+        QMessageBox.critical(None,tr('启动器数据无法加载'),str(error));return 1
     window.show()
     QTimer.singleShot(1500,window.updater.startup)
     return application.exec()

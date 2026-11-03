@@ -1,4 +1,5 @@
 """Homepage split launch action with a continuous silhouette and stable layout."""
+from .i18n import tr
 from PySide6.QtCore import Qt,QRectF
 from PySide6.QtGui import QColor,QFont,QFontMetrics,QPainter,QPainterPath,QPen
 from PySide6.QtWidgets import QWidget,QHBoxLayout
@@ -11,8 +12,8 @@ class LaunchSegment(MotionButton):
         super().__init__('',parent);self.quick=quick
         self.setProperty('role','primary');self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFixedSize(52 if quick else 300,76)
-        self.setAccessibleName('快捷选择实例' if quick else '启动游戏')
-        if quick:self.setToolTip('快捷选择实例')
+        self.setAccessibleName(tr('快捷选择实例') if quick else tr('启动游戏'))
+        if quick:self.setToolTip(tr('快捷选择实例'))
 
     def setText(self,text):
         super().setText(text)
@@ -44,7 +45,7 @@ class LaunchSegment(MotionButton):
         else:
             from .widgets import icon
             title,_,subtitle=self.text().partition('\n')
-            glyph='plus' if title=='安装游戏' else 'rocket'
+            glyph='plus' if title==tr('安装游戏') else 'rocket'
             signature=(glyph,ink.rgba())
             if getattr(self,'_launch_icon_signature',None)!=signature:
                 self._launch_icon_signature=signature;self._launch_icon=icon(glyph,ink)

@@ -1,4 +1,5 @@
 """Small orthographic textured skin renderer; Qt raster only, no WebEngine."""
+from .i18n import tr
 import math
 from PySide6.QtCore import Qt,QPointF,QRectF
 from PySide6.QtGui import QPainter,QImage,QTransform,QColor,QPen,QFont
@@ -10,12 +11,12 @@ class SkinPreview(QWidget):
     def __init__(self,parent=None):
         super().__init__(parent);self.image=QImage();self.cape=QImage();self.show_cape=True;self.yaw=-.38;self.pitch=.16;self.drag=None;self.slim=False;self._textures={}
         self.setMinimumSize(220,320);self.setCursor(Qt.CursorShape.OpenHandCursor)
-        self.setAccessibleName('皮肤三维预览，左右旋转、上下俯仰，双击复位');self.setToolTip('拖动旋转 / 上下俯仰 · 双击复位')
+        self.setAccessibleName(tr('皮肤三维预览，左右旋转、上下俯仰，双击复位'));self.setToolTip(tr('拖动旋转 / 上下俯仰 · 双击复位'))
 
     def load(self,path,slim=False):
         from ..skins import skin_bytes
         image=QImage.fromData(skin_bytes(path))
-        if image.isNull() or image.width()!=64 or image.height() not in (32,64):raise ValueError('皮肤 PNG 无法解码')
+        if image.isNull() or image.width()!=64 or image.height() not in (32,64):raise ValueError(tr('皮肤 PNG 无法解码'))
         self.image=image;self.slim=slim;self._textures.clear();self.update()
 
     def mousePressEvent(self,event):
@@ -53,7 +54,7 @@ class SkinPreview(QWidget):
     def paintEvent(self,event):
         painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if self.image.isNull():
-            painter.setPen(paint_color(self,'muted',text=True));painter.drawText(self.rect(),Qt.AlignmentFlag.AlignCenter,'导入皮肤后预览');return
+            painter.setPen(paint_color(self,'muted',text=True));painter.drawText(self.rect(),Qt.AlignmentFlag.AlignCenter,tr('导入皮肤后预览'));return
         unit=min(self.width()/24,self.height()/38);cx=self.width()/2;cy=self.height()/2-16*unit
         yaw=self.yaw;pitch=self.pitch
         def project(point):
@@ -105,4 +106,4 @@ class SkinPreview(QWidget):
                 (c.x()-a.x())/th,(c.y()-a.y())/th,a.x(),a.y()))
             painter.drawImage(QPointF(0,0),texture);painter.restore()
         painter.setPen(paint_color(self,'muted',text=True));font=QFont(self.font());font.setPixelSize(11);painter.setFont(font)
-        painter.drawText(QRectF(0,self.height()-23,self.width(),20),Qt.AlignmentFlag.AlignCenter,'拖动旋转 · 双击复位')
+        painter.drawText(QRectF(0,self.height()-23,self.width(),20),Qt.AlignmentFlag.AlignCenter,tr('拖动旋转 · 双击复位'))

@@ -1,4 +1,5 @@
 """Switch repositories as a unit, including settings, metadata and async views."""
+from .i18n import tr
 from pathlib import Path
 from PySide6.QtWidgets import QLineEdit
 from ..storage import directory_key
@@ -10,7 +11,7 @@ class LibraryActions:
         dialog=InstanceOverview(self);self.show_subpage(dialog)
 
     def select_library_instance(self,path,vid,page='home'):
-        if self.mutating or self.launch_pending:self.status.setText('请等待当前文件操作完成');return False
+        if self.mutating or self.launch_pending:self.status.setText(tr('请等待当前文件操作完成'));return False
         if directory_key(path)==directory_key(self.repo.game_dir):
             if not self.set_selected(vid,refresh_page=False):return False
             self.navigate(page);return True
@@ -31,8 +32,8 @@ class LibraryActions:
         path=Path(path).expanduser().resolve()
         if directory_key(path)==directory_key(self.repo.game_dir):return True
         if self.mutating or self.launch_pending:
-            self.status.setText('请等待当前安装或启动准备完成后切换游戏文件夹');return False
-        if not path.is_dir():self.error('游戏文件夹不存在或暂时不可用：'+str(path));return False
+            self.status.setText(tr('请等待当前安装或启动准备完成后切换游戏文件夹'));return False
+        if not path.is_dir():self.error(tr('游戏文件夹不存在或暂时不可用：')+str(path));return False
         if not self.flush_settings():return False
         try:
             self.game_libraries.remember(self.selected_version)
@@ -63,7 +64,7 @@ class LibraryActions:
     def add_game_library(self,path):
         try:
             if self.mutating or self.launch_pending:
-                self.status.setText('请等待当前任务完成后添加游戏文件夹');return False
+                self.status.setText(tr('请等待当前任务完成后添加游戏文件夹'));return False
             return self.switch_game_library(self.game_libraries.add(path))
         except Exception as error:self.error(error);return False
 

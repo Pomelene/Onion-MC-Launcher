@@ -1,4 +1,5 @@
 """Continuous thumbnail grid with bounded, viewport-driven image decoding."""
+from .i18n import tr
 from collections import OrderedDict
 from datetime import datetime
 from PySide6.QtCore import Qt,QAbstractListModel,QModelIndex,QSize,QTimer,QPoint,QRectF
@@ -55,7 +56,7 @@ class ScreenshotDelegate(QStyledItemDelegate):
         painter.setPen(paint_color(view,'text',text=True))
         painter.drawText(QRectF(rect.left()+9,rect.bottom()-43,width,20),Qt.AlignmentFlag.AlignVCenter,QFontMetrics(font).elidedText(entry.path.name,Qt.TextElideMode.ElideRight,width))
         font.setPixelSize(11);painter.setFont(font);painter.setPen(paint_color(view,'muted',text=True))
-        detail='文件夹' if entry.directory else datetime.fromtimestamp(entry.modified).strftime('%m-%d %H:%M:%S')+f'  ·  {entry.size/1024:.0f} KiB'
+        detail=tr('文件夹') if entry.directory else datetime.fromtimestamp(entry.modified).strftime('%m-%d %H:%M:%S')+f'  ·  {entry.size/1024:.0f} KiB'
         painter.drawText(QRectF(rect.left()+9,rect.bottom()-23,width,18),Qt.AlignmentFlag.AlignVCenter,detail)
         painter.restore()
 
@@ -70,7 +71,7 @@ class ScreenshotGallery(QListView):
         self.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel);self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection);self.setMouseTracking(True)
         self.setMinimumHeight(360);self.setStyleSheet('QListView { background: transparent; border: none; outline: none; }')
-        self.setItemDelegate(ScreenshotDelegate(self));self.setAccessibleName('截图图库，按时间倒序连续显示')
+        self.setItemDelegate(ScreenshotDelegate(self));self.setAccessibleName(tr('截图图库，按时间倒序连续显示'))
         self.timer=QTimer(self);self.timer.setSingleShot(True);self.timer.setInterval(30);self.timer.timeout.connect(self.load_visible)
         self.verticalScrollBar().valueChanged.connect(self.schedule)
         self.activated.connect(self.open_index)
@@ -137,26 +138,26 @@ class ScreenshotGallery(QListView):
         entry=index.data(Qt.ItemDataRole.UserRole);selected=[i.data(Qt.ItemDataRole.UserRole) for i in self.selectionModel().selectedIndexes()]
         menu=ActionMenu(self)
         if len(selected)>1 and all(not e.directory for e in selected):
-            menu.addAction('复制所选截图',lambda:self.export_selected(selected))
-            menu.addAction('移入恢复区',lambda:self.remove_selected(selected))
+            menu.addAction(tr('复制所选截图'),lambda:self.export_selected(selected))
+            menu.addAction(tr('移入恢复区'),lambda:self.remove_selected(selected))
             menu.exec(self.viewport().mapToGlobal(point));return
-        menu.addAction('打开文件夹' if entry.directory else '查看原图',lambda:self.open_index(index))
-        menu.addAction('打开所在目录',lambda:self.browser.owner.open_folder(entry.path.parent))
-        menu.addAction('重命名',lambda:self.browser.rename(entry.path))
-        menu.addAction('移入恢复区',lambda:self.browser.remove(entry.path));menu.exec(self.viewport().mapToGlobal(point))
+        menu.addAction(tr('打开文件夹') if entry.directory else tr('查看原图'),lambda:self.open_index(index))
+        menu.addAction(tr('打开所在目录'),lambda:self.browser.owner.open_folder(entry.path.parent))
+        menu.addAction(tr('重命名'),lambda:self.browser.rename(entry.path))
+        menu.addAction(tr('移入恢复区'),lambda:self.browser.remove(entry.path));menu.exec(self.viewport().mapToGlobal(point))
 
     def export_selected(self,entries):
-        folder=QFileDialog.getExistingDirectory(self,'选择目标文件夹')
+        folder=QFileDialog.getExistingDirectory(self,tr('选择目标文件夹'))
         if not folder:return
         from ..file_library import export_pictures
         self.browser.mutate(lambda:export_pictures(self.browser.root,[e.path for e in entries],folder),
-                            lambda count:self.browser.owner.status.setText(f'已复制 {count} 张截图'))
+                            lambda count:self.browser.owner.status.setText(f"{tr('已复制 ')}{count}{tr(' 张截图')}"))
 
     def remove_selected(self,entries):
-        if QMessageBox.question(self,'移入恢复区',f'将 {len(entries)} 张截图移入恢复区？')!=QMessageBox.StandardButton.Yes:return
+        if QMessageBox.question(self,tr('移入恢复区'),f"{tr('将 ')}{len(entries)}{tr(' 张截图移入恢复区？')}")!=QMessageBox.StandardButton.Yes:return
         from ..file_library import remove_entries
         self.browser.mutate(lambda:remove_entries(self.browser.root,[e.path for e in entries]),
-                            lambda moved:self.browser.owner.status.setText(f'已移入 {len(moved)} 张截图'))
+                            lambda moved:self.browser.owner.status.setText(f"{tr('已移入 ')}{len(moved)}{tr(' 张截图')}"))
     def keyPressEvent(self,event):
         if event.key()==Qt.Key.Key_Delete and self.currentIndex().isValid():
             entries=[index.data(Qt.ItemDataRole.UserRole) for index in self.selectionModel().selectedIndexes()]

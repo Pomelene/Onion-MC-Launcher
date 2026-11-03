@@ -1,4 +1,5 @@
 """Instance selection and management keep every action bound to one instance."""
+from .i18n import tr
 from .lists import FlatTreeWidget as QTreeWidget
 
 from PySide6.QtCore import Qt,QPoint,QRectF,QSize,QEvent
@@ -50,8 +51,8 @@ class InstancePicker(QDialog):
         super().__init__(launcher,Qt.WindowType.Popup|Qt.WindowType.FramelessWindowHint);self.launcher=launcher;self.resize(400,420)
         self.setObjectName('instancePicker');self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground,True)
         self.setAttribute(Qt.WidgetAttribute.WA_NoMouseReplay,True)
-        body=column(self,14,10);heading=row();heading.addWidget(label('选择实例','heading'),1);self.count=label('','muted');heading.addWidget(self.count);body.addLayout(heading)
-        self.query=QLineEdit();self.query.setPlaceholderText('搜索实例');self.query.setClearButtonEnabled(True);self.query.addAction(icon('search',paint_color(self,'icon')),QLineEdit.ActionPosition.LeadingPosition);body.addWidget(self.query)
+        body=column(self,14,10);heading=row();heading.addWidget(label(tr('选择实例'),'heading'),1);self.count=label('','muted');heading.addWidget(self.count);body.addLayout(heading)
+        self.query=QLineEdit();self.query.setPlaceholderText(tr('搜索实例'));self.query.setClearButtonEnabled(True);self.query.addAction(icon('search',paint_color(self,'icon')),QLineEdit.ActionPosition.LeadingPosition);body.addWidget(self.query)
         from .choices import ChoiceComboBox
         from ..game_libraries import GameLibraries
         from ..storage import directory_key
@@ -59,7 +60,7 @@ class InstancePicker(QDialog):
         for entry in launcher.game_libraries.entries():self.library_choice.addItem(GameLibraries.title(entry),entry['path'])
         for index in range(self.library_choice.count()):
             if directory_key(self.library_choice.itemData(index))==directory_key(launcher.repo.game_dir):self.library_choice.setCurrentIndex(index)
-        self.library_choice.setAccessibleName('游戏文件夹');self.library_choice.setToolTip(str(launcher.repo.game_dir));body.insertWidget(1,self.library_choice)
+        self.library_choice.setAccessibleName(tr('游戏文件夹'));self.library_choice.setToolTip(str(launcher.repo.game_dir));body.insertWidget(1,self.library_choice)
         def switch_library(index):
             path=self.library_choice.itemData(index)
             if path:self.accept();launcher.switch_game_library(path)
@@ -67,8 +68,8 @@ class InstancePicker(QDialog):
         self.tree=QTreeWidget();self.tree.setProperty('listSurface',False);self.tree.setObjectName('instancePickerList');self.tree.setHeaderHidden(True);self.tree.setRootIsDecorated(False);self.tree.setColumnCount(1)
         self.tree.setUniformRowHeights(True);self.tree.setMouseTracking(True);self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.tree.setItemDelegate(InstanceChoiceDelegate(self));body.addWidget(self.tree,1)
-        self.empty=label('没有匹配的实例','muted');self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter);body.addWidget(self.empty)
-        body.addWidget(button('管理实例',self.open_list,'soft','grid'))
+        self.empty=label(tr('没有匹配的实例'),'muted');self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter);body.addWidget(self.empty)
+        body.addWidget(button(tr('管理实例'),self.open_list,'soft','grid'))
         self.query.textChanged.connect(self.filter);self.tree.itemClicked.connect(self.choose)
         self.query.returnPressed.connect(lambda:self.choose(self.tree.currentItem()) if self.tree.currentItem() else None);self.filter()
         self.query.installEventFilter(self);self.tree.installEventFilter(self)
@@ -91,7 +92,7 @@ class InstancePicker(QDialog):
         w=self.launcher;query=self.query.text().strip().lower();self.tree.clear()
         for vid in sorted(w.versions,key=lambda v:(not w.instances.get(v).favorite,w.instances.display_name(v).casefold(),v.casefold())):
             if query not in (vid+' '+w.instances.display_name(vid)+' '+w.instances.get(vid).group+' '+' '.join(w.instances.get(vid).tags)).lower():continue
-            kind=w.kinds.get(vid,'原版');version=vid[:-(len(kind)+1)] if vid.casefold().endswith('-'+kind.casefold()) else vid
+            kind=w.kinds.get(vid,tr('原版'));version=vid[:-(len(kind)+1)] if vid.casefold().endswith('-'+kind.casefold()) else vid
             detail=' · '.join(part for part in (version,kind,w.instances.get(vid).group,*w.instances.get(vid).tags) if part)
             item=QTreeWidgetItem([('★ ' if w.instances.get(vid).favorite else '')+w.instances.display_name(vid)]);item.setData(0,Qt.ItemDataRole.UserRole,vid);item.setData(0,Qt.ItemDataRole.UserRole+1,detail)
             item.setToolTip(0,w.instances.display_name(vid)+'\n'+vid+' · '+kind);self.tree.addTopLevelItem(item)
@@ -150,29 +151,29 @@ class InstanceWorkspace(QWidget):
         try:game,current,version=component_info(w.repo,self.vid)
         except (OSError,ValueError,VersionError) as error:page.body.addWidget(label(str(error),'muted',True));return
         page.body.setSpacing(0);page.body.addWidget(ContentRow('Minecraft',game,'package'))
-        for key,title in [('fabric','Fabric'),('legacyfabric','Legacy Fabric'),('quilt','Quilt'),('forge','Forge'),('neoforge','NeoForge'),('optifine','OptiFine')]:
+        for key,title in [('fabric','Fabric'),('legacyfabric','Legacy Fabric'),('quilt','Quilt'),('forge','Forge'),('neoforge','NeoForge'),('optifine','OptiFine'),('liteloader','LiteLoader')]:
             supported=key in ('fabric','quilt') and (not current or current==key)
-            detail=version if current==key else '与 '+current.title()+' 不兼容' if current else '未安装'
-            if not supported and (not current or current==key):detail+=' · 暂不支持原位安装'
+            detail=version if current==key else tr('与 ')+current.title()+tr(' 不兼容') if current else tr('未安装')
+            if not supported and (not current or current==key):detail+=tr(' · 暂不支持原位安装')
             item=ContentRow(title,detail,'package')
             if supported:
                 def choose(kind=key):
                     from .component_versions import ComponentVersions
                     w.show_subpage(ComponentVersions(w,self.vid,kind))
-                item.line.addWidget(button('更换版本' if current==key else '安装',choose,'soft','download'))
+                item.line.addWidget(button(tr('更换版本') if current==key else tr('安装'),choose,'soft','download'))
             page.body.addWidget(item)
 
     def build_info(self):
         w=self.launcher;page=self.pages['info'];clear(page.body);meta=w.instances.get(self.vid)
-        card=Card('实例信息');fields={};form=QFormLayout()
-        for key,title,value in [('name','显示名称',meta.name),('group','分组',meta.group),('tags','标签（逗号分隔）',', '.join(meta.tags)),('notes','备注',meta.notes)]:
-            edit=QLineEdit(value);edit.setPlaceholderText(self.vid if key=='name' else '可选');fields[key]=edit;form.addRow(title,edit)
+        card=Card(tr('实例信息'));fields={};form=QFormLayout()
+        for key,title,value in [('name',tr('显示名称'),meta.name),('group',tr('分组'),meta.group),('tags',tr('标签（逗号分隔）'),', '.join(meta.tags)),('notes',tr('备注'),meta.notes)]:
+            edit=QLineEdit(value);edit.setPlaceholderText(self.vid if key=='name' else tr('可选'));fields[key]=edit;form.addRow(title,edit)
         card.body.addLayout(form)
         from PySide6.QtWidgets import QCheckBox
-        favorite=QCheckBox('收藏此实例');favorite.setChecked(meta.favorite);card.body.addWidget(favorite)
+        favorite=QCheckBox(tr('收藏此实例'));favorite.setChecked(meta.favorite);card.body.addWidget(favorite)
         def save():
-            w.instances.update(self.vid,favorite=favorite.isChecked(),**{key:edit.text().strip() for key,edit in fields.items()});w.update_selection();w.reload_versions(refresh_page=False);w.status.setText('实例信息已保存')
-        card.body.addWidget(button('保存实例信息',save,'primary'));page.body.addWidget(card)
-        card=Card('维护与恢复','文件移除后进入恢复中心，可在原位置不存在时恢复。')
-        for title,callback in [('启动前环境体检',lambda:w.preflight(self.vid)),('校验游戏文件',lambda:w.verify_version(self.vid)),('导出整合包',lambda:w.export_modpack(self.vid)),('恢复中心',w.recovery),('移除当前实例',lambda:w.delete_version(self.vid))]:card.body.addWidget(button(title,callback,'soft'))
+            w.instances.update(self.vid,favorite=favorite.isChecked(),**{key:edit.text().strip() for key,edit in fields.items()});w.update_selection();w.reload_versions(refresh_page=False);w.status.setText(tr('实例信息已保存'))
+        card.body.addWidget(button(tr('保存实例信息'),save,'primary'));page.body.addWidget(card)
+        card=Card(tr('维护与恢复'),tr('文件移除后进入恢复中心，可在原位置不存在时恢复。'))
+        for title,callback in [(tr('启动前环境体检'),lambda:w.preflight(self.vid)),(tr('校验游戏文件'),lambda:w.verify_version(self.vid)),(tr('导出整合包'),lambda:w.export_modpack(self.vid)),(tr('恢复中心'),w.recovery),(tr('移除当前实例'),lambda:w.delete_version(self.vid))]:card.body.addWidget(button(title,callback,'soft'))
         page.body.addWidget(card)

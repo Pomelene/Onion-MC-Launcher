@@ -1,4 +1,5 @@
 """Quiet startup checks and one compact, opt-in update prompt."""
+from .i18n import tr
 import sys
 from pathlib import Path
 from PySide6.QtCore import QObject,QTimer,Qt,QRectF
@@ -20,27 +21,27 @@ class UpdateDialog(QDialog):
 
 class UpdatePrompt(UpdateDialog):
     def __init__(self,owner,release):
-        super().__init__(owner);self.setWindowTitle('启动器更新');self.setFixedWidth(460)
-        title='发现新版本 ' if release.order>updates.LAUNCHER_UPDATE_ORDER else '切换到版本 '
+        super().__init__(owner);self.setWindowTitle(tr('启动器更新'));self.setFixedWidth(460)
+        title=tr('发现新版本 ') if release.order>updates.LAUNCHER_UPDATE_ORDER else tr('切换到版本 ')
         body=column(self,24,16);body.addWidget(label(title+release.version,'heading'))
         if release.notes:
             notes=label(release.notes,'muted',True)
             notes.setTextFormat(Qt.TextFormat.PlainText)
             notes.setMaximumHeight(180);body.addWidget(notes)
-        body.addWidget(label('下载完成后将重启启动器，设置和游戏文件会保留。','muted',True))
-        actions=row();actions.addStretch();later=button('稍后',self.reject);actions.addWidget(later)
-        actions.addWidget(button('下载并重启',self.accept,'primary','download'));body.addLayout(actions)
+        body.addWidget(label(tr('下载完成后将重启启动器，设置和游戏文件会保留。'),'muted',True))
+        actions=row();actions.addStretch();later=button(tr('稍后'),self.reject);actions.addWidget(later)
+        actions.addWidget(button(tr('下载并重启'),self.accept,'primary','download'));body.addLayout(actions)
         later.setDefault(True);later.setFocus()
 
 class VersionPicker(UpdateDialog):
     def __init__(self,owner,releases):
-        super().__init__(owner);self.setWindowTitle('版本管理');self.setFixedWidth(460)
-        body=column(self,24,14);self.versions=ChoiceComboBox();self.versions.setAccessibleName('启动器版本')
-        for item in releases:self.versions.addItem(item.version+('（当前）' if item.version==updates.LAUNCHER_VERSION else ''),item)
+        super().__init__(owner);self.setWindowTitle(tr('版本管理'));self.setFixedWidth(460)
+        body=column(self,24,14);self.versions=ChoiceComboBox();self.versions.setAccessibleName(tr('启动器版本'))
+        for item in releases:self.versions.addItem(item.version+(tr('（当前）') if item.version==updates.LAUNCHER_VERSION else ''),item)
         body.addWidget(self.versions)
-        self.warning=label('0.3.2 及以下版本不支持自动升级，之后需手动下载安装新版。','muted',True);body.addWidget(self.warning)
-        actions=row();actions.addStretch();actions.addWidget(button('取消',self.reject))
-        self.proceed=button('安装并重启',self.accept,'primary','download');actions.addWidget(self.proceed);body.addLayout(actions)
+        self.warning=label(tr('0.3.2 及以下版本不支持自动升级，之后需手动下载安装新版。'),'muted',True);body.addWidget(self.warning)
+        actions=row();actions.addStretch();actions.addWidget(button(tr('取消'),self.reject))
+        self.proceed=button(tr('安装并重启'),self.accept,'primary','download');actions.addWidget(self.proceed);body.addLayout(actions)
         self.versions.currentIndexChanged.connect(self.changed);self.changed()
 
     def changed(self):
@@ -62,7 +63,7 @@ class UpdateController(QObject):
     def startup(self):
         if not updates.can_install():return
         if updates.finish_previous_updates(sys.executable):
-            QMessageBox.warning(self.owner,'启动器更新未完成','上次自动更新未完成，请重试或从 GitHub 手动下载。原程序备份保存在 .onion/updates。')
+            QMessageBox.warning(self.owner,tr('启动器更新未完成'),tr('上次自动更新未完成，请重试或从 GitHub 手动下载。原程序备份保存在 .onion/updates。'))
         if self.owner.config_obj.get('check_launcher_updates'):self.check()
 
     def check(self,manual=False):
@@ -72,7 +73,7 @@ class UpdateController(QObject):
             self.checking=False
             if release and (manual or self.owner.config_obj.get('check_launcher_updates')):
                 self.pending=release;self.pending_manual=manual;self.offer()
-            elif manual and not release:QMessageBox.information(self.owner,'检查更新','当前已是最新版本。')
+            elif manual and not release:QMessageBox.information(self.owner,tr('检查更新'),tr('当前已是最新版本。'))
         def failed(error):
             # Startup connectivity and malformed remote data never create UI.
             self.checking=False
@@ -104,14 +105,14 @@ class UpdateController(QObject):
 
     def install(self,release):
         if not updates.can_install():
-            QMessageBox.information(self.owner,'启动器更新','源码运行时请更新源码；EXE 版支持自动替换。');return
+            QMessageBox.information(self.owner,tr('启动器更新'),tr('源码运行时请更新源码；EXE 版支持自动替换。'));return
         if self.busy():self.pending=release;self.pending_manual=True;self.timer.start(2000);return
         executable=Path(sys.executable).resolve();downloader=self.owner.repo.downloader;self.installing=True
         def work(job):return updates.download_update(release,executable,downloader,job)
         def done(staged):
             if job.cancel.is_set():self.installing=False;return
             self.ready=(executable,staged,release);self.apply()
-        job=self.owner.task('更新启动器',work,done,mutates=True)
+        job=self.owner.task(tr('更新启动器'),work,done,mutates=True)
         if not job:self.installing=False
         else:self.install_job_key=job.key
 

@@ -10,13 +10,13 @@
 !/THIRD_PARTY_NOTICES.md
 !/requirements.txt
 !/requirements-dev.txt
-!/requirements-thunion.txt
 !/main.py
 !/main_tk.py
 !/launcher/
 !/tests/
 !/scripts/
 !/packaging/
+!/build_tools/
 !/assets/
 !/docs/
 __pycache__/

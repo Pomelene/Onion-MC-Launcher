@@ -14,24 +14,28 @@
 """
 
 from pathlib import Path
-import os,runpy
+import os,runpy,json
 
 ROOT = Path(SPECPATH).resolve().parent  # SPECPATH 是 spec 所在目录（packaging/）
+QT = Path(os.environ.get('ONION_QT_PATH', str(ROOT/'.deps/qt')))
+profile_path=ROOT/'packaging/build-profile.json'
+profile=json.loads(profile_path.read_text(encoding='utf-8')) if profile_path.exists() else {}
+thunion=profile.get('edition')=='thunion'
+web_binaries=[(str(QT/'PySide6/Qt6WebView.dll'),'PySide6'),
+              (str(QT/'PySide6/plugins/webview/qtwebview_webview2.dll'),'PySide6/plugins/webview')] if thunion else []
 
 a = Analysis(
     [str(ROOT / "main.py")],
-    pathex=[str(ROOT), str(ROOT / ".deps" / "qt")],
-    binaries=[(str(ROOT / 'assets/native/onion_seedmap.dll'), 'assets/native'),
-              (str(ROOT / '.deps/qt/PySide6/Qt6WebView.dll'), 'PySide6'),
-              (str(ROOT / '.deps/qt/PySide6/plugins/webview/qtwebview_webview2.dll'), 'PySide6/plugins/webview')],
+    pathex=[str(ROOT), str(QT)],
+    binaries=[(str(ROOT / 'assets/native/onion_seedmap.dll'), 'assets/native')]+web_binaries,
     datas=[(str(ROOT / "assets" / "craftbridge.ico"), "assets"),
            (str(ROOT / "assets" / "microsoft-app.json"), "assets"),
            (str(ROOT / "launcher/native/cubiomes/LICENSE"), "assets/licenses/cubiomes")],
-    hiddenimports=["PySide6.QtWidgets", "PySide6.QtWebView"],
+    hiddenimports=["PySide6.QtWidgets"]+(["PySide6.QtWebView"] if thunion else []),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[str(ROOT / 'packaging/qt_unpack.py')],
-    excludes=["tests", "scripts", "pytest", "numpy", "matplotlib", "pandas", "tkinter", "launcher.ui", "PIL", "unittest"],
+    excludes=["tests", "scripts", "pytest", "numpy", "matplotlib", "pandas", "tkinter", "launcher.ui", "PIL", "unittest"]+([] if thunion else ['launcher.club_services','launcher.qtui.club_services','launcher.qtui.web_tools']),
     noarchive=False,
     optimize=0,
 )

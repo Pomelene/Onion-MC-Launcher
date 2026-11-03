@@ -14,7 +14,7 @@ def _primary(version):
     if not file:raise ValueError('该版本没有可下载文件')
     name=component(file['filename'])
     digest=(file.get('hashes') or {}).get('sha1','').lower()
-    if not name.lower().endswith('.jar'):raise ValueError('模组文件必须为 JAR')
+    if not name.lower().endswith(('.jar','.litemod')):raise ValueError('模组文件必须为 JAR 或 LiteMod')
     if urlsplit(file['url']).scheme!='https':raise ValueError('模组下载必须使用 HTTPS')
     if len(digest)!=40 or any(c not in '0123456789abcdef' for c in digest):raise ValueError('缺少有效文件校验值')
     if not isinstance(file.get('size'),int) or isinstance(file['size'],bool) or not 0<file['size']<=1024**3:raise ValueError('模组文件大小无效')

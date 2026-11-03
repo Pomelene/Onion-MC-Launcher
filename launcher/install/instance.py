@@ -20,7 +20,7 @@ def install_instance(repo,game,kind,loader_version,target_id,request_id=None,on_
         profile=target/f'{target_id}.json'
         if profile.is_file() and json.loads(profile.read_text(encoding='utf-8')).get('onionInstallRequest')==request_id:return target_id
         raise FileExistsError('实例目录已存在：'+target_id)
-    if kind not in ('vanilla','fabric','legacyfabric','quilt','forge','neoforge','optifine'):raise ValueError('不支持的加载器')
+    if kind not in ('vanilla','fabric','legacyfabric','quilt','forge','neoforge','optifine','liteloader'):raise ValueError('不支持的加载器')
     def check():
         if cancel is not None and cancel.is_set():raise DownloadCancelled('安装已取消')
     check();cache=repo.assert_writable(repo.game_dir/'.onion/install');cache.mkdir(parents=True,exist_ok=True)
@@ -51,6 +51,9 @@ def install_instance(repo,game,kind,loader_version,target_id,request_id=None,on_
             elif kind in ('fabric','legacyfabric','quilt'):
                 from .fabric import install_loader
                 result=install_loader(staged,game,loader_version or None,kind,on_stage)
+            elif kind=='liteloader':
+                from .liteloader import install_loader
+                result=install_loader(staged,game,loader_version,on_stage,on_progress)
             elif kind in ('forge','neoforge'):
                 from .forge import install_forge
                 result=install_forge(staged,game,kind,loader_version,on_stage,on_progress)

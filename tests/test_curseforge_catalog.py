@@ -13,6 +13,10 @@ def test_curseforge_search_versions_and_required_dependencies():
     assert hits['hits'][0]['project_id']=='cf:1' and hits['total_hits']==1
     root=pick_version(client.normalized_versions(1),'1.20.1','fabric');assert root
     assert [v['project_id'] for v in resolve_required_versions(client.downloader,'',root,'1.20.1','fabric')]==['cf:2','cf:1']
+    files[2].insert(0,dict(files[2][0],id=23,hashes=[{'algo':1,'value':'c'*40}]))
+    selected=resolve_required_versions(client.downloader,'',root,'1.20.1','fabric',installed_hashes={'b'*40})
+    assert selected[0]['id']=='22'
+    files[2].pop(0)
     files[2][0]['downloadUrl']=None
     try:resolve_required_versions(client.downloader,'',root,'1.20.1','fabric')
     except CurseForgeError:pass

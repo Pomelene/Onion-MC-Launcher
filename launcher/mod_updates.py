@@ -8,6 +8,58 @@ from .mod_plan import _cancel,assert_mods_idle
 from .safety import child,component
 
 
+def prepare_catalog_install(repo, vid, project_id, version, api_key, job):
+    """Resolve the same files that will be installed after review."""
+    from .catalog import pick_version, target_compatibility
+    from .mod_plan import build_plan, snapshot
+
+    folder = repo.run_dir(vid)/'mods'
+    repo.assert_writable(folder)
+    game, loader = target_compatibility(repo, 'mod', vid)
+    if not pick_version([version], game, loader):
+        raise ValueError('没有适配当前版本或加载器的文件。')
+    if project_id.startswith('cf:'):
+        from .curseforge import resolve_required_versions
+        before = snapshot(folder)
+        installed = {digest for name, digest in before.items() if name.lower().endswith(('.jar', '.litemod'))}
+        versions = resolve_required_versions(repo.downloader, api_key, version, game, loader, job,
+                                             installed_hashes=installed)
+        entries = []
+        dependencies = []
+        for item in versions:
+            _, name, digest = _primary(item)
+            present = digest in installed
+            if item['project_id'] != project_id:
+                dependencies.append((name, '保留' if present else '安装'))
+            if not present:
+                entries.append({'latest':item})
+    else:
+        plan = build_plan(repo.downloader, folder, [version], game, loader, job)
+        before = plan['before']
+        dependencies = [(entry['file']['filename'], entry['action'])
+                        for entry in plan['entries'] if entry['project'] != project_id]
+        entries = [
+            {'latest':entry['version'], 'path':folder/entry['old'] if entry['old'] else None,
+             'old_sha1':before.get(entry['old'], '')}
+            for entry in plan['entries'] if entry['action'] != '保留'
+        ]
+    entries.sort(key=lambda entry: entry['latest']['project_id'] == project_id)
+    return {'folder':folder, 'before':before, 'target':(game,loader),
+            'entries':entries, 'dependencies':dependencies}
+
+
+def install_catalog_plan(repo, vid, plan, job):
+    from .catalog import target_compatibility
+    from .mod_plan import snapshot
+
+    folder = repo.run_dir(vid)/'mods'
+    if (folder != plan['folder'] or target_compatibility(repo, 'mod', vid) != plan['target']
+            or snapshot(folder) != plan['before']):
+        raise ValueError('实例已发生变化，请重新检查前置模组。')
+    if plan['entries']:
+        install_selected(repo, vid, plan['entries'], job)
+
+
 def _primary(version):
     files=version.get('files') or []
     file=next((f for f in files if f.get('primary')),files[0] if files else None)

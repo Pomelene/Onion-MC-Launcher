@@ -1,5 +1,14 @@
 """English UI catalog; source strings are stable translation keys."""
 EN = {
+ '必需前置模组':'Required dependencies',
+ '正在检查前置模组…':'Checking dependencies…',
+ '安装模组及前置':'Install mod and dependencies',
+ '需要更新':'Update required',
+ '需要安装':'Install required',
+ '实例已发生变化，请重新检查前置模组。':'The instance changed. Check dependencies again.',
+ '搜索失败':'Search failed',
+ '切换下载源':'Switch source',
+ '此版本未提供可下载文件':'No downloadable file for this version',
  '立即生效':'Applies immediately',
  '社团服务':'THUnion Services',
  '依赖元数据格式无效':'Invalid dependency metadata','尚未确认前置 ':'Unverified dependency: ',
@@ -55,7 +64,7 @@ EN = {
  ' 移入恢复中心？\n文件会保留，可恢复；不会直接删除。':' to recovery?\nFiles will be retained and can be restored.',
  '-副本':'-copy','[已隐藏令牌]':'[token redacted]','世界存档':'World save','准备启动':'Preparing launch',
  '创建独立实例':'Create separate instance',
- '启动前检查发现问题，请在实例管理中打开“环境体检”：\n':'Pre-launch checks found issues. Open Pre-launch checks in instance management:\n',
+ '启动前检查发现以下问题：\n':'Pre-launch checks found these issues:\n',
  '图片 (*.png *.jpg *.jpeg *.webp)':'Images (*.png *.jpg *.jpeg *.webp)',
  '图片不能超过 5 MiB':'Image must be no larger than 5 MiB','图片无效或尺寸过大':'Invalid image or dimensions too large',
  '基础版本：':'Base version: ','实例图标已更新':'Instance icon updated','实例已复制 · ':'Instance duplicated · ',

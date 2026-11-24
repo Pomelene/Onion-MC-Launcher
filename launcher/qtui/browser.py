@@ -2,12 +2,27 @@
 from .i18n import tr
 from .choices import ChoiceComboBox
 from PySide6.QtCore import Qt,QTimer
-from PySide6.QtWidgets import QWidget,QLineEdit,QComboBox,QGridLayout
+from PySide6.QtWidgets import QWidget,QLineEdit,QGridLayout
 from shiboken6 import isValid
 from ..catalog_search import SORTS,CATEGORY_LABELS,search_terms
 from .widgets import Page,Empty,ContentRow,column,row,label,button,clear,icon_button
 
 TITLES={'mod':'模组','resourcepack':'资源包','shader':'光影','modpack':'整合包'}
+
+
+class ProjectRow(ContentRow):
+    def __init__(self,title,detail,glyph,open_project):
+        super().__init__(title,detail,glyph)
+        self.open_project=open_project
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.action(tr('选择版本'),open_project,'arrow')
+
+    def mouseReleaseEvent(self,event):
+        if event.button()==Qt.MouseButton.LeftButton and self.rect().contains(event.position().toPoint()):
+            self.open_project()
+            event.accept()
+        else:
+            super().mouseReleaseEvent(event)
 
 
 class ContentBrowser(QWidget):
@@ -21,11 +36,20 @@ class ContentBrowser(QWidget):
         self.initialized=False;self.search_job=None;self.categories_loaded=False;self.categories_loading=False
         self.search_timer=QTimer(self);self.search_timer.setSingleShot(True);self.search_timer.setInterval(350);self.search_timer.timeout.connect(lambda:self.search(0))
         body=column(self,20,10)
-        toolbar=row(spacing=8);self.source=ChoiceComboBox();self.source.addItem('Modrinth','modrinth');self.source.addItem('CurseForge','curseforge');self.source.setMaximumWidth(150);toolbar.addWidget(self.source)
-        self.target=ChoiceComboBox();self.target.setMinimumWidth(130);self.target.setMaximumWidth(250);self.target.setAccessibleName(tr('安装到实例'));toolbar.addWidget(self.target,1)
+        toolbar=row(spacing=8);self.source=ChoiceComboBox();self.source.addItem('Modrinth','modrinth');self.source.addItem('CurseForge','curseforge');self.source.setMaximumWidth(150);self.source.setAccessibleName(tr('下载源'));toolbar.addWidget(self.source)
+        self.target=ChoiceComboBox();self.target.setMinimumWidth(130);self.target.setMaximumWidth(250);self.target.setAccessibleName(tr('安装到实例'))
         self.query=QLineEdit();self.query.setPlaceholderText(tr('搜索')+' '+tr(TITLES[kind]));self.query.setToolTip(tr('支持名称、关键词和常用中文别名；按回车搜索'));self.query.setClearButtonEnabled(True);toolbar.addWidget(self.query,2)
-        self.go=icon_button(tr('搜索'),lambda:self.search(0),'search');toolbar.addWidget(self.go)
+        self.go=button(tr('搜索'),lambda:self.search(0),'primary','search');toolbar.addWidget(self.go)
         self.filter_button=icon_button(tr('筛选'),self.toggle_filters,'settings');self.filter_button.setCheckable(True);toolbar.addWidget(self.filter_button);body.addLayout(toolbar)
+        if kind!='modpack':
+            context=row(spacing=8)
+            context.addWidget(label(tr('安装到实例'),'muted'))
+            context.addWidget(self.target)
+            context.addStretch()
+            body.addLayout(context)
+        else:
+            self.target.setParent(self)
+            self.target.hide()
         self.filters=QWidget();filters=QGridLayout(self.filters);filters.setContentsMargins(0,0,0,0);filters.setSpacing(8);self.filters.hide();body.addWidget(self.filters)
         self.game=QLineEdit();self.game.setPlaceholderText(tr('全部游戏版本'));self.game.setAccessibleName(tr('游戏版本'));self.game.setToolTip(tr('筛选 Minecraft 版本；留空为全部'));filters.addWidget(self.game,0,0)
         self.loader=ChoiceComboBox()
@@ -67,6 +91,10 @@ class ContentBrowser(QWidget):
         self.category.setVisible(modrinth);self.sort.setVisible(modrinth)
         self.category.setCurrentIndex(0);self.sort.setCurrentIndex(0)
         self.filters_changed()
+
+    def switch_source(self):
+        self.source.setCurrentIndex(1-self.source.currentIndex())
+        self.source_changed()
 
     def toggle_filters(self):
         self.filters.setVisible(self.filter_button.isChecked())
@@ -142,27 +170,37 @@ class ContentBrowser(QWidget):
         self.search_timer.stop();self.initialized=True
         text=self.query.text().strip()
         query=(text,self.game.text().strip(),self.loader.currentData() if self.loader.isEnabled() else '',self.target_vid,self.category.currentData() or '',self.sort.currentData() or 'relevance',self.source.currentData())
-        if query!=self.last_search:page=0
+        if query!=self.last_search:page=0;self.empty()
         if self.search_job:self.search_job.cancel_job()
-        page=max(0,page);self.request_id+=1;request=self.request_id;self.loading=True;self.go.setEnabled(False);self.message.setText(tr('正在搜索…'));self.update_paging()
+        page=max(0,page);self.request_id+=1;request=self.request_id;self.loading=True;self.go.setEnabled(False);self.message.setText(tr('正在搜索…'));self.message.setToolTip('');self.update_paging()
         def done(data):
             if not isValid(self) or request!=self.request_id:return
             self.search_job=None;self.loading=False;self.go.setEnabled(True);self.last_search=query;self.page_number=page
             hits=data.get('hits') or [];self.total=max(int(data.get('total_hits') or 0),page*self.PAGE_SIZE+len(hits))
             clear(self.results.body)
-            if not hits:self.results.body.addWidget(Empty(tr('没有匹配结果'),tr('试试其他关键词，或放宽游戏版本和加载器条件。'),'search'))
+            if not hits:self.results.body.addWidget(Empty(tr('没有匹配结果'),tr('试试其他关键词，或放宽游戏版本和加载器条件。'),'search',tr('筛选'),self.show_filters))
             for hit in hits:
+                if not isinstance(hit,dict) or not hit.get('project_id'):continue
                 title=hit.get('title') or hit.get('slug') or tr('项目')
                 detail=hit.get('description') or hit.get('author') or ''
-                item=ContentRow(title,detail,{'mod':'package','resourcepack':'grid','shader':'world','modpack':'package'}[self.kind])
-                item.action(tr('选择版本'),lambda pid=hit['project_id'],t=title:self.launcher.choose_project_version(pid,t,self.kind,query[1],query[2],query[3]),'arrow')
+                def open_project(pid=hit['project_id'],name=title):
+                    if self.last_search==query:
+                        self.launcher.choose_project_version(pid,name,self.kind,query[1],query[2],query[3])
+                item=ProjectRow(title,detail,{'mod':'package','resourcepack':'grid','shader':'world','modpack':'package'}[self.kind],open_project)
                 self.results.body.addWidget(item)
                 if hit.get('icon_url'):self.launcher.load_catalog_icon(item,hit['icon_url'])
             self.summary.setText('');self.message.setText('');self.update_paging()
             QTimer.singleShot(0,self.results,lambda:self.results.verticalScrollBar().setValue(0))
         def failed(error):
             if not isValid(self) or request!=self.request_id:return
-            self.search_job=None;self.loading=False;self.go.setEnabled(True);self.message.setText(tr('搜索失败，点击搜索重试'));self.message.setToolTip(str(error));self.update_paging()
+            self.search_job=None;self.loading=False;self.go.setEnabled(True)
+            if not self.results.body.count():
+                self.results.body.addWidget(Empty(tr('搜索失败'),str(error),'search',tr('重试'),lambda:self.search(page)))
+                actions=row();actions.addStretch();actions.addWidget(button(tr('切换下载源'),self.switch_source,'soft'));actions.addStretch();self.results.body.addLayout(actions)
+                self.message.setText('')
+            else:
+                self.message.setText(tr('搜索失败，点击搜索重试'));self.message.setToolTip(str(error))
+            self.update_paging()
         from ..catalog import search
         self.query.setToolTip(tr('搜索：')+search_terms(self.kind,text) if search_terms(self.kind,text)!=text else tr('支持名称、关键词和常用中文别名；按回车搜索'))
         def work(job):
@@ -171,3 +209,7 @@ class ContentBrowser(QWidget):
                 return CurseForgeClient(self.repo.downloader,self.launcher.config_obj.get('curseforge_api_key')).search(self.kind,*query[:3],index=page*self.PAGE_SIZE,page_size=self.PAGE_SIZE)
             return search(self.repo.downloader,self.kind,*query[:3],limit=self.PAGE_SIZE,offset=page*self.PAGE_SIZE,category=query[4],sort=query[5])
         self.search_job=self.launcher.tasks.submit(work,done,failed,downloader=self.repo.downloader)
+
+    def show_filters(self):
+        self.filter_button.setChecked(True)
+        self.toggle_filters()

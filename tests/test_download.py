@@ -7,6 +7,47 @@ from launcher.download import (DownloadCancelled, DownloadError, DownloadJob,
 from tests.harness import FakeServer, temp_workspace
 
 
+def test_anonymous_https_retries_direct_after_system_proxy_failure():
+    import io
+    from unittest.mock import Mock, patch
+    import urllib.error
+
+    downloader = Downloader(retries=2)
+    proxy, direct = Mock(), Mock()
+    proxy.open.side_effect = urllib.error.URLError('proxy unavailable')
+    direct.open.return_value = io.BytesIO(b'{"hits":[]}')
+    url = 'https://api.modrinth.com/v2/search'
+    with patch('urllib.request.getproxies', return_value={'https':'http://proxy.invalid'}), (
+            patch.object(downloader, '_opener', side_effect=[proxy,direct])) as open_route, (
+            patch.object(downloader, '_retry_wait')):
+        assert downloader.fetch_json(url) == {'hits':[]}
+        assert [call.kwargs for call in open_route.call_args_list] == [{},{'direct':True}]
+        assert proxy.open.call_args.args[0] is not direct.open.call_args.args[0]
+
+
+def test_stale_partial_range_restarts_even_with_one_attempt():
+    import io
+    import urllib.error
+    from unittest.mock import Mock, patch
+
+    body = b'valid payload'
+    with temp_workspace() as root:
+        path = root/'mod.jar'
+        path.with_suffix('.jar.part').write_bytes(b'old data')
+        response = io.BytesIO(body)
+        response.status = 200
+        response.headers = {'Content-Length':str(len(body))}
+        opener = Mock()
+        url = 'https://cdn.modrinth.com/test.jar'
+        opener.open.side_effect = [urllib.error.HTTPError(url,416,'Range',{},None),response]
+        downloader = Downloader(retries=1)
+        with patch.object(downloader,'_opener',return_value=opener):
+            assert downloader.download_one(DownloadJob(url,path,size=len(body),sha1=hashlib.sha1(body).hexdigest()))
+        assert opener.open.call_args_list[0].args[0].get_header('Range') == 'bytes=8-'
+        assert opener.open.call_args_list[1].args[0].get_header('Range') is None
+        assert path.read_bytes() == body
+
+
 def test_transfer_bytes_propagate_to_parallel_workers_and_skip_cached_files():
     payload=b'a'*140000;server=FakeServer({'/one':payload,'/two':payload}).start()
     try:

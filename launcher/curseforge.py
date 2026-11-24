@@ -147,7 +147,7 @@ class CurseForgeClient:
         return "mods"
 
 
-def resolve_required_versions(downloader,api_key,root,game,loader,job=None):
+def resolve_required_versions(downloader,api_key,root,game,loader,job=None,*,installed_hashes=()):
     """Resolve required CurseForge dependencies before touching the mod folder."""
     from .catalog import pick_version
     client=CurseForgeClient(downloader,api_key);chosen={};visiting=set()
@@ -165,8 +165,11 @@ def resolve_required_versions(downloader,api_key,root,game,loader,job=None):
             ident=dependency.get('modId')
             if type(ident) is not int or ident<=0:raise CurseForgeError('前置依赖信息无效')
             candidates=client.normalized_versions(ident)
-            candidates=[v for v in candidates if v.get('files') and v.get('version_type')=='release']
-            selected=pick_version(candidates,game,loader)
+            present = [v for v in candidates if any(
+                (file.get('hashes') or {}).get('sha1','').lower() in installed_hashes
+                for file in v.get('files',()))]
+            stable = [v for v in candidates if v.get('files') and v.get('version_type')=='release']
+            selected=pick_version(present,game,loader) or pick_version(stable,game,loader)
             if not selected:raise CurseForgeError('没有适用的必需前置版本：'+str(ident))
             visit(selected)
         visiting.remove(project);chosen[project]=version

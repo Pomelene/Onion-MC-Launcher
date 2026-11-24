@@ -170,6 +170,25 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='qt-settings-') as direct
     modal=QMessageBox(QMessageBox.Icon.Question,'确认','确认测试',QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,window)
     QTimer.singleShot(20,lambda:modal.button(QMessageBox.StandardButton.Yes).click())
     assert modal.exec()==QMessageBox.StandardButton.Yes
+    # Long errors must fit the current screen without resizing the launcher.
+    from launcher.qtui.widgets import ErrorDialog
+    original_geometry=window.geometry()
+    details=('D:/mods/'+'long-filename-'*150+'\n')*24
+    observed=[]
+    def dismiss_error():
+        dialog=app.activeModalWidget()
+        if isinstance(dialog,ErrorDialog):
+            observed.append((dialog.details.toPlainText(),dialog.size(),
+                             dialog.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground),
+                             dialog.details.verticalScrollBar().maximum(),window.geometry()))
+        dialog.accept()
+    QTimer.singleShot(20,dismiss_error)
+    MainWindow.error(window,details)
+    assert len(observed)==1
+    text,size,translucent,scroll,geometry=observed[0]
+    assert text==details and not translucent and scroll>0
+    assert size.width()<=560 and size.height()<=352
+    assert geometry==original_geometry==window.geometry()
     QTimer.singleShot(20,lambda:app.activeModalWidget().accept())
     assert QInputDialog.getText(window,'名称','显示名称',text='Fixture')==('Fixture',True)
     reparented=QDialog(window);QVBoxLayout(reparented).addWidget(QLabel('嵌入测试'))

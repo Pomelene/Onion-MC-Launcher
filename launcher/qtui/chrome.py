@@ -35,8 +35,10 @@ class FrameController(QObject):
         super().__init__(window)
         self.window = window
         self.allow_maximize = maximize
-        window.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground,True)
-        window.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+        if not window.property('opaqueDialog'):
+            window.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground,True)
+        if not window.windowFlags() & Qt.WindowType.FramelessWindowHint:
+            window.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         window.installEventFilter(self)
         top, bottom, left, right = Qt.Edge.TopEdge, Qt.Edge.BottomEdge, Qt.Edge.LeftEdge, Qt.Edge.RightEdge
         self.edges = [top, bottom, left, right, top|left, top|right, bottom|left, bottom|right]
@@ -247,10 +249,14 @@ class DialogChromeManager(QObject):
         while owner is not None and not owner.styleSheet():
             owner = owner.parentWidget()
         if owner is not None:
-            dialog.setStyleSheet(owner.styleSheet())
+            style=owner.styleSheet()
         else:
             from .widgets import themed_style
-            dialog.setStyleSheet(themed_style())
+            style=themed_style()
+        if dialog.property('opaqueDialog'):
+            from .theme import paint_color
+            style+=f'\nQDialog[opaqueDialog="true"] {{ background:{paint_color(dialog,"base").name()}; }}'
+        dialog.setStyleSheet(style)
         self.sync_header(dialog)
         header.show()
         dialog._chrome_decorating=False

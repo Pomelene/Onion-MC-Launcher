@@ -428,7 +428,12 @@ class MainWindow(ChromeMainWindow,Actions,Pages,LibraryActions):
 
     def error(self,error):
         from .i18n import message
-        text=message(str(error));self.status.setText(text);QMessageBox.warning(self,tr('操作未完成'),text)
+        from .widgets import ErrorDialog
+        title=tr('操作未完成')
+        self.status.setText(title)
+        dialog=ErrorDialog(self,title,message(str(error)))
+        try:dialog.exec()
+        finally:dialog.deleteLater()
 
     def task(self,title,work,done=None,mutates=True,retry=None,task_repo=None,task_instance=None):
         if mutates and self.mutating:self.error(tr('已有文件操作进行中，请等待完成或取消当前任务。'));return

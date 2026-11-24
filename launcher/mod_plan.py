@@ -18,7 +18,7 @@ def _cancel(job):
 
 def snapshot(folder):
     folder=Path(folder)
-    return {p.name:mod_sha1(p) for p in sorted(folder.iterdir()) if p.is_file() and p.name.lower().endswith(('.jar','.zip','.jar.disabled','.zip.disabled'))} if folder.exists() else {}
+    return {p.name:mod_sha1(p) for p in sorted(folder.iterdir()) if p.is_file() and p.name.lower().endswith(('.jar','.zip','.litemod','.jar.disabled','.zip.disabled','.litemod.disabled'))} if folder.exists() else {}
 
 
 def assert_mods_idle(repo,vid):

@@ -110,11 +110,12 @@ def stage(root, config, edition, destination):
     return version
 
 
-def build(root, config, edition):
+def build(root, config, edition, *, preview=False):
     cache = root/'tmp/automatic-builds';cache.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix=edition+'-', dir=cache))
     version = stage(root, config, edition, directory)
-    output = f'Onion-v{version}.exe'
+    suffix = '-preview' if preview else ''
+    output = f'Onion-v{version}{suffix}.exe'
     shell = shutil.which('pwsh') or shutil.which('powershell')
     if not shell:raise RuntimeError('PowerShell is required for Windows builds')
     environment = dict(os.environ)
@@ -149,6 +150,7 @@ def main():
     parser.add_argument('--config',type=Path,default=DEFAULT_CONFIG)
     parser.add_argument('--edition',choices=('standard','thunion','both'),help='Override edition for this run')
     parser.add_argument('--check',action='store_true',help='Validate manifests without building')
+    parser.add_argument('--preview',action='store_true',help='Use a separate preview EXE filename')
     parser.add_argument('--refresh-manifest',action='store_true',help='Update source lists without building')
     args = parser.parse_args();path = args.config.resolve()
     config = json.loads(path.read_text(encoding='utf-8'))
@@ -160,8 +162,8 @@ def main():
     validate(ROOT, config)
     if args.check:print('Configuration and source manifests are valid.');return 0
     editions=('standard','thunion') if config['edition']=='both' else (config['edition'],)
-    results=[build(ROOT, config, edition) for edition in editions]
-    report=ROOT/'tmp/automatic-builds/latest.json'
+    results=[build(ROOT, config, edition, preview=args.preview) for edition in editions]
+    report=ROOT/'tmp/automatic-builds'/('latest-preview.json' if args.preview else 'latest.json')
     report.write_text(json.dumps(results,ensure_ascii=False,indent=2),encoding='utf-8')
     return 0
 

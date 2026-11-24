@@ -2,7 +2,7 @@
 import time
 from collections import deque
 from PySide6.QtCore import QTimer, Qt, QSize, QRect, QRectF, QPoint, QPointF, QEvent, QVariantAnimation, QEasingCurve, QBuffer, QByteArray, QIODevice
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPainterPath, QFontDatabase, QFont, QLinearGradient, QRadialGradient, QImageReader, QFontMetrics, QBrush, QImage
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPainterPath, QFontDatabase, QFont, QLinearGradient, QRadialGradient, QImageReader, QFontMetrics, QBrush, QImage, QTextOption
 from PySide6.QtWidgets import (QWidget,QFrame,QVBoxLayout,QHBoxLayout,QLabel,QPushButton,
     QScrollArea,QSizePolicy,QDialog,QProgressBar,QMessageBox,QLayout,QAbstractButton,QCheckBox,QSpinBox,QComboBox,QLineEdit,QAbstractSpinBox,QStyle,QStyleOptionComboBox)
 
@@ -261,9 +261,42 @@ class FeedbackLabel(QLabel):
     def __init__(self):
         super().__init__('');self.setObjectName('muted')
         self.setTextFormat(Qt.TextFormat.PlainText);self.hide()
+        self.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Preferred)
 
     def setText(self,text):
         super().setText(text);self.setVisible(bool(text))
+
+
+class ErrorDialog(QDialog):
+    """Present raw error details without letting their length size the window."""
+    def __init__(self,owner,title,text):
+        from PySide6.QtWidgets import QPlainTextEdit
+
+        super().__init__(owner,Qt.WindowType.Dialog|Qt.WindowType.FramelessWindowHint)
+        self.setProperty('opaqueDialog',True)
+        self.setWindowTitle(title)
+        self.setWindowModality(Qt.WindowModality.WindowModal)
+        body=column(self,16,12)
+        self.details=QPlainTextEdit()
+        self.details.setReadOnly(True)
+        self.details.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        self.details.setPlainText(text)
+        body.addWidget(self.details,1)
+        actions=row()
+        actions.addStretch()
+        close=button(tr('确定'),self.accept,'primary')
+        close.setDefault(True)
+        actions.addWidget(close)
+        body.addLayout(actions)
+
+        area=owner.screen().availableGeometry()
+        width=min(560,max(320,area.width()-48))
+        height=min(352,max(180,area.height()-48))
+        self.resize(width,height)
+        position=owner.frameGeometry().center()-QPoint(width//2,height//2)
+        self.move(max(area.left(),min(position.x(),area.right()-width+1)),
+                  max(area.top(),min(position.y(),area.bottom()-height+1)))
+        close.setFocus()
 
 
 def label(text,kind='',wrap=False):

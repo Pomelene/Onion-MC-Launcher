@@ -160,6 +160,14 @@ class Pages:
 
     def choose_project_version(self,project_id,title,kind,game,loader,vid):
         from .project_versions import ProjectVersions
+        from ..catalog import target_compatibility
+        from ..version import VersionNotFound
+        if not vid and kind!='modpack':
+            self.error(tr('请先选择一个游戏实例。'));return
+        try:
+            game,loader=target_compatibility(self.repo,kind,vid,game,loader)
+        except (VersionNotFound,ValueError,OSError) as error:
+            self.error(error);return
         if self.current_page!='download' or getattr(self,'download_kind','mod')!=kind:self.choose_download_kind(kind)
         self.show_subpage(ProjectVersions(self,project_id,title,kind,game,loader,vid))
 
@@ -174,27 +182,33 @@ class Pages:
             return data if len(data)<=MAX_ICON_BYTES else b''
         self.tasks.submit(work,lambda data:item.set_artwork(data) if isValid(item) else None,lambda error:None)
 
-    def install_project(self,project_id,kind,game,loader,version_id=None,release_id=None):
+    def install_project(self,project_id,kind,game,loader,version_id=None,release_id=None,*,release_entry=None,reviewed_plan=None):
         vid=self.selected_version if version_id is None else version_id
         if not vid and kind!='modpack':self.error(tr('请先选择一个游戏实例。'));return
         repo=self.repo;run=repo.run_dir(vid) if vid else repo.game_dir
         def work(job):
-            from ..catalog import versions,pick_version,download_version
+            if reviewed_plan is not None:
+                from ..mod_updates import install_catalog_plan
+                install_catalog_plan(repo,vid,reviewed_plan,job)
+                return None
+            from ..catalog import versions,pick_version,download_version,target_compatibility
             if vid and kind!='modpack':repo.assert_idle(vid)
             target=repo.cache_path('modpacks') if kind=='modpack' else run/{'mod':'mods','resourcepack':'resourcepacks','shader':'shaderpacks'}[kind];repo.assert_writable(target)
-            available=versions(repo.downloader,project_id,self.config_obj.get('curseforge_api_key'))
+            available=([release_entry] if release_entry is not None else
+                       versions(repo.downloader,project_id,self.config_obj.get('curseforge_api_key')))
             if release_id is not None:available=[v for v in available if v.get('id')==release_id]
-            chosen=pick_version(available,game,loader)
+            target_game,target_loader=target_compatibility(repo,kind,vid,game,loader)
+            chosen=pick_version(available,target_game,target_loader)
             if not chosen:raise RuntimeError(tr('没有适配当前版本或加载器的文件。'))
             if kind=='mod':
                 if str(project_id).startswith('cf:'):
                     from ..curseforge import resolve_required_versions
                     from ..mod_updates import install_selected
-                    selected=resolve_required_versions(repo.downloader,self.config_obj.get('curseforge_api_key'),chosen,game,loader,job)
+                    selected=resolve_required_versions(repo.downloader,self.config_obj.get('curseforge_api_key'),chosen,target_game,target_loader,job)
                     install_selected(repo,vid,[{'latest':v} for v in selected],job);return None
                 from ..mod_plan import build_plan
                 from ..mod_updates import install_selected
-                plan=build_plan(repo.downloader,target,[chosen],game,loader,job)
+                plan=build_plan(repo.downloader,target,[chosen],target_game,target_loader,job)
                 selected=[dict(path=target/e['old'] if e['old'] else None,latest=e['version'],old_sha1=plan['before'].get(e['old'],'')) for e in plan['entries'] if e['action']!='保留']
                 install_selected(repo,vid,selected,job);return None
             target.mkdir(parents=True,exist_ok=True);job.emit(tr('正在下载项目文件'));path=download_version(repo.downloader,chosen,target)
@@ -204,7 +218,7 @@ class Pages:
             return None
         def start():
             if self.repo is not repo:self.error(tr('游戏目录已切换，请回到原目录重新安装'));return
-            return self.task(tr('安装内容'),work,lambda installed:self.installed(installed) if installed else self.status.setText(tr('内容已安装')),retry=start,task_repo=repo,task_instance=vid)
+            return self.task(tr('安装内容'),work,lambda installed:self.installed(installed) if installed else self.status.setText(tr('内容已安装')),retry=start if reviewed_plan is None else None,task_repo=repo,task_instance=vid)
         return start()
 
     def build_mods(self,content_kind='mods'):

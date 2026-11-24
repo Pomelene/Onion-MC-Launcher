@@ -56,7 +56,9 @@ class Actions:
             job.emit(tr('启动前环境体检'))
             issues=inspect(repo,vid,overrides,write_probe=True,cancel=job.cancel,progress=lambda done,total:job.emit(f"{tr('检查模组 ')}{done}/{total}"))
             errors=[issue.message for issue in issues if issue.severity=='error']
-            if errors:raise RuntimeError(tr('启动前检查发现问题，请在实例管理中打开“环境体检”：\n')+'\n'.join(errors[:12]))
+            if errors:
+                from .i18n import message
+                raise RuntimeError(tr('启动前检查发现以下问题：\n')+'\n'.join(message(error) for error in errors))
             job.emit(tr('正在验证账号'))
             fresh=self.accounts.refresh(record) if record.is_expired() else record
             rv=repo.install(vid,job.emit,lambda a,b:job.emit((a,b)))

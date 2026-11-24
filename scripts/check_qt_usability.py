@@ -36,11 +36,12 @@ for control in (combo,spin,slider):
 host.close()
 
 class PendingTasks:
-    def submit(self,work,done,failed):self.done=done;self.failed=failed
+    def submit(self,work,done,failed,**kwargs):self.done=done;self.failed=failed
 class Window(QWidget):
     def __init__(self):
         super().__init__();self.tasks=PendingTasks();self.repo=SimpleNamespace(downloader=None)
         self.instances=SimpleNamespace(display_name=lambda vid:'测试实例');self.installs=[]
+        self.config_obj={}
     def install_project(self,*args,**kwargs):self.installs.append((args,kwargs));return False
 window=Window();dialog=ProjectVersions(window,'example','测试模组','mod','1.21.1','fabric','fixture')
 dialog.show();QTest.qWait(20);assert dialog.loading and not dialog.install_button.isEnabled()
@@ -68,7 +69,24 @@ assert not dialog.loading and dialog.refresh_button.isEnabled() and dialog.insta
 assert '重试' in dialog.status.text()
 QTest.mouseClick(dialog.install_button,Qt.MouseButton.LeftButton)
 assert window.installs[-1][1]['release_id']=='chosen'
+assert window.installs[-1][1]['release_entry']['id']=='chosen'
 dialog.fetch();dialog.reject();window.tasks.done(entries);assert not dialog.active
+review=ProjectVersions(window,'example','测试依赖','mod','1.21.1','fabric','fixture')
+review.show();QTest.qWait(20)
+with_dependency=dict(release('mod'),dependencies=[{'dependency_type':'required','project_id':'library'}])
+window.tasks.done([with_dependency,release('alternative')])
+review.tree.setCurrentItem(review.tree.topLevelItem(0))
+window.installs.clear();review.install()
+plan={'dependencies':[('library.jar','安装'),('existing.jar','保留')]}
+window.tasks.done(plan)
+assert not window.installs and review.dependencies.isVisible()
+assert review.install_button.text()=='安装模组及前置'
+review.tree.setCurrentItem(review.tree.topLevelItem(1))
+assert not review.dependencies.isVisible() and review.reviewed is None
+review.tree.setCurrentItem(review.tree.topLevelItem(0));review.install();window.tasks.done(plan)
+review.install()
+assert window.installs[-1][1]['reviewed_plan'] is plan
+review.reject()
 window.close()
 
 from launcher.config import Config
@@ -80,8 +98,8 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='usability-') as director
     while main.tasks.jobs and time.monotonic()<deadline:QTest.qWait(10)
     main.navigate('versions');app.processEvents();page=main.page_map['versions']
     buttons={b.text():b for b in page.findChildren(QPushButton)}
-    assert not buttons['管理'].isEnabled() and not buttons['使用此实例'].isEnabled() and not buttons['新建'].isEnabled()
-    assert buttons['安装'].isEnabled() and buttons['导入'].isEnabled()
+    assert main.version_tree.topLevelItemCount()==0
+    assert buttons['安装'].isEnabled()
     assert main.library_search.isClearButtonEnabled()
     main.versions=['fixture-A','fixture-B'];main.kinds={v:'原版' for v in main.versions};main.selected_version='fixture-A'
     main.build_versions();app.processEvents();buttons={b.text():b for b in page.findChildren(QPushButton) if b.isVisible()}
@@ -90,11 +108,10 @@ with tempfile.TemporaryDirectory(dir=ROOT/'tmp',prefix='usability-') as director
     for i in range(2):
         item=main.version_tree.topLevelItem(i)
         assert item.toolTip(1)==item.text(1)
-    assert buttons['管理'].isEnabled() and buttons['使用此实例'].isEnabled()
     main.library_search.setText('no-such-instance');app.processEvents()
-    assert not buttons['管理'].isEnabled() and not buttons['使用此实例'].isEnabled()
+    assert main.version_tree.topLevelItemCount()==0
     main.library_search.clear();app.processEvents()
-    assert buttons['管理'].isEnabled() and buttons['使用此实例'].isEnabled()
+    assert main.version_tree.topLevelItemCount()==2
     main.close()
 assert not errors,errors
 print('PASS: scroll protection, keyboard input, catalog selection/refresh/failure/close, compatibility guards, empty-library actions')

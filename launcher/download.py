@@ -10,6 +10,7 @@
 """
 
 import hashlib
+import http.client
 import json
 import io
 import threading
@@ -105,18 +106,37 @@ class Downloader:
     def _cancel_event(self):
         return getattr(self._local, "cancel_event", None)
 
-    def _opener(self) -> urllib.request.OpenerDirector:
+    def _opener(self, *, direct=False) -> urllib.request.OpenerDirector:
         handlers: list = [urllib.request.HTTPHandler(), https_handler(),SafeRedirectHandler()]
-        if self.proxy:
+        if direct:
+            handlers.append(urllib.request.ProxyHandler({}))
+        elif self.proxy:
             handlers.append(urllib.request.ProxyHandler(
                 {"http": self.proxy, "https": self.proxy}))
         elif not self.use_system_proxy:
             handlers.append(urllib.request.ProxyHandler({}))
         return urllib.request.build_opener(*handlers)
 
+    def _can_try_direct(self, url):
+        return (not self.proxy and self.use_system_proxy and url.startswith('https://')
+                and bool(urllib.request.getproxies().get('https')))
+
+    @staticmethod
+    def _retryable(error):
+        if isinstance(error, urllib.error.HTTPError):
+            return error.code in (407, 408, 425, 429, 500, 502, 503, 504)
+        return isinstance(error, (urllib.error.URLError, OSError, http.client.HTTPException, UnicodeDecodeError))
+
+    @staticmethod
+    def _retry_wait(event, delay):
+        if event is None:
+            time.sleep(delay)
+        elif event.wait(delay):
+            raise DownloadCancelled('已取消请求')
+
     # ---------- 简单请求 ----------
 
-    def fetch(self, url: str, binary: bool = False, headers: Optional[dict] = None, *, data=None, method=None):
+    def fetch(self, url: str, binary: bool = False, headers: Optional[dict] = None, *, data=None, method=None, read_only=False):
         """GET 请求并返回 bytes（binary=True）或解码后的 str。失败自动重试。
 
         headers 用于需要鉴权的接口（如 CurseForge 的 x-api-key）。
@@ -127,13 +147,20 @@ class Downloader:
             request_headers.update(headers)
         last: Optional[Exception] = None
         request_data=data
-        for _ in range(self.retries):
+        anonymous_read = (read_only or data is None and method in (None, 'GET')) and not any(
+            key.lower() in ('authorization','proxy-authorization','cookie','x-api-key')
+            for key in request_headers)
+        fallback = anonymous_read and self._can_try_direct(url)
+        direct = False
+        for attempt in range(self.retries):
             event = self._cancel_event()
             if event is not None and event.is_set():
                 raise DownloadCancelled("已取消请求")
             try:
                 req = urllib.request.Request(url, headers=request_headers,data=request_data,method=method)
-                with self._opener().open(req, timeout=self.timeout) as resp:
+                opener = self._opener(direct=True) if direct else self._opener()
+                timeout = min(8, self.timeout) if fallback and not direct and self.retries > 1 else self.timeout
+                with opener.open(req, timeout=timeout) as resp:
                     reader=getattr(resp,'read1',resp.read);output=io.BytesIO();received=0
                     while True:
                         if event is not None and event.is_set():raise DownloadCancelled('已取消请求')
@@ -147,7 +174,14 @@ class Downloader:
             except DownloadCancelled:raise
             except Exception as e:  # noqa: BLE001
                 last = e
-                if isinstance(e,urllib.error.HTTPError) and e.code==404:break
+                if not self._retryable(e):
+                    if isinstance(e,urllib.error.HTTPError):e.close()
+                    break
+                retry_after = e.headers.get('Retry-After','') if isinstance(e,urllib.error.HTTPError) and e.headers else ''
+                if isinstance(e,urllib.error.HTTPError):e.close()
+                direct = fallback
+                if attempt+1 < self.retries:
+                    self._retry_wait(event, min(8, int(retry_after)) if retry_after.isascii() and retry_after.isdigit() and len(retry_after)<8 else .4*(attempt+1))
         raise DownloadError(f"网络请求失败（{type(last).__name__}），请检查网络及服务状态",getattr(last,'code',None)) from None
 
     def fetch_json(self, url: str, headers: Optional[dict] = None):
@@ -156,7 +190,10 @@ class Downloader:
     def post_json(self,url,payload):
         body=json.dumps(payload,separators=(',',':')).encode('utf-8')
         if len(body)>1024*1024:raise ValueError('请求内容超过安全上限')
-        return json.loads(self.fetch(url,headers={'Content-Type':'application/json','Accept':'application/json'},data=body,method='POST'))
+        read_only = url in ('https://api.modrinth.com/v2/version_files',
+                            'https://api.modrinth.com/v2/version_files/update')
+        return json.loads(self.fetch(url,headers={'Content-Type':'application/json','Accept':'application/json'},
+                                     data=body,method='POST',read_only=read_only))
 
     # ---------- 单文件下载 ----------
 
@@ -207,7 +244,13 @@ class Downloader:
         if job.force:tmp.unlink(missing_ok=True)
         if tmp.exists() and tmp.stat().st_size>job.max_size:tmp.unlink()
         last: Optional[Exception] = None
-        for attempt in range(self.retries):
+        fallback = bool(job.sha1 or job.sha256) and self._can_try_direct(job.url)
+        direct = False
+        # An invalid saved Range gets one clean attempt, even with retries=1.
+        range_reset = False
+        attempt = 0
+        while attempt < self.retries:
+            attempt += 1
             try:
                 self._check_cancel(job)
                 offset = tmp.stat().st_size if tmp.exists() else 0
@@ -215,7 +258,9 @@ class Downloader:
                 if offset > 0:
                     headers["Range"] = f"bytes={offset}-"
                 req = urllib.request.Request(job.url, headers=headers)
-                with self._opener().open(req, timeout=self.timeout) as resp:
+                opener = self._opener(direct=True) if direct else self._opener()
+                timeout = min(8, self.timeout) if fallback and not direct and self.retries > 1 else self.timeout
+                with opener.open(req, timeout=timeout) as resp:
                     status = getattr(resp, "status", 200)
                     resume = (status == 206 and offset > 0)
                     total = int(resp.headers.get("Content-Length") or 0)
@@ -267,16 +312,23 @@ class Downloader:
                 raise
             except Exception as e:  # noqa: BLE001
                 last = e
-                if attempt+1<self.retries:
-                    delay=.5*(attempt+1)
-                    if job.cancel_event is not None:
-                        if job.cancel_event.wait(delay):raise DownloadCancelled('已取消下载')
-                    else:time.sleep(delay)
+                if isinstance(e,urllib.error.HTTPError):
+                    e.close()
+                    if e.code==416 and offset and not range_reset:
+                        tmp.unlink(missing_ok=True)
+                        range_reset = True
+                        attempt -= 1
+                        continue
+                    if not self._retryable(e):break
+                if fallback and self._retryable(e):direct = True
+                if attempt<self.retries:self._retry_wait(job.cancel_event, .5*attempt)
         remaining = tuple(u for u in job.fallback_urls if u != job.url)
         if remaining:
             tmp.unlink(missing_ok=True)
             return self.download_one(replace(job, url=remaining[0], fallback_urls=remaining[1:]), progress)
-        raise DownloadError(f"下载失败（{type(last).__name__}），请检查网络及文件完整性") from None
+        status = getattr(last,'code',None)
+        reason = f'HTTP {status}' if status else str(last) if isinstance(last,DownloadError) else type(last).__name__
+        raise DownloadError(f"下载失败（{reason}），请检查网络及文件完整性", status) from None
 
     @staticmethod
     def _hash_valid(path,job):

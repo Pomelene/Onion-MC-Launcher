@@ -64,6 +64,14 @@ def pick_version(version_list: list[dict], game_version: str = "", loader: str =
     return None
 
 
+def target_compatibility(repo, kind, vid, game='', loader=''):
+    """Search filters can broaden discovery, but cannot override an instance."""
+    if not vid or kind == 'modpack':
+        return game, loader
+    from .modpack import _base_version, _detect_loader
+    return _base_version(repo, vid), _detect_loader(repo, vid)[0] if kind == 'mod' else ''
+
+
 def download_version(downloader, version_obj: dict, target_dir: Path) -> Path:
     """下载该版本的首选文件到 target_dir，返回文件路径。"""
     files = version_obj.get("files") or []
